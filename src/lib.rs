@@ -12,65 +12,88 @@ use primary_header::PrimaryHeader;
 #[derive(Debug)]
 pub struct Fits<'a> {
     header: PrimaryHeader<'a>,
-    pub data: DataType<'a>,
+    data: DataType<'a>,
 }
 
-trait ParsingDataUnit: std::marker::Sized {
-    fn parse_data_unit(buf: &[u8], num_items: usize) -> Result<DataType, Error> {
-        let num_bytes_per_item = std::mem::size_of::<Self>();
+trait DataUnit<'a>: std::marker::Sized {
+    type Item: Default;
+
+    fn parse(buf: &'a [u8], num_items: usize) -> Result<Self, Error<'a>> {
+        let num_bytes_per_item = std::mem::size_of::<Self::Item>();
         let num_bytes = num_items * num_bytes_per_item;
         let (_, raw_bytes) = take(num_bytes)(buf)?;
 
-        let data = Self::data(raw_bytes, num_items);
+        let data = Self::new(raw_bytes, num_items);
         Ok(data)
     }
 
-    fn data(raw_bytes: &[u8], num_items: usize) -> DataType;
+    fn new(raw_bytes: &'a [u8], num_items: usize) -> Self;
 }
 
-impl ParsingDataUnit for u8 {
-    fn data(raw_bytes: &[u8], _num_items: usize) -> DataType {
-        DataType::U8(raw_bytes)
+#[derive(Debug)]
+pub struct DataUnitU8<'a>(&'a [u8]);
+impl<'a> DataUnit<'a> for DataUnitU8<'a> {
+    type Item = u8;
+    fn new(raw_bytes: &'a [u8], _num_items: usize) -> Self {
+        DataUnitU8(raw_bytes)
     }
 }
 
-impl ParsingDataUnit for i16 {
-    fn data(raw_bytes: &[u8], num_items: usize) -> DataType {
-        let mut dst: Vec<Self> = vec![0; num_items];
+#[derive(Debug)]
+pub struct DataUnitI16(Vec<i16>);
+impl<'a> DataUnit<'a> for DataUnitI16 {
+    type Item = i16;
+    fn new(raw_bytes: &[u8], num_items: usize) -> Self {
+        let mut dst: Vec<Self::Item> = vec![Self::Item::default(); num_items];
         BigEndian::read_i16_into(raw_bytes, &mut dst);
-        DataType::I16(dst)
+
+        DataUnitI16(dst)
     }
 }
 
-impl ParsingDataUnit for i32 {
-    fn data(raw_bytes: &[u8], num_items: usize) -> DataType {
-        let mut dst: Vec<Self> = vec![0; num_items];
+#[derive(Debug)]
+pub struct DataUnitI32(Vec<i32>);
+impl<'a> DataUnit<'a> for DataUnitI32 {
+    type Item = i32;
+    fn new(raw_bytes: &[u8], num_items: usize) -> Self {
+        let mut dst: Vec<Self::Item> = vec![Self::Item::default(); num_items];
         BigEndian::read_i32_into(raw_bytes, &mut dst);
-        DataType::I32(dst)
+
+        DataUnitI32(dst)
     }
 }
 
-impl ParsingDataUnit for i64 {
-    fn data(raw_bytes: &[u8], num_items: usize) -> DataType {
-        let mut dst: Vec<Self> = vec![0; num_items];
+#[derive(Debug)]
+pub struct DataUnitI64(Vec<i64>);
+impl<'a> DataUnit<'a> for DataUnitI64 {
+    type Item = i64;
+    fn new(raw_bytes: &[u8], num_items: usize) -> Self {
+        let mut dst: Vec<Self::Item> = vec![Self::Item::default(); num_items];
         BigEndian::read_i64_into(raw_bytes, &mut dst);
-        DataType::I64(dst)
+
+        DataUnitI64(dst)
     }
 }
-
-impl ParsingDataUnit for f32 {
-    fn data(raw_bytes: &[u8], num_items: usize) -> DataType {
-        let mut dst: Vec<Self> = vec![0.0; num_items];
+#[derive(Debug)]
+pub struct DataUnitF32(Vec<f32>);
+impl<'a> DataUnit<'a> for DataUnitF32 {
+    type Item = f32;
+    fn new(raw_bytes: &[u8], num_items: usize) -> Self {
+        let mut dst: Vec<Self::Item> = vec![Self::Item::default(); num_items];
         BigEndian::read_f32_into(raw_bytes, &mut dst);
-        DataType::F32(dst)
+
+        DataUnitF32(dst)
     }
 }
-
-impl ParsingDataUnit for f64 {
-    fn data(raw_bytes: &[u8], num_items: usize) -> DataType {
-        let mut dst: Vec<Self> = vec![0.0; num_items];
+#[derive(Debug)]
+pub struct DataUnitF64(Vec<f64>);
+impl<'a> DataUnit<'a> for DataUnitF64 {
+    type Item = f64;
+    fn new(raw_bytes: &[u8], num_items: usize) -> Self {
+        let mut dst: Vec<Self::Item> = vec![Self::Item::default(); num_items];
         BigEndian::read_f64_into(raw_bytes, &mut dst);
-        DataType::F64(dst)
+
+        DataUnitF64(dst)
     }
 }
 
@@ -92,12 +115,12 @@ impl<'a> Fits<'a> {
 
         // Read the byte data stream in BigEndian order conformly to the spec
         let data = match header.get_bitpix() {
-            BitpixValue::U8 => u8::parse_data_unit(buf, num_items)?,
-            BitpixValue::I16 => i16::parse_data_unit(buf, num_items)?,
-            BitpixValue::I32 => i32::parse_data_unit(buf, num_items)?,
-            BitpixValue::I64 => i64::parse_data_unit(buf, num_items)?,
-            BitpixValue::F32 => f32::parse_data_unit(buf, num_items)?,
-            BitpixValue::F64 => f64::parse_data_unit(buf, num_items)?,
+            BitpixValue::U8 => DataType::U8(DataUnitU8::parse(buf, num_items)?),
+            BitpixValue::I16 => DataType::I16(DataUnitI16::parse(buf, num_items)?),
+            BitpixValue::I32 => DataType::I32(DataUnitI32::parse(buf, num_items)?),
+            BitpixValue::I64 => DataType::I64(DataUnitI64::parse(buf, num_items)?),
+            BitpixValue::F32 => DataType::F32(DataUnitF32::parse(buf, num_items)?),
+            BitpixValue::F64 => DataType::F64(DataUnitF64::parse(buf, num_items)?),
         };
 
         Ok(Fits { header, data })
@@ -106,12 +129,12 @@ impl<'a> Fits<'a> {
 
 #[derive(Debug)]
 pub enum DataType<'a> {
-    U8(&'a [u8]),
-    I16(Vec<i16>),
-    I32(Vec<i32>),
-    I64(Vec<i64>),
-    F32(Vec<f32>),
-    F64(Vec<f64>),
+    U8(DataUnitU8<'a>),
+    I16(DataUnitI16),
+    I32(DataUnitI32),
+    I64(DataUnitI64),
+    F32(DataUnitF32),
+    F64(DataUnitF64),
 }
 
 #[cfg(test)]
@@ -151,6 +174,24 @@ mod tests {
         ];
         assert_eq!(cards, cards_expect);
         println!("{:?}", cards);
+    }
+
+    #[test]
+    fn test_fits_tile2() {
+        use std::fs::File;
+        use crate::DataType;
+        let  f  = File::open("misc/Npix208.fits").unwrap();
+        let  bytes: Result<Vec<_>, _> =  f.bytes().collect();
+        let  buf  =  bytes.unwrap();
+        let  Fits { data, .. } =  Fits::from_bytes_slice(&buf).unwrap();
+        
+        match data {
+            DataType::F32(v) => {
+                println!("{:?}", v);
+            },
+            _ => unreachable!()
+        };
+        
     }
 
 }

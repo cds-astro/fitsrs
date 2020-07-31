@@ -13,16 +13,19 @@ The extensions are not supported
 ## Exemple
 
 ```rust
-let  f  = File::open("misc/Npix208.fits").unwrap();
-let  bytes: Result<Vec<_>, _> =  f.bytes().collect();
-let  buf  =  bytes.unwrap();
-let  Fits { .., data } =  Fits::from_bytes_slice(&buf).unwrap();
+use std::fs::File;
+use fitsreader::{Fits, DataType};
+
+let f  = File::open("misc/Npix208.fits").unwrap();
+let bytes: Result<Vec<_>, _> =  f.bytes().collect();
+let buf  =  bytes.unwrap();
+let Fits { data, .. } =  Fits::from_bytes_slice(&buf).unwrap();
 
 match data {
-	DataType::F32(v) = {
-		// v is a Vec<f32>
-	},
-	_ => unreachable!()
+    DataType::F32(v) => {
+        println!("{:?}", v);
+    },
+    _ => unreachable!()
 };
 ```
 
