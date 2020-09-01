@@ -11,8 +11,8 @@ mod primary_header;
 use primary_header::PrimaryHeader;
 #[derive(Debug)]
 pub struct Fits<'a> {
-    header: PrimaryHeader<'a>,
-    data: DataType<'a>,
+    pub header: PrimaryHeader<'a>,
+    pub data: DataType<'a>,
 }
 
 trait DataUnit<'a>: std::marker::Sized {
@@ -31,7 +31,7 @@ trait DataUnit<'a>: std::marker::Sized {
 }
 
 #[derive(Debug)]
-pub struct DataUnitU8<'a>(&'a [u8]);
+pub struct DataUnitU8<'a>(pub &'a [u8]);
 impl<'a> DataUnit<'a> for DataUnitU8<'a> {
     type Item = u8;
     fn new(raw_bytes: &'a [u8], _num_items: usize) -> Self {
@@ -40,7 +40,7 @@ impl<'a> DataUnit<'a> for DataUnitU8<'a> {
 }
 
 #[derive(Debug)]
-pub struct DataUnitI16(Vec<i16>);
+pub struct DataUnitI16(pub Vec<i16>);
 impl<'a> DataUnit<'a> for DataUnitI16 {
     type Item = i16;
     fn new(raw_bytes: &[u8], num_items: usize) -> Self {
@@ -52,7 +52,7 @@ impl<'a> DataUnit<'a> for DataUnitI16 {
 }
 
 #[derive(Debug)]
-pub struct DataUnitI32(Vec<i32>);
+pub struct DataUnitI32(pub Vec<i32>);
 impl<'a> DataUnit<'a> for DataUnitI32 {
     type Item = i32;
     fn new(raw_bytes: &[u8], num_items: usize) -> Self {
@@ -64,7 +64,7 @@ impl<'a> DataUnit<'a> for DataUnitI32 {
 }
 
 #[derive(Debug)]
-pub struct DataUnitI64(Vec<i64>);
+pub struct DataUnitI64(pub Vec<i64>);
 impl<'a> DataUnit<'a> for DataUnitI64 {
     type Item = i64;
     fn new(raw_bytes: &[u8], num_items: usize) -> Self {
@@ -75,7 +75,7 @@ impl<'a> DataUnit<'a> for DataUnitI64 {
     }
 }
 #[derive(Debug)]
-pub struct DataUnitF32(Vec<f32>);
+pub struct DataUnitF32(pub Vec<f32>);
 impl<'a> DataUnit<'a> for DataUnitF32 {
     type Item = f32;
     fn new(raw_bytes: &[u8], num_items: usize) -> Self {
@@ -86,7 +86,7 @@ impl<'a> DataUnit<'a> for DataUnitF32 {
     }
 }
 #[derive(Debug)]
-pub struct DataUnitF64(Vec<f64>);
+pub struct DataUnitF64(pub Vec<f64>);
 impl<'a> DataUnit<'a> for DataUnitF64 {
     type Item = f64;
     fn new(raw_bytes: &[u8], num_items: usize) -> Self {
@@ -180,18 +180,52 @@ mod tests {
     fn test_fits_tile2() {
         use std::fs::File;
         use crate::DataType;
-        let  f  = File::open("misc/Npix208.fits").unwrap();
-        let  bytes: Result<Vec<_>, _> =  f.bytes().collect();
-        let  buf  =  bytes.unwrap();
-        let  Fits { data, .. } =  Fits::from_bytes_slice(&buf).unwrap();
+        let  f  = File::open("misc/Npix282.fits").unwrap();
+        let  bytes: Result<Vec<_>, _> = f.bytes().collect();
+        let  buf = bytes.unwrap();
+        let  Fits { data, .. } = Fits::from_bytes_slice(&buf).unwrap();
         
         match data {
             DataType::F32(v) => {
-                println!("{:?}", v);
+                //println!("{:?}", v);
             },
             _ => unreachable!()
         };
         
     }
 
+    #[test]
+    fn test_fits_tile3() {
+        use std::fs::File;
+        use crate::DataType;
+        let  f  = File::open("misc/Npix4906.fits").unwrap();
+        let  bytes: Result<Vec<_>, _> =  f.bytes().collect();
+        let  buf  =  bytes.unwrap();
+        let  Fits { data, .. } =  Fits::from_bytes_slice(&buf).unwrap();
+        
+        match data {
+            DataType::I16(v) => {
+                println!("{:?}", v);
+            },
+            _ => unreachable!()
+        };
+    }
+
+    /*#[test]
+    fn test_fits_tile4() {
+        use std::fs::File;
+        use crate::DataType;
+        let  f  = File::open("misc/Npix8.fits").unwrap();
+        let  bytes: Result<Vec<_>, _> =  f.bytes().collect();
+        let  buf  =  bytes.unwrap();
+        let  Fits { data, .. } =  Fits::from_bytes_slice(&buf).unwrap();
+        
+        match data {
+            DataType::I16(v) => {
+                println!("{:?}", v);
+            },
+            _ => unreachable!()
+        };
+        
+    }*/
 }

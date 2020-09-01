@@ -1,8 +1,9 @@
 use nom::{
     branch::alt,
-    character::complete::{alphanumeric0, char, digit1, space0},
-    combinator::{map, value},
-    sequence::{delimited, preceded, tuple},
+    bytes::complete::{tag, escaped, take_till},
+    character::complete::{alphanumeric0, char, digit1, space0, alpha0, one_of},
+    combinator::{map, value, opt},
+    sequence::{delimited, preceded, tuple, pair},
     IResult,
 };
 
@@ -21,7 +22,15 @@ pub(crate) fn parse_undefined(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
 
 pub(crate) fn parse_character_string(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
     map(
-        preceded(space0, delimited(char('\''), alphanumeric0, char('\''))),
+        preceded(
+            space0,
+            delimited(
+                char('\''),
+                take_till(|c| c == b'\''),
+                //escaped(alpha1, '\\', one_of(" ")), 
+                char('\'')
+            )
+        ),
         |str: &[u8]| {
             let str = std::str::from_utf8(str).unwrap();
             FITSKeywordValue::CharacterString(str)
@@ -60,9 +69,28 @@ pub(crate) fn parse_integer(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
     )(buf)
 }
 
+fn signed_digit(buf: &[u8]) -> IResult<&[u8], (Option<&[u8]>, &[u8])> {
+    pair(
+        opt(
+            alt((tag("+"), tag("-")))
+        ),  // maybe sign?
+        digit1
+    )(buf)
+}
+
 pub(crate) fn parse_absolute_float(buf: &[u8]) -> IResult<&[u8], f64> {
     map(
-        tuple((digit1, char('.'), digit1)),
+        tuple((
+            signed_digit,
+            char('.'),
+            digit1,
+            opt(
+                preceded(
+                alt((char('E'), char('e'))),
+                signed_digit
+                )
+            )
+        )),
         |(digits, _, decimals): (&[u8], char, &[u8])| {
             let string = std::format!(
                 "{}.{}",
@@ -97,13 +125,28 @@ pub(crate) fn parse_float(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_integer, FITSKeywordValue};
+    use super::{parse_integer, parse_character_string, parse_float, FITSKeywordValue};
 
     #[test]
     fn test_integer() {
         assert_eq!(
             parse_integer(b"      -4545424"),
             Ok((b"" as &[u8], FITSKeywordValue::IntegerNumber(-4545424)))
+        );
+    }
+
+    #[test]
+    fn test_float() {
+        assert_eq!(
+            parse_float(b"      -32768.0"),
+            Ok((b"" as &[u8], FITSKeywordValue::FloatingPoint(-32768.0)))
+        );
+    }
+    #[test]
+    fn test_string() {
+        assert_eq!(
+            parse_character_string(b"      'sdfs Zdfs MLKKLSFD sdf '"),
+            Ok((b"" as &[u8], FITSKeywordValue::CharacterString("sdfs Zdfs MLKKLSFD sdf ")))
         );
     }
 }

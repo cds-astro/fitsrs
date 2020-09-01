@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 #[derive(Debug, PartialEq)]
-pub(crate) struct PrimaryHeader<'a> {
+pub struct PrimaryHeader<'a> {
     pub keys: HashSet<&'a str>,
     pub cards: Vec<(&'a str, FITSHeaderKeyword<'a>)>,
 }
@@ -36,7 +36,8 @@ impl<'a> PrimaryHeader<'a> {
                     FITSHeaderKeyword::Naxis(_) => {
                         naxis = true;
                         "NAXIS"
-                    }
+                    },
+                    FITSHeaderKeyword::Blank(_) => "BLANK",
                     FITSHeaderKeyword::NaxisSize { name, .. } => name,
                     FITSHeaderKeyword::Comment(_) => "COMMENT",
                     FITSHeaderKeyword::History(_) => "HISTORY",
@@ -85,6 +86,14 @@ impl<'a> PrimaryHeader<'a> {
         }
     }
 
+    pub(crate) fn get_blank(&self) -> f64 {
+        if let Some(&FITSHeaderKeyword::Blank(blank)) = self.get("BLANK") {
+            blank
+        } else {
+            unreachable!();
+        }
+    }
+
     pub(crate) fn get_axis_size(&self, idx: usize) -> Option<usize> {
         // NAXIS indexes begins at 1 instead of 0
         let naxis = String::from("NAXIS") + &(idx + 1).to_string();
@@ -126,6 +135,7 @@ pub enum FITSHeaderKeyword<'a> {
         // Size of the axis
         size: usize,
     },
+    Blank(f64),
     // TODO we will probably need a Cow<str> here
     // because we have to delete simple quote doublons
     Comment(&'a str),
@@ -163,6 +173,7 @@ pub(self) fn parse_card(header: &[u8]) -> MyResult<&[u8], FITSHeaderKeyword> {
     let (header, (keyword, value)) =
         preceded(multispace0, pair(parse_card_keyword, parse_card_value))(header)?;
 
+    let value = dbg!(value);
     match (keyword, value) {
         // SIMPLE = true check
         (b"SIMPLE", value) => match value {
@@ -197,9 +208,16 @@ pub(self) fn parse_card(header: &[u8]) -> MyResult<&[u8], FITSHeaderKeyword> {
             }
             _ => Err(Error::MandatoryValueError("NAXIS")),
         },
+        // BLANK value
+        (b"BLANK", value) => match value {
+            FITSKeywordValue::FloatingPoint(blank) => {
+                Ok((header, FITSHeaderKeyword::Blank(blank as f64)))
+            },
+            _ => Err(Error::MandatoryValueError("BLANK")),
+        },
         // Comment associated to a string check
         (b"COMMENT", value) => match value {
-            FITSKeywordValue::CharacterString(str) => Ok((header, FITSHeaderKeyword::Comment(str))),
+            FITSKeywordValue::CharacterString(str) => { panic!(); Ok((header, FITSHeaderKeyword::Comment(str))) },
             _ => Err(Error::MandatoryValueError("COMMENT")),
         },
         // History associated to a string check
@@ -209,7 +227,7 @@ pub(self) fn parse_card(header: &[u8]) -> MyResult<&[u8], FITSHeaderKeyword> {
         },
         // END keyword check
         (b"END", value) => match value {
-            FITSKeywordValue::Undefined => Ok((header, FITSHeaderKeyword::End)),
+            FITSKeywordValue::Undefined => { Ok((header, FITSHeaderKeyword::End)) },
             _ => Err(Error::MandatoryValueError("END")),
         },
         ([b'N', b'A', b'X', b'I', b'S', ..], value) => {
@@ -239,6 +257,7 @@ pub(self) fn parse_card(header: &[u8]) -> MyResult<&[u8], FITSHeaderKeyword> {
             }
         }
         (keyword, value) => {
+            panic!("keyword {:?} {:?}", keyword, value);
             // Other keywords of 8 character length
             if keyword.len() != KEYWORD_BYTES_LENGTH {
                 Err(Error::MustBe8BytesLong(keyword))
@@ -269,8 +288,8 @@ pub(crate) fn parse_card_value(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
                 alt((
                     parse_character_string,
                     parse_logical,
-                    parse_integer,
                     parse_float,
+                    parse_integer,
                 )),
             ),
             parse_undefined,
