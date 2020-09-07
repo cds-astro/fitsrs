@@ -110,6 +110,7 @@ mod tests {
             Ok((b"" as &[u8], FITSKeywordValue::FloatingPoint(-32767.0)))
         );
     }
+
     #[test]
     fn test_string() {
         assert_eq!(

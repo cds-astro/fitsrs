@@ -175,6 +175,7 @@ pub(self) fn parse_card(header: &[u8]) -> MyResult<&[u8], FITSHeaderKeyword> {
         preceded(multispace0, pair(parse_card_keyword, parse_card_value))(header)?;
     println!("{:?} {:?}", std::str::from_utf8(keyword).unwrap(), value);
 
+    let value = dbg!(value);
     match (keyword, value) {
         // SIMPLE = true check
         (b"SIMPLE", value) => match value {
@@ -287,8 +288,8 @@ pub(crate) fn parse_card_value(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
                 alt((
                     parse_character_string,
                     parse_logical,
-                    //parse_integer,
                     parse_float,
+                    parse_integer,
                 )),
             ),
             parse_undefined,
