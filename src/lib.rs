@@ -1,5 +1,5 @@
 extern crate nom;
-use nom::{bytes::streaming::take, character::complete::multispace0};
+use nom::{bytes::complete::take, character::complete::multispace0};
 
 extern crate byteorder;
 use byteorder::{BigEndian, ByteOrder};
@@ -8,11 +8,13 @@ mod card_value;
 mod error;
 mod primary_header;
 
-use primary_header::PrimaryHeader;
+use primary_header::{PrimaryHeader};
+pub use primary_header::FITSHeaderKeyword;
+pub use card_value::FITSKeywordValue;
 #[derive(Debug)]
 pub struct Fits<'a> {
-    header: PrimaryHeader<'a>,
-    data: DataType<'a>,
+    pub header: PrimaryHeader<'a>,
+    pub data: DataType<'a>,
 }
 
 trait DataUnit<'a>: std::marker::Sized {
@@ -21,6 +23,7 @@ trait DataUnit<'a>: std::marker::Sized {
     fn parse(buf: &'a [u8], num_items: usize) -> Result<Self, Error<'a>> {
         let num_bytes_per_item = std::mem::size_of::<Self::Item>();
         let num_bytes = num_items * num_bytes_per_item;
+        println!("{:?} num bytes", num_bytes);
         let (_, raw_bytes) = take(num_bytes)(buf)?;
 
         let data = Self::new(raw_bytes, num_items);
@@ -31,7 +34,7 @@ trait DataUnit<'a>: std::marker::Sized {
 }
 
 #[derive(Debug)]
-pub struct DataUnitU8<'a>(&'a [u8]);
+pub struct DataUnitU8<'a>(pub &'a [u8]);
 impl<'a> DataUnit<'a> for DataUnitU8<'a> {
     type Item = u8;
     fn new(raw_bytes: &'a [u8], _num_items: usize) -> Self {
@@ -40,7 +43,7 @@ impl<'a> DataUnit<'a> for DataUnitU8<'a> {
 }
 
 #[derive(Debug)]
-pub struct DataUnitI16(Vec<i16>);
+pub struct DataUnitI16(pub Vec<i16>);
 impl<'a> DataUnit<'a> for DataUnitI16 {
     type Item = i16;
     fn new(raw_bytes: &[u8], num_items: usize) -> Self {
@@ -52,7 +55,7 @@ impl<'a> DataUnit<'a> for DataUnitI16 {
 }
 
 #[derive(Debug)]
-pub struct DataUnitI32(Vec<i32>);
+pub struct DataUnitI32(pub Vec<i32>);
 impl<'a> DataUnit<'a> for DataUnitI32 {
     type Item = i32;
     fn new(raw_bytes: &[u8], num_items: usize) -> Self {
@@ -64,7 +67,7 @@ impl<'a> DataUnit<'a> for DataUnitI32 {
 }
 
 #[derive(Debug)]
-pub struct DataUnitI64(Vec<i64>);
+pub struct DataUnitI64(pub Vec<i64>);
 impl<'a> DataUnit<'a> for DataUnitI64 {
     type Item = i64;
     fn new(raw_bytes: &[u8], num_items: usize) -> Self {
@@ -75,7 +78,7 @@ impl<'a> DataUnit<'a> for DataUnitI64 {
     }
 }
 #[derive(Debug)]
-pub struct DataUnitF32(Vec<f32>);
+pub struct DataUnitF32(pub Vec<f32>);
 impl<'a> DataUnit<'a> for DataUnitF32 {
     type Item = f32;
     fn new(raw_bytes: &[u8], num_items: usize) -> Self {
@@ -86,7 +89,7 @@ impl<'a> DataUnit<'a> for DataUnitF32 {
     }
 }
 #[derive(Debug)]
-pub struct DataUnitF64(Vec<f64>);
+pub struct DataUnitF64(pub Vec<f64>);
 impl<'a> DataUnit<'a> for DataUnitF64 {
     type Item = f64;
     fn new(raw_bytes: &[u8], num_items: usize) -> Self {
@@ -102,6 +105,7 @@ use primary_header::BitpixValue;
 impl<'a> Fits<'a> {
     pub fn from_bytes_slice(buf: &'a [u8]) -> Result<Fits<'a>, Error<'a>> {
         let (buf, header) = PrimaryHeader::new(&buf)?;
+        println!("azea");
 
         // At this point the header is valid
         let num_items = (0..header.get_naxis())
@@ -112,6 +116,7 @@ impl<'a> Fits<'a> {
             });
 
         multispace0(buf)?;
+        println!("azea2, {:?}", num_items);
 
         // Read the byte data stream in BigEndian order conformly to the spec
         let data = match header.get_bitpix() {
@@ -122,6 +127,7 @@ impl<'a> Fits<'a> {
             BitpixValue::F32 => DataType::F32(DataUnitF32::parse(buf, num_items)?),
             BitpixValue::F64 => DataType::F64(DataUnitF64::parse(buf, num_items)?),
         };
+        println!("azea2, {:?}", num_items);
 
         Ok(Fits { header, data })
     }
@@ -180,18 +186,85 @@ mod tests {
     fn test_fits_tile2() {
         use std::fs::File;
         use crate::DataType;
-        let  f  = File::open("misc/Npix208.fits").unwrap();
-        let  bytes: Result<Vec<_>, _> =  f.bytes().collect();
-        let  buf  =  bytes.unwrap();
-        let  Fits { data, .. } =  Fits::from_bytes_slice(&buf).unwrap();
+        let  f  = File::open("misc/Npix282.fits").unwrap();
+        let  bytes: Result<Vec<_>, _> = f.bytes().collect();
+        let  buf = bytes.unwrap();
+        let  Fits { data, .. } = Fits::from_bytes_slice(&buf).unwrap();
         
         match data {
             DataType::F32(v) => {
-                println!("{:?}", v);
+                //println!("{:?}", v);
             },
             _ => unreachable!()
         };
         
     }
 
+    #[test]
+    fn test_fits_tile3() {
+        use std::fs::File;
+        use crate::DataType;
+        let  f  = File::open("misc/Npix4906.fits").unwrap();
+        let  bytes: Result<Vec<_>, _> =  f.bytes().collect();
+        let  buf  =  bytes.unwrap();
+        let  Fits { data, .. } =  Fits::from_bytes_slice(&buf).unwrap();
+        
+        match data {
+            DataType::I16(v) => {
+                println!("{:?}", v);
+            },
+            _ => unreachable!()
+        };
+    }
+
+    #[test]
+    fn test_fits_tile4() {
+        use std::fs::File;
+        use crate::DataType;
+        let  f  = File::open("misc/Npix9.fits").unwrap();
+        let  bytes: Result<Vec<_>, _> =  f.bytes().collect();
+        let  buf  =  bytes.unwrap();
+        let  Fits { data, .. } =  Fits::from_bytes_slice(&buf).unwrap();
+        
+        match data {
+            DataType::I16(v) => {
+                println!("{:?}", v);
+            },
+            _ => unreachable!()
+        };
+    }
+
+    #[test]
+    fn test_fits_tile5() {
+        use std::fs::File;
+        use crate::DataType;
+        let  f  = File::open("misc/Npix133.fits").unwrap();
+        let  bytes: Result<Vec<_>, _> =  f.bytes().collect();
+        let  buf  =  bytes.unwrap();
+        let  Fits { data, .. } =  Fits::from_bytes_slice(&buf).unwrap();
+        
+        match data {
+            DataType::I16(v) => {
+                println!("{:?}", v);
+            },
+            _ => unreachable!()
+        };
+    }
+    /*#[test]
+    fn test_fits_tile4() {
+        use std::fs::File;
+        use crate::DataType;
+        let  f  = File::open("misc/Npix8.fits").unwrap();
+        let  bytes: Result<Vec<_>, _> =  f.bytes().collect();
+        let  buf  =  bytes.unwrap();
+        let  Fits { data, .. } =  Fits::from_bytes_slice(&buf).unwrap();
+        
+        match data {
+            DataType::I16(v) => {
+                println!("{:?}", v);
+            },
+            _ => unreachable!()
+        };
+        
+    }*/
 }
