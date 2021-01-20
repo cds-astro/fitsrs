@@ -198,7 +198,7 @@ mod tests {
         let  Fits { data, .. } = Fits::from_bytes_slice(&buf).unwrap();
         
         match data {
-            DataType::F32(v) => {
+            DataType::F32(_v) => {
                 //println!("{:?}", v);
             },
             _ => unreachable!()
@@ -272,49 +272,6 @@ mod tests {
         };
     }
 
-    #[test]
-    fn test_fits_tile7() {
-        use std::{fs, io};
-
-        let entries = fs::read_dir("./misc/dss2_blue_xj_s")
-            .unwrap()
-            .map(|res| res.map(|e| e.path()))
-            .collect::<Result<Vec<_>, io::Error>>()
-            .unwrap();
-
-        use crate::DataType;
-        for filename in entries {
-            let  f  = fs::File::open(filename).unwrap();
-            let  bytes: Result<Vec<_>, _> =  f.bytes().collect();
-            let  buf  =  bytes.unwrap();
-            let  Fits { data, .. } =  Fits::from_bytes_slice(&buf).unwrap();
-            
-            match data {
-                DataType::I16(v) => {
-                    println!("{:?}", v);
-                },
-                _ => unreachable!()
-            };
-        }
-    }
-    #[test]
-    fn test_fits_tile8() {
-        use std::fs::File;
-        use crate::DataType;
-        let  f  = File::open("misc/Npix44108.fits").unwrap();
-        let  bytes: Result<Vec<_>, _> =  f.bytes().collect();
-        let  buf  =  bytes.unwrap();
-        let  Fits { data, header } =  Fits::from_bytes_slice(&buf).unwrap();
-
-        let header = dbg!(header);
-        
-        match data {
-            DataType::F32(v) => {
-                println!("{:?}", v);
-            },
-            _ => unreachable!()
-        };
-    }
     #[test]
     fn test_bad_bytes() {
         let bytes: &[u8] = &[60, 33, 68, 79, 67, 84, 89, 80, 69, 32, 72, 84, 77, 76, 32, 80, 85, 66, 76, 73, 67, 32, 34, 45, 47, 47, 73, 69, 84, 70, 47, 47, 68, 84, 68, 32, 72, 84, 77, 76, 32, 50, 46, 48, 47, 47, 69, 78, 34, 62, 10, 60, 104, 116, 109, 108, 62, 60, 104, 101, 97, 100, 62, 10, 60, 116, 105, 116, 108, 101, 62, 52, 48, 52, 32, 78, 111, 116, 32, 70, 111, 117, 110, 100, 60, 47, 116, 105, 116, 108, 101, 62, 10, 60, 47, 104, 101, 97, 100, 62, 60, 98, 111, 100, 121, 62, 10, 60, 104, 49, 62, 78, 111, 116, 32, 70, 111, 117, 110, 100, 60, 47, 104, 49, 62, 10, 60, 112, 62, 84, 104, 101, 32, 114, 101, 113, 117, 101, 115, 116, 101, 100, 32, 85, 82, 76, 32, 47, 97, 108, 108, 115, 107, 121, 47, 80, 78, 82, 101, 100, 47, 78, 111, 114, 100, 101, 114, 55, 47, 68, 105, 114, 52, 48, 48, 48, 48, 47, 78, 112, 105, 120, 52, 52, 49, 49, 49, 46, 102, 105, 116, 115, 32, 119, 97, 115, 32, 110, 111, 116, 32, 102, 111, 117, 110, 100, 32, 111, 110, 32, 116, 104, 105, 115, 32, 115, 101, 114, 118, 101, 114, 46, 60, 47, 112, 62, 10, 60, 47, 98, 111, 100, 121, 62, 60, 47, 104, 116, 109, 108, 62, 10];

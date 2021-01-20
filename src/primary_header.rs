@@ -292,7 +292,7 @@ pub(crate) fn parse_card_value(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_card, Error, FITSHeaderKeyword, FITSKeywordValue};
+    use super::{parse_card, FITSHeaderKeyword, FITSKeywordValue};
     #[test]
     fn test_parse_card() {
         assert_eq!(
