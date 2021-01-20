@@ -32,7 +32,7 @@ impl<'a> PrimaryHeader<'a> {
                 FITSHeaderKeyword::Naxis(_) => {
                     naxis = true;
                     "NAXIS"
-                },
+                }
                 FITSHeaderKeyword::Blank(_) => "BLANK",
                 FITSHeaderKeyword::NaxisSize { name, .. } => name,
                 FITSHeaderKeyword::Comment(_) => "COMMENT",
@@ -170,7 +170,7 @@ pub(self) fn parse_card(header: &[u8]) -> MyResult<&[u8], FITSHeaderKeyword> {
     let (header, keyword) = preceded(multispace0, parse_card_keyword)(header)?;
     // We stop consuming tokens after the exit
     if keyword == b"END" {
-        return Ok((header, FITSHeaderKeyword::End))
+        return Ok((header, FITSHeaderKeyword::End));
     }
 
     let (header, value) = parse_card_value(header)?;
@@ -212,14 +212,12 @@ pub(self) fn parse_card(header: &[u8]) -> MyResult<&[u8], FITSHeaderKeyword> {
         },
         // BLANK value
         (b"BLANK", value) => match value {
-            FITSKeywordValue::FloatingPoint(blank) => {
-                Ok((header, FITSHeaderKeyword::Blank(blank)))
-            },
+            FITSKeywordValue::FloatingPoint(blank) => Ok((header, FITSHeaderKeyword::Blank(blank))),
             _ => Err(Error::MandatoryValueError("BLANK")),
         },
         // Comment associated to a string check
         (b"COMMENT", value) => match value {
-            FITSKeywordValue::CharacterString(str) => { Ok((header, FITSHeaderKeyword::Comment(str))) },
+            FITSKeywordValue::CharacterString(str) => Ok((header, FITSHeaderKeyword::Comment(str))),
             _ => Err(Error::MandatoryValueError("COMMENT")),
         },
         // History associated to a string check
@@ -253,22 +251,20 @@ pub(self) fn parse_card(header: &[u8]) -> MyResult<&[u8], FITSHeaderKeyword> {
                 Err(Error::MandatoryValueError(name))
             }
         }
-        (keyword, value) => {
-            Ok((
-                header,
-                FITSHeaderKeyword::Other {
-                    name: keyword,
-                    value,
-                },
-            ))
-        }
+        (keyword, value) => Ok((
+            header,
+            FITSHeaderKeyword::Other {
+                name: keyword,
+                value,
+            },
+        )),
     }
 }
 
 pub(crate) fn parse_card_keyword(buf: &[u8]) -> IResult<&[u8], &[u8]> {
     alt((
         recognize(pair(tag(b"NAXIS"), digit1)),
-        take_till(|c| c == b' ' || c == b'\t' || c == b'=')
+        take_till(|c| c == b' ' || c == b'\t' || c == b'='),
     ))(buf)
 }
 
@@ -279,11 +275,7 @@ pub(crate) fn parse_card_value(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
         alt((
             preceded(
                 tag(b"= "),
-                alt((
-                    parse_character_string,
-                    parse_logical,
-                    parse_float,
-                )),
+                alt((parse_character_string, parse_logical, parse_float)),
             ),
             parse_undefined,
         )),

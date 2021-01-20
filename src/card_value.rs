@@ -3,8 +3,8 @@ use nom::{
     bytes::complete::{take_till, take_while},
     character::complete::{char, space0},
     combinator::{map, value},
-    sequence::{delimited, preceded},
     number::complete::float,
+    sequence::{delimited, preceded},
     IResult,
 };
 
@@ -29,11 +29,7 @@ pub(crate) fn parse_character_string(buf: &[u8]) -> IResult<&[u8], FITSKeywordVa
     map(
         preceded(
             space0,
-            delimited(
-                char('\''),
-                take_till(|c| c == b'\''),
-                char('\'')
-            )
+            delimited(char('\''), take_till(|c| c == b'\''), char('\'')),
         ),
         |str: &[u8]| {
             let str = std::str::from_utf8(str).unwrap();
@@ -76,12 +72,7 @@ pub(crate) fn parse_logical(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
 pub(crate) fn parse_float(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
     preceded(
         space0,
-        map(
-            float,
-            |val| {
-                FITSKeywordValue::FloatingPoint(val as f64)
-            }
-        )
+        map(float, |val| FITSKeywordValue::FloatingPoint(val as f64)),
     )(buf)
 }
 
@@ -116,7 +107,10 @@ mod tests {
     fn test_string() {
         assert_eq!(
             parse_character_string(b"      'sdfs Zdfs MLKKLSFD sdf '"),
-            Ok((b"" as &[u8], FITSKeywordValue::CharacterString("sdfs Zdfs MLKKLSFD sdf ")))
+            Ok((
+                b"" as &[u8],
+                FITSKeywordValue::CharacterString("sdfs Zdfs MLKKLSFD sdf ")
+            ))
         );
     }
 }
