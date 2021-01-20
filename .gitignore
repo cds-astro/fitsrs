@@ -1,2 +1,7 @@
 Cargo.lock
 target/
+fitswasm/node_modules
+fitswasm/test
+fitswasm/Cargo.lock
+fitswasm/target
+fitswasm/pkg
