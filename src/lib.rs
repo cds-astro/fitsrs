@@ -1,5 +1,5 @@
 extern crate nom;
-use nom::{bytes::complete::take, character::complete::multispace0};
+use nom::bytes::complete::take;
 
 extern crate byteorder;
 use byteorder::{BigEndian, ByteOrder};
@@ -23,7 +23,6 @@ trait DataUnit<'a>: std::marker::Sized {
     fn parse(buf: &'a [u8], num_items: usize) -> Result<Self, Error<'a>> {
         let num_bytes_per_item = std::mem::size_of::<Self::Item>();
         let num_bytes = num_items * num_bytes_per_item;
-        println!("{:?} num bytes", num_bytes);
         let (_, raw_bytes) = take(num_bytes)(buf)?;
 
         let data = Self::new(raw_bytes, num_items);
@@ -99,13 +98,15 @@ impl<'a> DataUnit<'a> for DataUnitF64 {
         DataUnitF64(dst)
     }
 }
-
+use nom::multi::{many0, count};
+use nom::bytes::complete::tag;
+use nom::sequence::preceded;
 use error::Error;
 use primary_header::BitpixValue;
 impl<'a> Fits<'a> {
     pub fn from_bytes_slice(buf: &'a [u8]) -> Result<Fits<'a>, Error<'a>> {
+        let num_total_bytes = buf.len();
         let (buf, header) = PrimaryHeader::new(&buf)?;
-        println!("azea");
 
         // At this point the header is valid
         let num_items = (0..header.get_naxis())
@@ -115,8 +116,14 @@ impl<'a> Fits<'a> {
                 total
             });
 
-        multispace0(buf)?;
-        println!("azea2, {:?}", num_items);
+        //white_space0(buf)?;
+        let num_bytes_consumed = num_total_bytes - buf.len();
+        let num_bytes_to_next_line = 80 - num_bytes_consumed % 80;
+
+        let (buf, _) = preceded(
+            count(tag(b" "), num_bytes_to_next_line),
+            many0(count(tag(b" "), 80))
+        )(buf)?;
 
         // Read the byte data stream in BigEndian order conformly to the spec
         let data = match header.get_bitpix() {
@@ -127,7 +134,6 @@ impl<'a> Fits<'a> {
             BitpixValue::F32 => DataType::F32(DataUnitF32::parse(buf, num_items)?),
             BitpixValue::F64 => DataType::F64(DataUnitF64::parse(buf, num_items)?),
         };
-        println!("azea2, {:?}", num_items);
 
         Ok(Fits { header, data })
     }
@@ -197,7 +203,6 @@ mod tests {
             },
             _ => unreachable!()
         };
-        
     }
 
     #[test]
@@ -250,8 +255,8 @@ mod tests {
             _ => unreachable!()
         };
     }
-    /*#[test]
-    fn test_fits_tile4() {
+    #[test]
+    fn test_fits_tile6() {
         use std::fs::File;
         use crate::DataType;
         let  f  = File::open("misc/Npix8.fits").unwrap();
@@ -265,6 +270,54 @@ mod tests {
             },
             _ => unreachable!()
         };
+    }
+
+    #[test]
+    fn test_fits_tile7() {
+        use std::{fs, io};
+
+        let entries = fs::read_dir("./misc/dss2_blue_xj_s")
+            .unwrap()
+            .map(|res| res.map(|e| e.path()))
+            .collect::<Result<Vec<_>, io::Error>>()
+            .unwrap();
+
+        use crate::DataType;
+        for filename in entries {
+            let  f  = fs::File::open(filename).unwrap();
+            let  bytes: Result<Vec<_>, _> =  f.bytes().collect();
+            let  buf  =  bytes.unwrap();
+            let  Fits { data, .. } =  Fits::from_bytes_slice(&buf).unwrap();
+            
+            match data {
+                DataType::I16(v) => {
+                    println!("{:?}", v);
+                },
+                _ => unreachable!()
+            };
+        }
+    }
+    #[test]
+    fn test_fits_tile8() {
+        use std::fs::File;
+        use crate::DataType;
+        let  f  = File::open("misc/Npix44108.fits").unwrap();
+        let  bytes: Result<Vec<_>, _> =  f.bytes().collect();
+        let  buf  =  bytes.unwrap();
+        let  Fits { data, header } =  Fits::from_bytes_slice(&buf).unwrap();
+
+        let header = dbg!(header);
         
-    }*/
+        match data {
+            DataType::F32(v) => {
+                println!("{:?}", v);
+            },
+            _ => unreachable!()
+        };
+    }
+    #[test]
+    fn test_bad_bytes() {
+        let bytes: &[u8] = &[60, 33, 68, 79, 67, 84, 89, 80, 69, 32, 72, 84, 77, 76, 32, 80, 85, 66, 76, 73, 67, 32, 34, 45, 47, 47, 73, 69, 84, 70, 47, 47, 68, 84, 68, 32, 72, 84, 77, 76, 32, 50, 46, 48, 47, 47, 69, 78, 34, 62, 10, 60, 104, 116, 109, 108, 62, 60, 104, 101, 97, 100, 62, 10, 60, 116, 105, 116, 108, 101, 62, 52, 48, 52, 32, 78, 111, 116, 32, 70, 111, 117, 110, 100, 60, 47, 116, 105, 116, 108, 101, 62, 10, 60, 47, 104, 101, 97, 100, 62, 60, 98, 111, 100, 121, 62, 10, 60, 104, 49, 62, 78, 111, 116, 32, 70, 111, 117, 110, 100, 60, 47, 104, 49, 62, 10, 60, 112, 62, 84, 104, 101, 32, 114, 101, 113, 117, 101, 115, 116, 101, 100, 32, 85, 82, 76, 32, 47, 97, 108, 108, 115, 107, 121, 47, 80, 78, 82, 101, 100, 47, 78, 111, 114, 100, 101, 114, 55, 47, 68, 105, 114, 52, 48, 48, 48, 48, 47, 78, 112, 105, 120, 52, 52, 49, 49, 49, 46, 102, 105, 116, 115, 32, 119, 97, 115, 32, 110, 111, 116, 32, 102, 111, 117, 110, 100, 32, 111, 110, 32, 116, 104, 105, 115, 32, 115, 101, 114, 118, 101, 114, 46, 60, 47, 112, 62, 10, 60, 47, 98, 111, 100, 121, 62, 60, 47, 104, 116, 109, 108, 62, 10];
+        assert!(Fits::from_bytes_slice(bytes).is_err());
+    }
 }

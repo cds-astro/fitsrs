@@ -1,11 +1,10 @@
 use nom::{
     branch::alt,
-    bytes::complete::{tag, escaped, take_till},
-    character::complete::{alphanumeric0, char, digit1, space0, alpha0, one_of},
-    combinator::{map, value, opt},
-    sequence::{delimited, preceded, tuple, pair},
+    bytes::complete::{take_till, take_while},
+    character::complete::{char, space0},
+    combinator::{map, value},
+    sequence::{delimited, preceded},
     number::complete::float,
-    combinator::recognize,
     IResult,
 };
 
@@ -18,8 +17,12 @@ pub enum FITSKeywordValue<'a> {
     Undefined,
 }
 
+pub(crate) fn white_space0(s: &[u8]) -> IResult<&[u8], &[u8]> {
+    take_while(|s| s == b' ')(s)
+}
+
 pub(crate) fn parse_undefined(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
-    value(FITSKeywordValue::Undefined, space0)(buf)
+    value(FITSKeywordValue::Undefined, white_space0)(buf)
 }
 
 pub(crate) fn parse_character_string(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
@@ -29,7 +32,6 @@ pub(crate) fn parse_character_string(buf: &[u8]) -> IResult<&[u8], FITSKeywordVa
             delimited(
                 char('\''),
                 take_till(|c| c == b'\''),
-                //escaped(alpha1, '\\', one_of(" ")), 
                 char('\'')
             )
         ),
@@ -50,7 +52,7 @@ pub(crate) fn parse_logical(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
     )(buf)
 }
 
-pub(crate) fn parse_integer(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
+/*pub(crate) fn parse_integer(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
     preceded(
         space0,
         map(
@@ -69,7 +71,7 @@ pub(crate) fn parse_integer(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
             }
         )
     )(buf)
-}
+}*/
 
 pub(crate) fn parse_float(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
     preceded(
@@ -85,9 +87,9 @@ pub(crate) fn parse_float(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_integer, parse_character_string, parse_float, FITSKeywordValue};
+    use super::{parse_character_string, parse_float, FITSKeywordValue};
 
-    #[test]
+    /*#[test]
     fn test_integer() {
         assert_eq!(
             parse_integer(b"      -4545424"),
@@ -97,7 +99,7 @@ mod tests {
             parse_integer(b"      5506"),
             Ok((b"" as &[u8], FITSKeywordValue::IntegerNumber(5506)))
         );
-    }
+    }*/
 
     #[test]
     fn test_float() {
@@ -110,7 +112,6 @@ mod tests {
             Ok((b"" as &[u8], FITSKeywordValue::FloatingPoint(-32767.0)))
         );
     }
-
     #[test]
     fn test_string() {
         assert_eq!(

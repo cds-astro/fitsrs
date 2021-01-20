@@ -1,4 +1,3 @@
-
 # FITSReader written in pure Rust using [nom](https://github.com/Geal/nom)
 
 This crate is under heavy development, it was initiated for reading fits HiPS tile, i.e. generated from hipsgen and therefore taking into account that a fits tile:
@@ -7,6 +6,7 @@ This crate is under heavy development, it was initiated for reading fits HiPS ti
 * Does not use any WCS
 
 ## What is supported ?
+
 The read of a primary unit, i.e. the primary header and data unit
 The extensions are not supported
 

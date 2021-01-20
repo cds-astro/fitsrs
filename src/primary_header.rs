@@ -16,38 +16,36 @@ impl<'a> PrimaryHeader<'a> {
         let mut simple = false;
         let mut naxis = false;
         let mut bitpix = false;
-
-        while !end {
+        while !end && !input.is_empty() {
             let (input_next, card) = parse_card(input)?;
             input = input_next;
-            if card == FITSHeaderKeyword::End {
-                // Do not push the END keyword to the cards
-                end = true;
-            } else {
-                let key = match card {
-                    FITSHeaderKeyword::Simple => {
-                        simple = true;
-                        "SIMPLE"
-                    }
-                    FITSHeaderKeyword::Bitpix(_) => {
-                        bitpix = true;
-                        "BITPIX"
-                    }
-                    FITSHeaderKeyword::Naxis(_) => {
-                        naxis = true;
-                        "NAXIS"
-                    },
-                    FITSHeaderKeyword::Blank(_) => "BLANK",
-                    FITSHeaderKeyword::NaxisSize { name, .. } => name,
-                    FITSHeaderKeyword::Comment(_) => "COMMENT",
-                    FITSHeaderKeyword::History(_) => "HISTORY",
-                    FITSHeaderKeyword::Other { name, .. } => std::str::from_utf8(name).unwrap(),
-                    _ => unreachable!(),
-                };
 
-                cards.push((key, card));
-                keys.insert(key);
-            }
+            let key = match card {
+                FITSHeaderKeyword::Simple => {
+                    simple = true;
+                    "SIMPLE"
+                }
+                FITSHeaderKeyword::Bitpix(_) => {
+                    bitpix = true;
+                    "BITPIX"
+                }
+                FITSHeaderKeyword::Naxis(_) => {
+                    naxis = true;
+                    "NAXIS"
+                },
+                FITSHeaderKeyword::Blank(_) => "BLANK",
+                FITSHeaderKeyword::NaxisSize { name, .. } => name,
+                FITSHeaderKeyword::Comment(_) => "COMMENT",
+                FITSHeaderKeyword::History(_) => "HISTORY",
+                FITSHeaderKeyword::Other { name, .. } => std::str::from_utf8(name).unwrap(),
+                FITSHeaderKeyword::End => {
+                    end = true;
+                    continue;
+                }
+            };
+
+            cards.push((key, card));
+            keys.insert(key);
         }
         use std::borrow::Cow;
         // Check mandatory keys are present
@@ -68,13 +66,12 @@ impl<'a> PrimaryHeader<'a> {
                         return Err(Error::MandatoryKeywordMissing(key.into()));
                     }
                 }
+
+                let header = Self { cards, keys };
+                Ok((input, header))
             } else {
-                unreachable!();
+                Err(Error::MandatoryKeywordMissing("NAXISM".into()))
             }
-
-            let header = Self { cards, keys };
-
-            Ok((input, header))
         }
     }
 
@@ -86,13 +83,13 @@ impl<'a> PrimaryHeader<'a> {
         }
     }
 
-    pub(crate) fn get_blank(&self) -> f64 {
+    /*pub(crate) fn get_blank(&self) -> f64 {
         if let Some(&FITSHeaderKeyword::Blank(blank)) = self.get("BLANK") {
             blank
         } else {
             unreachable!();
         }
-    }
+    }*/
 
     pub(crate) fn get_axis_size(&self, idx: usize) -> Option<usize> {
         // NAXIS indexes begins at 1 instead of 0
@@ -162,20 +159,22 @@ type MyResult<'a, I, O> = Result<(I, O), Error<'a>>;
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_till},
-    character::complete::{alphanumeric1, digit1, multispace0, space0, one_of},
-    character::is_space,
+    character::complete::{digit1, multispace0},
     combinator::recognize,
     sequence::{pair, preceded},
     IResult,
 };
 
-const KEYWORD_BYTES_LENGTH: usize = 8;
 pub(self) fn parse_card(header: &[u8]) -> MyResult<&[u8], FITSHeaderKeyword> {
-    let (header, (keyword, value)) =
-        preceded(multispace0, pair(parse_card_keyword, parse_card_value))(header)?;
-    println!("{:?} {:?}", std::str::from_utf8(keyword).unwrap(), value);
+    // First parse the keyword
+    let (header, keyword) = preceded(multispace0, parse_card_keyword)(header)?;
+    // We stop consuming tokens after the exit
+    if keyword == b"END" {
+        return Ok((header, FITSHeaderKeyword::End))
+    }
 
-    let value = dbg!(value);
+    let (header, value) = parse_card_value(header)?;
+
     match (keyword, value) {
         // SIMPLE = true check
         (b"SIMPLE", value) => match value {
@@ -228,11 +227,6 @@ pub(self) fn parse_card(header: &[u8]) -> MyResult<&[u8], FITSHeaderKeyword> {
             FITSKeywordValue::CharacterString(str) => Ok((header, FITSHeaderKeyword::History(str))),
             _ => Err(Error::MandatoryValueError("HISTORY")),
         },
-        // END keyword check
-        (b"END", value) => match value {
-            FITSKeywordValue::Undefined => { Ok((header, FITSHeaderKeyword::End)) },
-            _ => Err(Error::MandatoryValueError("END")),
-        },
         ([b'N', b'A', b'X', b'I', b'S', ..], value) => {
             let name = std::str::from_utf8(keyword).unwrap();
             let (_, idx_axis) =
@@ -281,7 +275,7 @@ pub(crate) fn parse_card_keyword(buf: &[u8]) -> IResult<&[u8], &[u8]> {
 use crate::card_value::*;
 pub(crate) fn parse_card_value(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
     preceded(
-        space0,
+        white_space0,
         alt((
             preceded(
                 tag(b"= "),
@@ -289,7 +283,6 @@ pub(crate) fn parse_card_value(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
                     parse_character_string,
                     parse_logical,
                     parse_float,
-                    parse_integer,
                 )),
             ),
             parse_undefined,
