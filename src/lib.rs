@@ -41,6 +41,14 @@ impl<'a> DataUnit<'a> for DataUnitU8<'a> {
     }
 }
 
+impl<'a> std::ops::Deref for DataUnitU8<'a> {
+    type Target = &'a [u8];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 #[derive(Debug)]
 pub struct DataUnitI16(pub Vec<i16>);
 impl<'a> DataUnit<'a> for DataUnitI16 {
@@ -50,6 +58,13 @@ impl<'a> DataUnit<'a> for DataUnitI16 {
         BigEndian::read_i16_into(raw_bytes, &mut dst);
 
         DataUnitI16(dst)
+    }
+}
+impl std::ops::Deref for DataUnitI16 {
+    type Target = Vec<i16>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -64,7 +79,13 @@ impl<'a> DataUnit<'a> for DataUnitI32 {
         DataUnitI32(dst)
     }
 }
+impl std::ops::Deref for DataUnitI32 {
+    type Target = Vec<i32>;
 
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 #[derive(Debug)]
 pub struct DataUnitI64(pub Vec<i64>);
 impl<'a> DataUnit<'a> for DataUnitI64 {
@@ -74,6 +95,13 @@ impl<'a> DataUnit<'a> for DataUnitI64 {
         BigEndian::read_i64_into(raw_bytes, &mut dst);
 
         DataUnitI64(dst)
+    }
+}
+impl std::ops::Deref for DataUnitI64 {
+    type Target = Vec<i64>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 #[derive(Debug)]
@@ -87,6 +115,13 @@ impl<'a> DataUnit<'a> for DataUnitF32 {
         DataUnitF32(dst)
     }
 }
+impl std::ops::Deref for DataUnitF32 {
+    type Target = Vec<f32>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 #[derive(Debug)]
 pub struct DataUnitF64(pub Vec<f64>);
 impl<'a> DataUnit<'a> for DataUnitF64 {
@@ -98,13 +133,21 @@ impl<'a> DataUnit<'a> for DataUnitF64 {
         DataUnitF64(dst)
     }
 }
+impl std::ops::Deref for DataUnitF64 {
+    type Target = Vec<f64>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 use error::Error;
 use nom::bytes::complete::tag;
 use nom::multi::{count, many0};
 use nom::sequence::preceded;
 use primary_header::BitpixValue;
 impl<'a> Fits<'a> {
-    pub fn from_bytes_slice(buf: &'a [u8]) -> Result<Fits<'a>, Error<'a>> {
+    pub fn from_byte_slice(buf: &'a [u8]) -> Result<Fits<'a>, Error<'a>> {
         let num_total_bytes = buf.len();
         let (buf, header) = PrimaryHeader::new(&buf)?;
 
@@ -137,6 +180,14 @@ impl<'a> Fits<'a> {
 
         Ok(Fits { header, data })
     }
+
+    pub fn get_header(&'a self) -> &PrimaryHeader<'a> {
+        &self.header
+    }
+
+    pub fn get_data(&'a self) -> &DataType<'a> {
+        &self.data
+    }
 }
 
 #[derive(Debug)]
@@ -160,7 +211,7 @@ mod tests {
         let f = File::open("misc/Npix208.fits").unwrap();
         let bytes: Result<Vec<_>, _> = f.bytes().collect();
         let buf = bytes.unwrap();
-        let Fits { header, .. } = Fits::from_bytes_slice(&buf).unwrap();
+        let Fits { header, .. } = Fits::from_byte_slice(&buf).unwrap();
         let PrimaryHeader { cards, .. } = header;
 
         let cards_expect = vec![
@@ -190,86 +241,72 @@ mod tests {
 
     #[test]
     fn test_fits_tile2() {
-        use crate::DataType;
         use std::fs::File;
-        let f = File::open("misc/Npix282.fits").unwrap();
-        let bytes: Result<Vec<_>, _> = f.bytes().collect();
-        let buf = bytes.unwrap();
-        let Fits { data, .. } = Fits::from_bytes_slice(&buf).unwrap();
+
+        let mut f = File::open("misc/Npix282.fits").unwrap();
+        let mut buf = Vec::new();
+        f.read_to_end(&mut buf).unwrap();
+
+        let Fits { data, .. } = Fits::from_byte_slice(&buf[..]).unwrap();
 
         match data {
-            DataType::F32(_v) => {
-                //println!("{:?}", v);
-            }
-            _ => unreachable!(),
-        };
+            super::DataType::F32(_) => {}
+            _ => (),
+        }
     }
 
     #[test]
     fn test_fits_tile3() {
-        use crate::DataType;
         use std::fs::File;
-        let f = File::open("misc/Npix4906.fits").unwrap();
-        let bytes: Result<Vec<_>, _> = f.bytes().collect();
-        let buf = bytes.unwrap();
-        let Fits { data, .. } = Fits::from_bytes_slice(&buf).unwrap();
 
-        match data {
-            DataType::I16(v) => {
-                println!("{:?}", v);
-            }
-            _ => unreachable!(),
-        };
+        let mut f = File::open("misc/Npix4906.fits").unwrap();
+        let mut buf = Vec::new();
+        f.read_to_end(&mut buf).unwrap();
+
+        let _fits = Fits::from_byte_slice(&buf[..]).unwrap();
     }
 
     #[test]
     fn test_fits_tile4() {
-        use crate::DataType;
         use std::fs::File;
-        let f = File::open("misc/Npix9.fits").unwrap();
-        let bytes: Result<Vec<_>, _> = f.bytes().collect();
-        let buf = bytes.unwrap();
-        let Fits { data, .. } = Fits::from_bytes_slice(&buf).unwrap();
 
-        match data {
-            DataType::I16(v) => {
-                println!("{:?}", v);
-            }
-            _ => unreachable!(),
-        };
+        let mut f = File::open("misc/Npix9.fits").unwrap();
+        let mut buf = Vec::new();
+        f.read_to_end(&mut buf).unwrap();
+
+        let _fits = Fits::from_byte_slice(&buf[..]).unwrap();
     }
 
     #[test]
     fn test_fits_tile5() {
-        use crate::DataType;
         use std::fs::File;
-        let f = File::open("misc/Npix133.fits").unwrap();
-        let bytes: Result<Vec<_>, _> = f.bytes().collect();
-        let buf = bytes.unwrap();
-        let Fits { data, .. } = Fits::from_bytes_slice(&buf).unwrap();
 
-        match data {
-            DataType::I16(v) => {
-                println!("{:?}", v);
-            }
-            _ => unreachable!(),
-        };
+        let mut f = File::open("misc/Npix133.fits").unwrap();
+        let mut buf = Vec::new();
+        f.read_to_end(&mut buf).unwrap();
+
+        let _fits = Fits::from_byte_slice(&buf[..]).unwrap();
     }
     #[test]
     fn test_fits_tile6() {
-        use crate::DataType;
         use std::fs::File;
-        let f = File::open("misc/Npix8.fits").unwrap();
-        let bytes: Result<Vec<_>, _> = f.bytes().collect();
-        let buf = bytes.unwrap();
-        let Fits { data, .. } = Fits::from_bytes_slice(&buf).unwrap();
 
-        match data {
-            DataType::I16(v) => {
-                println!("{:?}", v);
-            }
-            _ => unreachable!(),
-        };
+        let mut f = File::open("misc/Npix8.fits").unwrap();
+        let mut buf = Vec::new();
+        f.read_to_end(&mut buf).unwrap();
+
+        let _fits = Fits::from_byte_slice(&buf[..]).unwrap();
+    }
+
+    #[test]
+    fn test_fits_tile7() {
+        use std::fs::File;
+
+        let mut f = File::open("misc/allsky_panstarrs.fits").unwrap();
+        let mut buf = Vec::new();
+        f.read_to_end(&mut buf).unwrap();
+
+        let _fits = Fits::from_byte_slice(&buf[..]).unwrap();
     }
 
     #[test]
@@ -289,6 +326,6 @@ mod tests {
             101, 114, 118, 101, 114, 46, 60, 47, 112, 62, 10, 60, 47, 98, 111, 100, 121, 62, 60,
             47, 104, 116, 109, 108, 62, 10,
         ];
-        assert!(Fits::from_bytes_slice(bytes).is_err());
+        assert!(Fits::from_byte_slice(bytes).is_err());
     }
 }

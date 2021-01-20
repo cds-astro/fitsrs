@@ -1,5 +1,5 @@
 [package]
-name = "fitsreader"
+name = "fitsrs"
 version = "0.1.1"
 authors = ["Matthieu Baumann <matthieu.baumann@astro.unistra.fr>"]
 edition = "2018"

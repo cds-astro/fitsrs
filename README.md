@@ -1,4 +1,4 @@
-# FITSReader written in pure Rust using [nom](https://github.com/Geal/nom)
+# FITS reader written in pure Rust using [nom](https://github.com/Geal/nom)
 
 This crate is under heavy development, it was initiated for reading fits HiPS tile, i.e. generated from hipsgen and therefore taking into account that a fits tile:
 
@@ -14,19 +14,25 @@ The extensions are not supported
 
 ```rust
 use std::fs::File;
-use fitsreader::{Fits, DataType};
 
-let f  = File::open("misc/Npix208.fits").unwrap();
-let bytes: Result<Vec<_>, _> =  f.bytes().collect();
-let buf  =  bytes.unwrap();
-let Fits { data, .. } =  Fits::from_bytes_slice(&buf).unwrap();
+use std::io::prelude::*;
 
-match data {
-    DataType::F32(v) => {
-        println!("{:?}", v);
-    },
-    _ => unreachable!()
-};
+extern crate fitsrs;
+use fitsrs::{Fits, DataType};
+
+fn main() {
+    let mut f = File::open("../fitsreader/misc/allsky_panstarrs.fits").unwrap();
+    let mut buffer = Vec::new();
+    f.read_to_end(&mut buffer).unwrap();
+
+    let Fits { header: _header, data } = Fits::from_byte_slice(&buffer.as_slice()).unwrap();
+    match data {
+        DataType::F32(_v) => {
+            // v
+        },
+        _ => ()
+    }
+}
 ```
 
 To run the tests:
