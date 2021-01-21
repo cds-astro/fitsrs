@@ -1,7 +1,13 @@
 use std::collections::HashSet;
+use serde::Serialize;
+
 #[derive(Debug, PartialEq)]
+#[derive(Serialize)]
 pub struct PrimaryHeader<'a> {
+    #[serde(skip_serializing)]
     pub keys: HashSet<&'a str>,
+
+    // Only serialize the cards
     pub cards: Vec<(&'a str, FITSHeaderKeyword<'a>)>,
 }
 
@@ -121,6 +127,7 @@ impl<'a> PrimaryHeader<'a> {
 }
 
 #[derive(Debug, PartialEq)]
+#[derive(Serialize)]
 pub enum FITSHeaderKeyword<'a> {
     Simple,
     Bitpix(BitpixValue),
@@ -146,6 +153,7 @@ pub enum FITSHeaderKeyword<'a> {
 
 use crate::card_value::FITSKeywordValue;
 #[derive(Debug, PartialEq)]
+#[derive(Serialize)]
 pub enum BitpixValue {
     U8,
     I16,

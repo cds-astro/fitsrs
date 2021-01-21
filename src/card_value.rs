@@ -8,7 +8,9 @@ use nom::{
     IResult,
 };
 
+use serde::Serialize;
 #[derive(Debug, PartialEq, Clone)]
+#[derive(Serialize)]
 pub enum FITSKeywordValue<'a> {
     IntegerNumber(i64),
     Logical(bool),

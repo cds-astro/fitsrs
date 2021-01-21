@@ -10,7 +10,11 @@ mod primary_header;
 
 pub use card_value::FITSKeywordValue;
 pub use primary_header::FITSHeaderKeyword;
-use primary_header::PrimaryHeader;
+pub use primary_header::PrimaryHeader;
+pub use primary_header::BitpixValue;
+
+use serde::Serialize;
+#[derive(Serialize)]
 #[derive(Debug)]
 pub struct Fits<'a> {
     pub header: PrimaryHeader<'a>,
@@ -33,6 +37,7 @@ trait DataUnit<'a>: std::marker::Sized {
 }
 
 #[derive(Debug)]
+#[derive(Serialize)]
 pub struct DataUnitU8<'a>(pub &'a [u8]);
 impl<'a> DataUnit<'a> for DataUnitU8<'a> {
     type Item = u8;
@@ -50,6 +55,7 @@ impl<'a> std::ops::Deref for DataUnitU8<'a> {
 }
 
 #[derive(Debug)]
+#[derive(Serialize)]
 pub struct DataUnitI16(pub Vec<i16>);
 impl<'a> DataUnit<'a> for DataUnitI16 {
     type Item = i16;
@@ -69,6 +75,7 @@ impl std::ops::Deref for DataUnitI16 {
 }
 
 #[derive(Debug)]
+#[derive(Serialize)]
 pub struct DataUnitI32(pub Vec<i32>);
 impl<'a> DataUnit<'a> for DataUnitI32 {
     type Item = i32;
@@ -87,6 +94,7 @@ impl std::ops::Deref for DataUnitI32 {
     }
 }
 #[derive(Debug)]
+#[derive(Serialize)]
 pub struct DataUnitI64(pub Vec<i64>);
 impl<'a> DataUnit<'a> for DataUnitI64 {
     type Item = i64;
@@ -105,6 +113,7 @@ impl std::ops::Deref for DataUnitI64 {
     }
 }
 #[derive(Debug)]
+#[derive(Serialize)]
 pub struct DataUnitF32(pub Vec<f32>);
 impl<'a> DataUnit<'a> for DataUnitF32 {
     type Item = f32;
@@ -123,6 +132,7 @@ impl std::ops::Deref for DataUnitF32 {
     }
 }
 #[derive(Debug)]
+#[derive(Serialize)]
 pub struct DataUnitF64(pub Vec<f64>);
 impl<'a> DataUnit<'a> for DataUnitF64 {
     type Item = f64;
@@ -145,7 +155,6 @@ use error::Error;
 use nom::bytes::complete::tag;
 use nom::multi::{count, many0};
 use nom::sequence::preceded;
-use primary_header::BitpixValue;
 impl<'a> Fits<'a> {
     pub fn from_byte_slice(buf: &'a [u8]) -> Result<Fits<'a>, Error<'a>> {
         let num_total_bytes = buf.len();
@@ -191,6 +200,7 @@ impl<'a> Fits<'a> {
 }
 
 #[derive(Debug)]
+#[derive(Serialize)]
 pub enum DataType<'a> {
     U8(DataUnitU8<'a>),
     I16(DataUnitI16),

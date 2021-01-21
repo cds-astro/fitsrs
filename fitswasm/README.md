@@ -18,10 +18,14 @@ fetch('http://alasky.u-strasbg.fr/Pan-STARRS/DR1/g/Norder3/Allsky.fits')
         // Get a bytes buffer
         const data = new Uint8Array(buf);
         // Call the wasm parser
-        console.log(fitswasm.readPrimaryHDUData(data));
-        // The result can be a
+        const fits = fitswasm.read(data));
+        // fits is an js object containing a "header" key
+        // and a "data" key
+        const header = fits.header;
+        const data = fits.data;
+        // The data can be either a
         // Uint8Array, Int16Array, Int32Array,
-        // Int64Array, Float32Array, Float64Array
+        // Float32Array or Float64Array
         // depending on the bitpix keyword found
     })
 ```
