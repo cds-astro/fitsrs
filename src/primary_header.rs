@@ -43,7 +43,9 @@ impl<'a> PrimaryHeader<'a> {
                 FITSHeaderKeyword::NaxisSize { name, .. } => name,
                 FITSHeaderKeyword::Comment(_) => "COMMENT",
                 FITSHeaderKeyword::History(_) => "HISTORY",
-                FITSHeaderKeyword::Other { name, .. } => std::str::from_utf8(name).unwrap(),
+                FITSHeaderKeyword::Other { name, .. } => {
+                    std::str::from_utf8(name)?
+                },
                 FITSHeaderKeyword::End => {
                     end = true;
                     continue;
