@@ -8,6 +8,9 @@ mod card_value;
 mod error;
 mod primary_header;
 
+mod fits;
+pub use fits::FitsMemAligned;
+
 pub use card_value::FITSKeywordValue;
 pub use primary_header::FITSHeaderKeyword;
 pub use primary_header::PrimaryHeader;
@@ -117,7 +120,7 @@ impl std::ops::Deref for DataUnitI64 {
 pub struct DataUnitF32(pub Vec<f32>);
 impl<'a> DataUnit<'a> for DataUnitF32 {
     type Item = f32;
-    fn new(raw_bytes: &[u8], num_items: usize) -> Self {
+    fn new(raw_bytes: &'a [u8], num_items: usize) -> Self {
         let mut dst: Vec<Self::Item> = vec![Self::Item::default(); num_items];
         BigEndian::read_f32_into(raw_bytes, &mut dst);
 
