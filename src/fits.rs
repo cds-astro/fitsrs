@@ -51,8 +51,8 @@ where
         // 80 bytes multiple, then it also begins at a correctly
         // aligned location.
         let x_ptr = buf as *const [u8] as *mut [u8];
-        let x_mut_ref = unsafe { &mut *x_ptr };
-        let (_, mut data, _) = x_mut_ref.align_to_mut::<T>();
+        let x_mut_ref = &mut *x_ptr;
+        let (_, data, _) = x_mut_ref.align_to_mut::<T>();
         // 2. Convert to big endianness. This is O(N) over the size of the data
         T::to_slice(data);
         // 3. Keep only the pixels

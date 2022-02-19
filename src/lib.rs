@@ -9,7 +9,7 @@ mod error;
 mod primary_header;
 
 mod fits;
-pub use fits::FitsMemAligned;
+pub use fits::{FitsMemAligned, BigEndianSlice};
 
 pub use card_value::FITSKeywordValue;
 pub use primary_header::FITSHeaderKeyword;
