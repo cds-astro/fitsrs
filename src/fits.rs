@@ -5,7 +5,7 @@ use serde::Serialize;
 #[derive(Debug)]
 pub struct FitsMemAligned<'a, T>
 where
-    T: BigEndianSlice
+    T: ToBigEndian
 {
     pub header: PrimaryHeader<'a>,
     pub data: &'a [T],
@@ -19,7 +19,7 @@ use byteorder::BigEndian;
 use crate::byteorder::ByteOrder;
 impl<'a, T> FitsMemAligned<'a, T>
 where
-    T: BigEndianSlice
+    T: ToBigEndian
 {
     /// Parse a FITS file correctly aligned in memory
     ///
@@ -71,24 +71,27 @@ where
     }
 }
 
-pub trait BigEndianSlice {
+pub trait ToBigEndian {
     fn to_slice(s: &mut [Self]) where Self: Sized;
 }
 
-impl BigEndianSlice for f32 {
+impl ToBigEndian for f32 {
     fn to_slice(s: &mut [Self]) {
         BigEndian::from_slice_f32(s);
     }
 }
-impl BigEndianSlice for i32 {
+impl ToBigEndian for i32 {
     fn to_slice(s: &mut [Self]) {
         BigEndian::from_slice_i32(s);
     }
 }
-impl BigEndianSlice for i16 {
+impl ToBigEndian for i16 {
     fn to_slice(s: &mut [Self]) {
         BigEndian::from_slice_i16(s);
     }
+}
+impl ToBigEndian for u8 {
+    fn to_slice(_s: &mut [Self]) {}
 }
 
 #[cfg(test)]
