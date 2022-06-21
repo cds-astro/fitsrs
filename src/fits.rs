@@ -75,6 +75,11 @@ pub trait ToBigEndian {
     fn to_slice(s: &mut [Self]) where Self: Sized;
 }
 
+impl ToBigEndian for f64 {
+    fn to_slice(s: &mut [Self]) {
+        BigEndian::from_slice_f64(s);
+    }
+}
 impl ToBigEndian for f32 {
     fn to_slice(s: &mut [Self]) {
         BigEndian::from_slice_f32(s);
