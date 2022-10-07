@@ -202,6 +202,53 @@ impl<'a> Fits<'a> {
     }
 }
 
+struct ParseDataUnit<'a, T> {
+    idx: usize,
+    num_bytes_per_item: usize,
+    data: &'a [u8],
+    val: Option<T>,
+}
+
+impl<'a, T> ParseDataUnit<'a, T> {
+    fn new(data: &'a [u8]) -> Self {
+        Self {
+            idx: 0,
+            num_bytes_per_item: std::mem::size_of::<T>(),
+            data,
+            val: None
+        }
+    }
+}
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use futures::stream::Stream;
+impl<'a, T> Stream for ParseDataUnit<'a, T>
+where
+    T: ToBigEndian + Unpin
+{
+    type Item = T;
+
+    /// Attempt to resolve the next item in the stream.
+    /// Returns `Poll::Pending` if not ready, `Poll::Ready(Some(x))` if a value
+    /// is ready, and `Poll::Ready(None)` if the stream has completed.
+    fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        // Deserialize row by row.
+        let len = self.data.len();
+        if let Some(val) = self.val.take() {
+            Poll::Ready(Some(val))
+        } else {
+            if self.idx < len {
+                self.val = Some(T::read(&self.data[self.idx..]));
+                self.idx += self.num_bytes_per_item;
+
+                Poll::Pending
+            } else {
+                Poll::Ready(None)
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 #[derive(Serialize)]
 pub enum DataType<'a> {

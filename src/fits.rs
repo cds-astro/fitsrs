@@ -72,30 +72,51 @@ where
 }
 
 pub trait ToBigEndian {
+    fn read(buf: &[u8]) -> Self;
     fn to_slice(s: &mut [Self]) where Self: Sized;
 }
 
 impl ToBigEndian for f64 {
+    fn read(buf: &[u8]) -> Self {
+        BigEndian::read_f64(buf)
+    }
+
     fn to_slice(s: &mut [Self]) {
         BigEndian::from_slice_f64(s);
     }
 }
 impl ToBigEndian for f32 {
+    fn read(buf: &[u8]) -> Self {
+        BigEndian::read_f32(buf)
+    }
+
     fn to_slice(s: &mut [Self]) {
         BigEndian::from_slice_f32(s);
     }
 }
 impl ToBigEndian for i32 {
+    fn read(buf: &[u8]) -> Self {
+        BigEndian::read_i32(buf)
+    }
+
     fn to_slice(s: &mut [Self]) {
         BigEndian::from_slice_i32(s);
     }
 }
 impl ToBigEndian for i16 {
+    fn read(buf: &[u8]) -> Self {
+        BigEndian::read_i16(buf)
+    }
+
     fn to_slice(s: &mut [Self]) {
         BigEndian::from_slice_i16(s);
     }
 }
 impl ToBigEndian for u8 {
+    fn read(buf: &[u8]) -> Self {
+        buf[0]
+    }
+
     fn to_slice(_s: &mut [Self]) {}
 }
 
