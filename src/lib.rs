@@ -39,21 +39,14 @@ trait DataUnit<'a>: std::marker::Sized {
     fn new(raw_bytes: &'a [u8], num_items: usize) -> Self;
 }
 
+use std::borrow::Cow;
 #[derive(Debug)]
 #[derive(Serialize)]
-pub struct DataUnitU8<'a>(pub &'a [u8]);
+pub struct DataUnitU8<'a>(pub Cow<'a, [u8]>);
 impl<'a> DataUnit<'a> for DataUnitU8<'a> {
     type Item = u8;
     fn new(raw_bytes: &'a [u8], _num_items: usize) -> Self {
-        DataUnitU8(raw_bytes)
-    }
-}
-
-impl<'a> std::ops::Deref for DataUnitU8<'a> {
-    type Target = &'a [u8];
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
+        DataUnitU8(Cow::Borrowed(raw_bytes))
     }
 }
 
@@ -193,6 +186,82 @@ impl<'a> Fits<'a> {
         Ok(Fits { header, data })
     }
 
+    pub async fn from_byte_slice_async(buf: &'a [u8]) -> Result<Fits<'a>, Error<'a>> {
+        let num_total_bytes = buf.len();
+        let (buf, header) = PrimaryHeader::new(&buf)?;
+
+        // At this point the header is valid
+        let num_items = (0..header.get_naxis())
+            .map(|idx| header.get_axis_size(idx).unwrap())
+            .fold(1, |mut total, val| {
+                total *= val;
+                total
+            });
+
+        //white_space0(buf)?;
+        let num_bytes_consumed = num_total_bytes - buf.len();
+        let num_bytes_to_next_line = 80 - num_bytes_consumed % 80;
+
+        let (buf, _) = preceded(
+            count(tag(b" "), num_bytes_to_next_line),
+            many0(count(tag(b" "), 80)),
+        )(buf)?;
+
+        // Read the byte data stream in BigEndian order conformly to the spec
+        let data = match header.get_bitpix() {
+            BitpixValue::U8 => {
+                DataType::U8(DataUnitU8(Cow::Borrowed(&buf[..num_items])))
+            },
+            BitpixValue::I16 => {
+                let mut stream = ParseDataUnit::<i16>::new(buf, num_items);
+                let mut res = vec![];
+                while let Some(item) = stream.next().await {
+                    res.push(item);
+                }
+
+                DataType::I16(DataUnitI16(res))
+            },
+            BitpixValue::I32 => {
+                let mut stream = ParseDataUnit::<i32>::new(buf, num_items);
+                let mut res = vec![];
+                while let Some(item) = stream.next().await {
+                    res.push(item);
+                }
+
+                DataType::I32(DataUnitI32(res))
+            },
+            BitpixValue::I64 => {
+                let mut stream = ParseDataUnit::<i64>::new(buf, num_items);
+                let mut res = vec![];
+                while let Some(item) = stream.next().await {
+                    res.push(item);
+                }
+
+                DataType::I64(DataUnitI64(res))
+            },
+            BitpixValue::F32 => {
+                let mut stream = ParseDataUnit::<f32>::new(buf, num_items);
+                let mut res = vec![];
+                while let Some(item) = stream.next().await {
+                    res.push(item);
+                }
+
+                DataType::F32(DataUnitF32(res))
+            },
+            BitpixValue::F64 => {
+                let mut stream = ParseDataUnit::<f64>::new(buf, num_items);
+                let mut res = vec![];
+                while let Some(item) = stream.next().await {
+                    res.push(item);
+                }
+
+                DataType::F64(DataUnitF64(res))
+            }
+        };
+
+        Ok(Fits { header, data })
+    }
+
     pub fn get_header(&'a self) -> &PrimaryHeader<'a> {
         &self.header
     }
@@ -205,23 +274,28 @@ impl<'a> Fits<'a> {
 struct ParseDataUnit<'a, T> {
     idx: usize,
     num_bytes_per_item: usize,
+    num_total_bytes: usize,
     data: &'a [u8],
-    val: Option<T>,
+    phantom: std::marker::PhantomData<T>,
 }
 
 impl<'a, T> ParseDataUnit<'a, T> {
-    fn new(data: &'a [u8]) -> Self {
+    fn new(data: &'a [u8], num_items: usize) -> Self {
+        let num_bytes_per_item = std::mem::size_of::<T>();
         Self {
             idx: 0,
-            num_bytes_per_item: std::mem::size_of::<T>(),
+            num_total_bytes: num_items * num_bytes_per_item,
+            num_bytes_per_item,
             data,
-            val: None
+            phantom: std::marker::PhantomData,
         }
     }
 }
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use futures::stream::Stream;
+use futures::stream::StreamExt; // for `next`
+
 impl<'a, T> Stream for ParseDataUnit<'a, T>
 where
     T: ToBigEndian + Unpin
@@ -233,18 +307,13 @@ where
     /// is ready, and `Poll::Ready(None)` if the stream has completed.
     fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         // Deserialize row by row.
-        let len = self.data.len();
-        if let Some(val) = self.val.take() {
+        if self.idx < self.num_total_bytes {
+            let val = T::read(&self.data[self.idx..]);
+            self.idx += self.num_bytes_per_item;
+
             Poll::Ready(Some(val))
         } else {
-            if self.idx < len {
-                self.val = Some(T::read(&self.data[self.idx..]));
-                self.idx += self.num_bytes_per_item;
-
-                Poll::Pending
-            } else {
-                Poll::Ready(None)
-            }
+            Poll::Ready(None)
         }
     }
 }
@@ -313,6 +382,27 @@ mod tests {
             super::DataType::F32(_) => {}
             _ => (),
         }
+    }
+
+    #[test]
+    fn test_fits_async() {
+        use std::fs::File;
+        use std::io::BufReader;
+
+        let mut f = File::open("misc/Npix282.fits").unwrap();
+        let mut buf = Vec::new();
+        f.read_to_end(&mut buf).unwrap();
+
+        use futures::executor::LocalPool;
+
+        let mut pool = LocalPool::new();
+
+        // run tasks in the pool until `my_app` completes
+        pool.run_until(async {
+            let Fits { data, .. } = Fits::from_byte_slice_async(&buf[..]).await.unwrap();
+
+            matches!(data, super::DataType::F32(_));
+        });
     }
 
     #[test]

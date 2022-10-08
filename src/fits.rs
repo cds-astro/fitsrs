@@ -94,6 +94,15 @@ impl ToBigEndian for f32 {
         BigEndian::from_slice_f32(s);
     }
 }
+impl ToBigEndian for i64 {
+    fn read(buf: &[u8]) -> Self {
+        BigEndian::read_i64(buf)
+    }
+
+    fn to_slice(s: &mut [Self]) {
+        BigEndian::from_slice_i64(s);
+    }
+}
 impl ToBigEndian for i32 {
     fn read(buf: &[u8]) -> Self {
         BigEndian::read_i32(buf)
