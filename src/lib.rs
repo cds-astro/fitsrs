@@ -276,7 +276,7 @@ struct ParseDataUnit<'a, T> {
     num_bytes_per_item: usize,
     num_total_bytes: usize,
     data: &'a [u8],
-    phantom: std::marker::PhantomData<T>,
+    val: Option<T>,
 }
 
 impl<'a, T> ParseDataUnit<'a, T> {
@@ -287,7 +287,7 @@ impl<'a, T> ParseDataUnit<'a, T> {
             num_total_bytes: num_items * num_bytes_per_item,
             num_bytes_per_item,
             data,
-            phantom: std::marker::PhantomData,
+            val: None,
         }
     }
 }
@@ -307,13 +307,18 @@ where
     /// is ready, and `Poll::Ready(None)` if the stream has completed.
     fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         // Deserialize row by row.
-        if self.idx < self.num_total_bytes {
-            let val = T::read(&self.data[self.idx..]);
-            self.idx += self.num_bytes_per_item;
-
-            Poll::Ready(Some(val))
+        if let Some(v) = self.val.take() {
+            Poll::Ready(Some(v))
         } else {
-            Poll::Ready(None)
+            if self.idx < self.num_total_bytes {
+                let val = T::read(&self.data[self.idx..]);
+                self.idx += self.num_bytes_per_item;
+                self.val = Some(val);
+    
+                Poll::Pending
+            } else {
+                Poll::Ready(None)
+            }
         }
     }
 }
