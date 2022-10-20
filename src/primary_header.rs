@@ -26,6 +26,8 @@ impl<'a> PrimaryHeader<'a> {
             let (input_next, card) = parse_card(input)?;
             input = input_next;
 
+            println!("card: {:?}", card);
+
             let key = match card {
                 FITSHeaderKeyword::Simple => {
                     simple = true;
@@ -185,6 +187,10 @@ pub(self) fn parse_card(header: &[u8]) -> MyResult<&[u8], FITSHeaderKeyword> {
 
     let (header, value) = parse_card_value(header)?;
 
+    //println!("{:?} {:?}", header, value);
+
+    let (header, _) = parse_card_comment(header)?;
+
     match (keyword, value) {
         // SIMPLE = true check
         (b"SIMPLE", value) => match value {
@@ -231,10 +237,13 @@ pub(self) fn parse_card(header: &[u8]) -> MyResult<&[u8], FITSHeaderKeyword> {
             _ => Err(Error::MandatoryValueError("COMMENT")),
         },
         // History associated to a string check
-        (b"HISTORY", value) => match value {
+        /*(b"HISTORY", value) => match value {
             FITSKeywordValue::CharacterString(str) => Ok((header, FITSHeaderKeyword::History(str))),
-            _ => Err(Error::MandatoryValueError("HISTORY")),
-        },
+            _ => {
+                println!("{:?}", value);
+                Err(Error::MandatoryValueError("HISTORY"))
+            },
+        },*/
         ([b'N', b'A', b'X', b'I', b'S', ..], value) => {
             let name = std::str::from_utf8(keyword).unwrap();
             let (_, idx_axis) =
@@ -289,6 +298,13 @@ pub(crate) fn parse_card_value(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
             ),
             parse_undefined,
         )),
+    )(buf)
+}
+
+pub(crate) fn parse_card_comment(buf: &[u8]) -> IResult<&[u8], &[u8]> {
+    preceded(
+        tag(b"/ "),
+        take_till(|c| c == b'\t'),
     )(buf)
 }
 

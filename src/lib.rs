@@ -433,6 +433,30 @@ mod tests {
     }
 
     #[test]
+    fn test_fits_image() {
+        use std::fs::File;
+
+        let mut f = File::open("misc/cutout-CDS_P_HST_PHAT_F475W.fits").unwrap();
+        let mut buf = Vec::new();
+        f.read_to_end(&mut buf).unwrap();
+
+        println!("fsdfsd");
+
+        let _fits = Fits::from_byte_slice(&buf[..]).unwrap();
+    }
+
+    /*#[test]
+    fn test_fits_image2() {
+        use std::fs::File;
+
+        let mut f = File::open("misc/FOCx38i0101t_c0f.fits").unwrap();
+        let mut buf = Vec::new();
+        f.read_to_end(&mut buf).unwrap();
+
+        let _fits = Fits::from_byte_slice(&buf[..]).unwrap();
+    }*/
+
+    #[test]
     fn test_fits_tile5() {
         use std::fs::File;
 
