@@ -3,12 +3,20 @@ pub use crate::primary_header::PrimaryHeader;
 use serde::Serialize;
 #[derive(Serialize)]
 #[derive(Debug)]
-pub struct FitsMemAligned<'a, T>
-where
-    T: ToBigEndian
-{
+pub struct FitsMemAligned<'a> {
     pub header: PrimaryHeader<'a>,
-    pub data: &'a [T],
+    pub data: DataTypeBorrowed<'a>,
+}
+
+#[derive(Serialize)]
+#[derive(Debug)]
+pub enum DataTypeBorrowed<'a> {
+    U8(&'a [u8]),
+    I16(&'a [i16]),
+    I32(&'a [i32]),
+    I64(&'a [i64]),
+    F32(&'a [f32]),
+    F64(&'a [f64]),
 }
 
 use crate::Error;
@@ -17,17 +25,17 @@ use nom::multi::{count, many0};
 use nom::sequence::preceded;
 use byteorder::BigEndian;
 use crate::byteorder::ByteOrder;
-impl<'a, T> FitsMemAligned<'a, T>
-where
-    T: ToBigEndian
-{
+pub use crate::primary_header::BitpixValue;
+
+
+impl<'a> FitsMemAligned<'a> {
     /// Parse a FITS file correctly aligned in memory
     ///
     /// # Arguments
     ///
     /// * `buf` - a slice located at a aligned address location with respect to the type T.
     ///   If T is f32, buf ptr must be divisible by 4
-    pub unsafe fn from_byte_slice(buf: &'a [u8]) -> Result<FitsMemAligned<'a, T>, Error<'a>> {
+    pub unsafe fn from_byte_slice(buf: &'a [u8]) -> Result<FitsMemAligned<'a>, Error<'a>> {
         let num_total_bytes = buf.len();
         let (buf, header) = PrimaryHeader::new(&buf)?;
 
@@ -52,12 +60,68 @@ where
         // aligned location.
         let x_ptr = buf as *const [u8] as *mut [u8];
         let x_mut_ref = &mut *x_ptr;
-        let (_, data, _) = x_mut_ref.align_to_mut::<T>();
-        // 2. Convert to big endianness. This is O(N) over the size of the data
-        T::to_slice(data);
-        // 3. Keep only the pixels
-        assert!(data.len() >= num_pixels);
-        let data = &data[..num_pixels];
+        let data = match header.get_bitpix() {
+            BitpixValue::U8 => {
+                let (_, data, _) = x_mut_ref.align_to_mut::<u8>();
+                // 2. Convert to big endianness. This is O(N) over the size of the data
+                u8::to_slice(data);
+                // 3. Keep only the pixels
+                assert!(data.len() >= num_pixels);
+                let data = &data[..num_pixels];
+
+                DataTypeBorrowed::U8(data)
+            },
+            BitpixValue::I16 => {
+                let (_, data, _) = x_mut_ref.align_to_mut::<i16>();
+                // 2. Convert to big endianness. This is O(N) over the size of the data
+                i16::to_slice(data);
+                // 3. Keep only the pixels
+                assert!(data.len() >= num_pixels);
+                let data = &data[..num_pixels];
+
+                DataTypeBorrowed::I16(data)
+            },
+            BitpixValue::I32 => {
+                let (_, data, _) = x_mut_ref.align_to_mut::<i32>();
+                // 2. Convert to big endianness. This is O(N) over the size of the data
+                i32::to_slice(data);
+                // 3. Keep only the pixels
+                assert!(data.len() >= num_pixels);
+                let data = &data[..num_pixels];
+
+                DataTypeBorrowed::I32(data)
+            },
+            BitpixValue::I64 => {
+                let (_, data, _) = x_mut_ref.align_to_mut::<i64>();
+                // 2. Convert to big endianness. This is O(N) over the size of the data
+                i64::to_slice(data);
+                // 3. Keep only the pixels
+                assert!(data.len() >= num_pixels);
+                let data = &data[..num_pixels];
+
+                DataTypeBorrowed::I64(data)
+            },
+            BitpixValue::F32 => {
+                let (_, data, _) = x_mut_ref.align_to_mut::<f32>();
+                // 2. Convert to big endianness. This is O(N) over the size of the data
+                f32::to_slice(data);
+                // 3. Keep only the pixels
+                assert!(data.len() >= num_pixels);
+                let data = &data[..num_pixels];
+
+                DataTypeBorrowed::F32(data)
+            },
+            BitpixValue::F64 => {
+                let (_, data, _) = x_mut_ref.align_to_mut::<f64>();
+                // 2. Convert to big endianness. This is O(N) over the size of the data
+                f64::to_slice(data);
+                // 3. Keep only the pixels
+                assert!(data.len() >= num_pixels);
+                let data = &data[..num_pixels];
+
+                DataTypeBorrowed::F64(data)
+            },
+        };
 
         Ok(FitsMemAligned { header, data })
     }
@@ -66,7 +130,7 @@ where
         &self.header
     }
 
-    pub fn get_data(&self) -> &[T] {
+    pub fn get_data(&self) -> &DataTypeBorrowed<'_> {
         &self.data
     }
 }
@@ -132,6 +196,7 @@ impl ToBigEndian for u8 {
 #[cfg(test)]
 mod tests {
     use super::FitsMemAligned;
+    use super::DataTypeBorrowed;
     use std::io::Read;
     use crate::Fits;
 
@@ -163,7 +228,7 @@ mod tests {
                 .copy_from_slice(&raw_bytes);        
 
             // 3 parse the fits considering that it is correctly aligned
-            let FitsMemAligned { data: data_aligned, .. } = FitsMemAligned::<f32>::from_byte_slice(
+            let FitsMemAligned { data: data_aligned, .. } = FitsMemAligned::from_byte_slice(
                 std::ptr::slice_from_raw_parts(
                     aligned_raw_bytes_ptr,
                     raw_bytes.len()
@@ -172,8 +237,8 @@ mod tests {
                 .unwrap()
             ).unwrap();
             // 4 use it
-            match data {
-                crate::DataType::F32(data) => {
+            match (data, data_aligned) {
+                (crate::DataType::F32(data) , DataTypeBorrowed::F32(data_aligned)) => {
                     assert_eq!(data.len(), data_aligned.len());
                     assert_eq!(data_aligned, &data[..]);
                 },
@@ -213,7 +278,7 @@ mod tests {
                 .copy_from_slice(&raw_bytes);        
 
             // 3 parse the fits considering that it is correctly aligned
-            let FitsMemAligned { data: data_aligned, .. } = FitsMemAligned::<i16>::from_byte_slice(
+            let FitsMemAligned { data: data_aligned, .. } = FitsMemAligned::from_byte_slice(
                 std::ptr::slice_from_raw_parts(
                     aligned_raw_bytes_ptr,
                     raw_bytes.len()
@@ -222,12 +287,12 @@ mod tests {
                 .unwrap()
             ).unwrap();
             // 4 use it
-            match data {
-                crate::DataType::I16(data) => {
+            match (data, data_aligned) {
+                (crate::DataType::I16(data) , DataTypeBorrowed::I16(data_aligned)) => {
                     assert_eq!(data.len(), data_aligned.len());
                     assert_eq!(data_aligned, &data[..]);
                 },
-                _ => (),
+                _ => unreachable!(),
             }
 
             // 5 dealloc this aligned memory space

@@ -11,7 +11,7 @@ use nom::{
 use serde::Serialize;
 #[derive(Debug, PartialEq, Clone)]
 #[derive(Serialize)]
-pub enum FITSKeywordValue<'a> {
+pub enum FITSCardValue<'a> {
     IntegerNumber(i64),
     Logical(bool),
     CharacterString(&'a str),
@@ -23,11 +23,11 @@ pub(crate) fn white_space0(s: &[u8]) -> IResult<&[u8], &[u8]> {
     take_while(|s| s == b' ')(s)
 }
 
-pub(crate) fn parse_undefined(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
-    value(FITSKeywordValue::Undefined, white_space0)(buf)
+pub(crate) fn parse_undefined(buf: &[u8]) -> IResult<&[u8], FITSCardValue> {
+    value(FITSCardValue::Undefined, white_space0)(buf)
 }
 
-pub(crate) fn parse_character_string(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
+pub(crate) fn parse_character_string(buf: &[u8]) -> IResult<&[u8], FITSCardValue> {
     map(
         preceded(
             space0,
@@ -35,17 +35,17 @@ pub(crate) fn parse_character_string(buf: &[u8]) -> IResult<&[u8], FITSKeywordVa
         ),
         |str: &[u8]| {
             let str = std::str::from_utf8(str).unwrap();
-            FITSKeywordValue::CharacterString(str)
+            FITSCardValue::CharacterString(str)
         },
     )(buf)
 }
 
-pub(crate) fn parse_logical(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
+pub(crate) fn parse_logical(buf: &[u8]) -> IResult<&[u8], FITSCardValue> {
     preceded(
         space0,
         alt((
-            value(FITSKeywordValue::Logical(true), char('T')),
-            value(FITSKeywordValue::Logical(false), char('F')),
+            value(FITSCardValue::Logical(true), char('T')),
+            value(FITSCardValue::Logical(false), char('F')),
         )),
     )(buf)
 }
@@ -71,16 +71,16 @@ pub(crate) fn parse_logical(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
     )(buf)
 }*/
 
-pub(crate) fn parse_float(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
+pub(crate) fn parse_float(buf: &[u8]) -> IResult<&[u8], FITSCardValue> {
     preceded(
         space0,
-        map(float, |val| FITSKeywordValue::FloatingPoint(val as f64)),
+        map(float, |val| FITSCardValue::FloatingPoint(val as f64)),
     )(buf)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_character_string, parse_float, FITSKeywordValue};
+    use super::{parse_character_string, parse_float, FITSCardValue};
 
     /*#[test]
     fn test_integer() {
@@ -98,11 +98,11 @@ mod tests {
     fn test_float() {
         assert_eq!(
             parse_float(b"      -32768.0"),
-            Ok((b"" as &[u8], FITSKeywordValue::FloatingPoint(-32768.0)))
+            Ok((b"" as &[u8], FITSCardValue::FloatingPoint(-32768.0)))
         );
         assert_eq!(
             parse_float(b"      -32767"),
-            Ok((b"" as &[u8], FITSKeywordValue::FloatingPoint(-32767.0)))
+            Ok((b"" as &[u8], FITSCardValue::FloatingPoint(-32767.0)))
         );
     }
     #[test]
@@ -111,7 +111,7 @@ mod tests {
             parse_character_string(b"      'sdfs Zdfs MLKKLSFD sdf '"),
             Ok((
                 b"" as &[u8],
-                FITSKeywordValue::CharacterString("sdfs Zdfs MLKKLSFD sdf ")
+                FITSCardValue::CharacterString("sdfs Zdfs MLKKLSFD sdf ")
             ))
         );
     }

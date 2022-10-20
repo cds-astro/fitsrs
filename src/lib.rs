@@ -4,15 +4,15 @@ use nom::bytes::complete::take;
 extern crate byteorder;
 use byteorder::{BigEndian, ByteOrder};
 
-mod card_value;
+mod card;
 mod error;
 mod primary_header;
 
 mod fits;
 pub use fits::{FitsMemAligned, ToBigEndian};
 
-pub use card_value::FITSKeywordValue;
-pub use primary_header::FITSHeaderKeyword;
+pub use card::FITSCardValue;
+pub use primary_header::FITSCard;
 pub use primary_header::PrimaryHeader;
 pub use primary_header::BitpixValue;
 
@@ -198,7 +198,6 @@ impl<'a> Fits<'a> {
                 total
             });
 
-        //white_space0(buf)?;
         let num_bytes_consumed = num_total_bytes - buf.len();
         let num_bytes_to_next_line = 80 - num_bytes_consumed % 80;
 
@@ -336,7 +335,7 @@ pub enum DataType<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::primary_header::{BitpixValue, FITSHeaderKeyword};
+    use super::primary_header::{BitpixValue, FITSCard};
     use super::{Fits, PrimaryHeader};
     use std::io::Read;
     #[test]
@@ -349,12 +348,12 @@ mod tests {
         let PrimaryHeader { cards, .. } = header;
 
         let cards_expect = vec![
-            ("SIMPLE", FITSHeaderKeyword::Simple),
-            ("BITPIX", FITSHeaderKeyword::Bitpix(BitpixValue::F32)),
-            ("NAXIS", FITSHeaderKeyword::Naxis(2)),
+            ("SIMPLE", FITSCard::Simple),
+            ("BITPIX", FITSCard::Bitpix(BitpixValue::F32)),
+            ("NAXIS", FITSCard::Naxis(2)),
             (
                 "NAXIS1",
-                FITSHeaderKeyword::NaxisSize {
+                FITSCard::NaxisSize {
                     name: "NAXIS1",
                     idx: 1,
                     size: 64,
@@ -362,7 +361,7 @@ mod tests {
             ),
             (
                 "NAXIS2",
-                FITSHeaderKeyword::NaxisSize {
+                FITSCard::NaxisSize {
                     name: "NAXIS2",
                     idx: 2,
                     size: 64,
@@ -389,7 +388,7 @@ mod tests {
         }
     }
 
-    #[test]
+    /*#[test]
     fn test_fits_async() {
         use std::fs::File;
         use std::io::BufReader;
@@ -408,7 +407,7 @@ mod tests {
 
             matches!(data, super::DataType::F32(_));
         });
-    }
+    }*/
 
     #[test]
     fn test_fits_tile3() {
@@ -445,7 +444,7 @@ mod tests {
         let _fits = Fits::from_byte_slice(&buf[..]).unwrap();
     }
 
-    /*#[test]
+    #[test]
     fn test_fits_image2() {
         use std::fs::File;
 
@@ -453,8 +452,18 @@ mod tests {
         let mut buf = Vec::new();
         f.read_to_end(&mut buf).unwrap();
 
-        let _fits = Fits::from_byte_slice(&buf[..]).unwrap();
-    }*/
+        let Fits { data, header } = Fits::from_byte_slice(&buf[..]).unwrap();
+
+        let naxis1 = header.get_axis_size(0).unwrap();
+        let naxis2 = header.get_axis_size(1).unwrap();
+
+        match data {
+            super::DataType::F32(data) => {
+                assert_eq!(data.len(), naxis1 * naxis2);
+            },
+            _ => unreachable!(),
+        }
+    }
 
     #[test]
     fn test_fits_tile5() {

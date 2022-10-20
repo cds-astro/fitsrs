@@ -8,7 +8,7 @@ pub struct PrimaryHeader<'a> {
     pub keys: HashSet<&'a str>,
 
     // Only serialize the cards
-    pub cards: Vec<(&'a str, FITSHeaderKeyword<'a>)>,
+    pub cards: Vec<(&'a str, FITSCard<'a>)>,
 }
 
 use crate::error::Error;
@@ -29,26 +29,26 @@ impl<'a> PrimaryHeader<'a> {
             println!("card: {:?}", card);
 
             let key = match card {
-                FITSHeaderKeyword::Simple => {
+                FITSCard::Simple => {
                     simple = true;
                     "SIMPLE"
                 }
-                FITSHeaderKeyword::Bitpix(_) => {
+                FITSCard::Bitpix(_) => {
                     bitpix = true;
                     "BITPIX"
                 }
-                FITSHeaderKeyword::Naxis(_) => {
+                FITSCard::Naxis(_) => {
                     naxis = true;
                     "NAXIS"
                 }
-                FITSHeaderKeyword::Blank(_) => "BLANK",
-                FITSHeaderKeyword::NaxisSize { name, .. } => name,
-                FITSHeaderKeyword::Comment(_) => "COMMENT",
-                FITSHeaderKeyword::History(_) => "HISTORY",
-                FITSHeaderKeyword::Other { name, .. } => {
+                FITSCard::Blank(_) => "BLANK",
+                FITSCard::NaxisSize { name, .. } => name,
+                FITSCard::Comment(_) => "COMMENT",
+                FITSCard::History(_) => "HISTORY",
+                FITSCard::Other { name, .. } => {
                     std::str::from_utf8(name)?
                 },
-                FITSHeaderKeyword::End => {
+                FITSCard::End => {
                     end = true;
                     continue;
                 }
@@ -69,7 +69,7 @@ impl<'a> PrimaryHeader<'a> {
             // Check the NAXISM
             let naxis = &cards.iter().find(|(name, _)| name == &"NAXIS").unwrap().1;
 
-            if let FITSHeaderKeyword::Naxis(naxis) = naxis {
+            if let FITSCard::Naxis(naxis) = naxis {
                 for idx_axis in 0..*naxis {
                     let key = String::from("NAXIS") + &(idx_axis + 1).to_string();
                     if !keys.contains(&key as &str) {
@@ -86,7 +86,7 @@ impl<'a> PrimaryHeader<'a> {
     }
 
     pub(crate) fn get_naxis(&self) -> usize {
-        if let Some(&FITSHeaderKeyword::Naxis(naxis)) = self.get("NAXIS") {
+        if let Some(&FITSCard::Naxis(naxis)) = self.get("NAXIS") {
             naxis
         } else {
             unreachable!();
@@ -104,7 +104,7 @@ impl<'a> PrimaryHeader<'a> {
     pub(crate) fn get_axis_size(&self, idx: usize) -> Option<usize> {
         // NAXIS indexes begins at 1 instead of 0
         let naxis = String::from("NAXIS") + &(idx + 1).to_string();
-        if let Some(FITSHeaderKeyword::NaxisSize { size, .. }) = self.get(&naxis) {
+        if let Some(FITSCard::NaxisSize { size, .. }) = self.get(&naxis) {
             Some(*size)
         } else {
             None
@@ -112,14 +112,14 @@ impl<'a> PrimaryHeader<'a> {
     }
 
     pub(crate) fn get_bitpix(&self) -> &BitpixValue {
-        if let Some(FITSHeaderKeyword::Bitpix(bitpix)) = self.get("BITPIX") {
+        if let Some(FITSCard::Bitpix(bitpix)) = self.get("BITPIX") {
             bitpix
         } else {
             unreachable!();
         }
     }
 
-    pub fn get(&self, key: &str) -> Option<&FITSHeaderKeyword> {
+    pub fn get(&self, key: &str) -> Option<&FITSCard> {
         if self.keys.contains(key) {
             let card = &self.cards.iter().find(|card| key == card.0).unwrap().1;
 
@@ -132,7 +132,7 @@ impl<'a> PrimaryHeader<'a> {
 
 #[derive(Debug, PartialEq)]
 #[derive(Serialize)]
-pub enum FITSHeaderKeyword<'a> {
+pub enum FITSCard<'a> {
     Simple,
     Bitpix(BitpixValue),
     Naxis(usize),
@@ -150,12 +150,12 @@ pub enum FITSHeaderKeyword<'a> {
     History(&'a str),
     Other {
         name: &'a [u8],
-        value: FITSKeywordValue<'a>,
+        value: FITSCardValue<'a>,
     },
     End,
 }
 
-use crate::card_value::FITSKeywordValue;
+use crate::card::FITSCardValue;
 #[derive(Debug, PartialEq)]
 #[derive(Serialize)]
 pub enum BitpixValue {
@@ -176,69 +176,63 @@ use nom::{
     sequence::{pair, preceded},
     IResult,
 };
-
-pub(self) fn parse_card(header: &[u8]) -> MyResult<&[u8], FITSHeaderKeyword> {
+use nom::bytes::complete::take;
+pub(self) fn parse_card(header: &[u8]) -> MyResult<&[u8], FITSCard> {
     // First parse the keyword
-    let (header, keyword) = preceded(multispace0, parse_card_keyword)(header)?;
+    let (bytes, card) = take(80_u8)(header)?;
+
+    let (card, keyword) = preceded(multispace0, parse_card_keyword)(card)?;
     // We stop consuming tokens after the exit
     if keyword == b"END" {
-        return Ok((header, FITSHeaderKeyword::End));
+        return Ok((bytes, FITSCard::End));
     }
 
-    let (header, value) = parse_card_value(header)?;
-
-    //println!("{:?} {:?}", header, value);
-
-    let (header, _) = parse_card_comment(header)?;
-
+    let (_, value) = parse_card_value(card)?;
     match (keyword, value) {
         // SIMPLE = true check
         (b"SIMPLE", value) => match value {
-            FITSKeywordValue::Logical(true) => Ok((header, FITSHeaderKeyword::Simple)),
+            FITSCardValue::Logical(true) => Ok((bytes, FITSCard::Simple)),
             _ => Err(Error::MandatoryValueError("SIMPLE")),
         },
         // BITPIX in {8, 16, 32, 64, -32, -64} check
         (b"BITPIX", value) => match value {
-            FITSKeywordValue::FloatingPoint(bitpix) => {
-                let bitpix = bitpix as i32;
-                let bitpix = match bitpix {
-                    8 => BitpixValue::U8,
-                    16 => BitpixValue::I16,
-                    32 => BitpixValue::I32,
-                    64 => BitpixValue::I64,
-                    -32 => BitpixValue::F32,
-                    -64 => BitpixValue::F64,
-                    _ => return Err(Error::BitpixBadValue),
-                };
-
-                Ok((header, FITSHeaderKeyword::Bitpix(bitpix)))
+            FITSCardValue::FloatingPoint(bitpix) => {
+                match bitpix as i32 {
+                    8 => Ok((bytes, FITSCard::Bitpix(BitpixValue::U8))),
+                    16 => Ok((bytes, FITSCard::Bitpix(BitpixValue::I16))),
+                    32 => Ok((bytes, FITSCard::Bitpix(BitpixValue::I32))),
+                    64 => Ok((bytes, FITSCard::Bitpix(BitpixValue::I64))),
+                    -32 => Ok((bytes, FITSCard::Bitpix(BitpixValue::F32))),
+                    -64 => Ok((bytes, FITSCard::Bitpix(BitpixValue::F64))),
+                    _ => Err(Error::BitpixBadValue),
+                }
             }
             _ => Err(Error::MandatoryValueError("BITPIX")),
         },
         // NAXIS > 0 integer check
         (b"NAXIS", value) => match value {
-            FITSKeywordValue::FloatingPoint(naxis) => {
+            FITSCardValue::FloatingPoint(naxis) => {
                 if naxis <= 0.0 {
                     Err(Error::NegativeOrNullNaxis)
                 } else {
-                    Ok((header, FITSHeaderKeyword::Naxis(naxis as usize)))
+                    Ok((bytes, FITSCard::Naxis(naxis as usize)))
                 }
             }
             _ => Err(Error::MandatoryValueError("NAXIS")),
         },
         // BLANK value
         (b"BLANK", value) => match value {
-            FITSKeywordValue::FloatingPoint(blank) => Ok((header, FITSHeaderKeyword::Blank(blank))),
+            FITSCardValue::FloatingPoint(blank) => Ok((bytes, FITSCard::Blank(blank))),
             _ => Err(Error::MandatoryValueError("BLANK")),
         },
         // Comment associated to a string check
         (b"COMMENT", value) => match value {
-            FITSKeywordValue::CharacterString(str) => Ok((header, FITSHeaderKeyword::Comment(str))),
+            FITSCardValue::CharacterString(str) => Ok((bytes, FITSCard::Comment(str))),
             _ => Err(Error::MandatoryValueError("COMMENT")),
         },
         // History associated to a string check
         /*(b"HISTORY", value) => match value {
-            FITSKeywordValue::CharacterString(str) => Ok((header, FITSHeaderKeyword::History(str))),
+            FITSKeywordValue::CharacterString(str) => Ok((bytes, FITSHeaderKeyword::History(str))),
             _ => {
                 println!("{:?}", value);
                 Err(Error::MandatoryValueError("HISTORY"))
@@ -252,14 +246,14 @@ pub(self) fn parse_card(header: &[u8]) -> MyResult<&[u8], FITSHeaderKeyword> {
             let idx_axis = std::str::from_utf8(idx_axis)
                 .map(|str| str.parse::<usize>().unwrap())
                 .unwrap();
-            if let FITSKeywordValue::FloatingPoint(size) = value {
+            if let FITSCardValue::FloatingPoint(size) = value {
                 if size <= 0.0 {
                     Err(Error::NegativeOrNullNaxisSize(idx_axis))
                 } else {
                     // Check the value
                     Ok((
-                        header,
-                        FITSHeaderKeyword::NaxisSize {
+                        bytes,
+                        FITSCard::NaxisSize {
                             name,
                             idx: idx_axis,
                             size: size as usize,
@@ -271,8 +265,8 @@ pub(self) fn parse_card(header: &[u8]) -> MyResult<&[u8], FITSHeaderKeyword> {
             }
         }
         (keyword, value) => Ok((
-            header,
-            FITSHeaderKeyword::Other {
+            bytes,
+            FITSCard::Other {
                 name: keyword,
                 value,
             },
@@ -287,8 +281,8 @@ pub(crate) fn parse_card_keyword(buf: &[u8]) -> IResult<&[u8], &[u8]> {
     ))(buf)
 }
 
-use crate::card_value::*;
-pub(crate) fn parse_card_value(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
+use crate::card::*;
+pub(crate) fn parse_card_value(buf: &[u8]) -> IResult<&[u8], FITSCardValue> {
     preceded(
         white_space0,
         alt((
@@ -301,16 +295,9 @@ pub(crate) fn parse_card_value(buf: &[u8]) -> IResult<&[u8], FITSKeywordValue> {
     )(buf)
 }
 
-pub(crate) fn parse_card_comment(buf: &[u8]) -> IResult<&[u8], &[u8]> {
-    preceded(
-        tag(b"/ "),
-        take_till(|c| c == b'\t'),
-    )(buf)
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{parse_card, FITSHeaderKeyword, FITSKeywordValue};
+    use super::{parse_card, FITSCard, FITSCardValue};
     #[test]
     fn test_parse_card() {
         assert_eq!(
@@ -318,22 +305,22 @@ mod tests {
                 b"AZSDFGFC=                    T                                                  "
             ),
             Ok((
-                b"                                                  " as &[u8],
-                FITSHeaderKeyword::Other {
+                b"" as &[u8],
+                FITSCard::Other {
                     name: b"AZSDFGFC",
-                    value: FITSKeywordValue::Logical(true)
+                    value: FITSCardValue::Logical(true)
                 }
             ))
         );
         assert_eq!(
             parse_card(
-                b"CDS_1=                     T                                                  "
+                b"CDS_1=                     T                                                    "
             ),
             Ok((
-                b"                                                  " as &[u8],
-                FITSHeaderKeyword::Other {
+                b"" as &[u8],
+                FITSCard::Other {
                     name: b"CDS_1",
-                    value: FITSKeywordValue::Logical(true)
+                    value: FITSCardValue::Logical(true)
                 }
             ))
         );
