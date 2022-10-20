@@ -1,8 +1,6 @@
 extern crate nom;
-use nom::bytes::complete::take;
 
 extern crate byteorder;
-use byteorder::{BigEndian, ByteOrder};
 
 mod card;
 mod error;
@@ -15,260 +13,6 @@ pub use card::FITSCardValue;
 pub use primary_header::FITSCard;
 pub use primary_header::PrimaryHeader;
 pub use primary_header::BitpixValue;
-
-use serde::Serialize;
-#[derive(Serialize)]
-#[derive(Debug)]
-pub struct Fits<'a> {
-    pub header: PrimaryHeader<'a>,
-    pub data: DataType<'a>,
-}
-
-trait DataUnit<'a>: std::marker::Sized {
-    type Item: Default;
-
-    fn parse(buf: &'a [u8], num_items: usize) -> Result<Self, Error<'a>> {
-        let num_bytes_per_item = std::mem::size_of::<Self::Item>();
-        let num_bytes = num_items * num_bytes_per_item;
-        let (_, raw_bytes) = take(num_bytes)(buf)?;
-
-        let data = Self::new(raw_bytes, num_items);
-        Ok(data)
-    }
-
-    fn new(raw_bytes: &'a [u8], num_items: usize) -> Self;
-}
-
-use std::borrow::Cow;
-#[derive(Debug)]
-#[derive(Serialize)]
-pub struct DataUnitU8<'a>(pub Cow<'a, [u8]>);
-impl<'a> DataUnit<'a> for DataUnitU8<'a> {
-    type Item = u8;
-    fn new(raw_bytes: &'a [u8], _num_items: usize) -> Self {
-        DataUnitU8(Cow::Borrowed(raw_bytes))
-    }
-}
-
-#[derive(Debug)]
-#[derive(Serialize)]
-pub struct DataUnitI16(pub Vec<i16>);
-impl<'a> DataUnit<'a> for DataUnitI16 {
-    type Item = i16;
-    fn new(raw_bytes: &[u8], num_items: usize) -> Self {
-        let mut dst: Vec<Self::Item> = vec![Self::Item::default(); num_items];
-        BigEndian::read_i16_into(raw_bytes, &mut dst);
-
-        DataUnitI16(dst)
-    }
-}
-impl std::ops::Deref for DataUnitI16 {
-    type Target = Vec<i16>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-#[derive(Debug)]
-#[derive(Serialize)]
-pub struct DataUnitI32(pub Vec<i32>);
-impl<'a> DataUnit<'a> for DataUnitI32 {
-    type Item = i32;
-    fn new(raw_bytes: &[u8], num_items: usize) -> Self {
-        let mut dst: Vec<Self::Item> = vec![Self::Item::default(); num_items];
-        BigEndian::read_i32_into(raw_bytes, &mut dst);
-
-        DataUnitI32(dst)
-    }
-}
-impl std::ops::Deref for DataUnitI32 {
-    type Target = Vec<i32>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-#[derive(Debug)]
-#[derive(Serialize)]
-pub struct DataUnitI64(pub Vec<i64>);
-impl<'a> DataUnit<'a> for DataUnitI64 {
-    type Item = i64;
-    fn new(raw_bytes: &[u8], num_items: usize) -> Self {
-        let mut dst: Vec<Self::Item> = vec![Self::Item::default(); num_items];
-        BigEndian::read_i64_into(raw_bytes, &mut dst);
-
-        DataUnitI64(dst)
-    }
-}
-impl std::ops::Deref for DataUnitI64 {
-    type Target = Vec<i64>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-#[derive(Debug)]
-#[derive(Serialize)]
-pub struct DataUnitF32(pub Vec<f32>);
-impl<'a> DataUnit<'a> for DataUnitF32 {
-    type Item = f32;
-    fn new(raw_bytes: &'a [u8], num_items: usize) -> Self {
-        let mut dst: Vec<Self::Item> = vec![Self::Item::default(); num_items];
-        BigEndian::read_f32_into(raw_bytes, &mut dst);
-
-        DataUnitF32(dst)
-    }
-}
-impl std::ops::Deref for DataUnitF32 {
-    type Target = Vec<f32>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-#[derive(Debug)]
-#[derive(Serialize)]
-pub struct DataUnitF64(pub Vec<f64>);
-impl<'a> DataUnit<'a> for DataUnitF64 {
-    type Item = f64;
-    fn new(raw_bytes: &[u8], num_items: usize) -> Self {
-        let mut dst: Vec<Self::Item> = vec![Self::Item::default(); num_items];
-        BigEndian::read_f64_into(raw_bytes, &mut dst);
-
-        DataUnitF64(dst)
-    }
-}
-impl std::ops::Deref for DataUnitF64 {
-    type Target = Vec<f64>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-use error::Error;
-use nom::bytes::complete::tag;
-use nom::multi::{count, many0};
-use nom::sequence::preceded;
-impl<'a> Fits<'a> {
-    pub fn from_byte_slice(buf: &'a [u8]) -> Result<Fits<'a>, Error<'a>> {
-        let num_total_bytes = buf.len();
-        let (buf, header) = PrimaryHeader::new(&buf)?;
-
-        // At this point the header is valid
-        let num_items = (0..header.get_naxis())
-            .map(|idx| header.get_axis_size(idx).unwrap())
-            .fold(1, |mut total, val| {
-                total *= val;
-                total
-            });
-
-        //white_space0(buf)?;
-        let num_bytes_consumed = num_total_bytes - buf.len();
-        let num_bytes_to_next_line = 80 - num_bytes_consumed % 80;
-
-        let (buf, _) = preceded(
-            count(tag(b" "), num_bytes_to_next_line),
-            many0(count(tag(b" "), 80)),
-        )(buf)?;
-
-        // Read the byte data stream in BigEndian order conformly to the spec
-        let data = match header.get_bitpix() {
-            BitpixValue::U8 => DataType::U8(DataUnitU8::parse(buf, num_items)?),
-            BitpixValue::I16 => DataType::I16(DataUnitI16::parse(buf, num_items)?),
-            BitpixValue::I32 => DataType::I32(DataUnitI32::parse(buf, num_items)?),
-            BitpixValue::I64 => DataType::I64(DataUnitI64::parse(buf, num_items)?),
-            BitpixValue::F32 => DataType::F32(DataUnitF32::parse(buf, num_items)?),
-            BitpixValue::F64 => DataType::F64(DataUnitF64::parse(buf, num_items)?),
-        };
-
-        Ok(Fits { header, data })
-    }
-
-    pub async fn from_byte_slice_async(buf: &'a [u8]) -> Result<Fits<'a>, Error<'a>> {
-        let num_total_bytes = buf.len();
-        let (buf, header) = PrimaryHeader::new(&buf)?;
-
-        // At this point the header is valid
-        let num_items = (0..header.get_naxis())
-            .map(|idx| header.get_axis_size(idx).unwrap())
-            .fold(1, |mut total, val| {
-                total *= val;
-                total
-            });
-
-        let num_bytes_consumed = num_total_bytes - buf.len();
-        let num_bytes_to_next_line = 80 - num_bytes_consumed % 80;
-
-        let (buf, _) = preceded(
-            count(tag(b" "), num_bytes_to_next_line),
-            many0(count(tag(b" "), 80)),
-        )(buf)?;
-
-        // Read the byte data stream in BigEndian order conformly to the spec
-        let data = match header.get_bitpix() {
-            BitpixValue::U8 => {
-                DataType::U8(DataUnitU8(Cow::Borrowed(&buf[..num_items])))
-            },
-            BitpixValue::I16 => {
-                let mut stream = ParseDataUnit::<i16>::new(buf, num_items);
-                let mut res = vec![];
-                while let Some(item) = stream.next().await {
-                    res.push(item);
-                }
-
-                DataType::I16(DataUnitI16(res))
-            },
-            BitpixValue::I32 => {
-                let mut stream = ParseDataUnit::<i32>::new(buf, num_items);
-                let mut res = vec![];
-                while let Some(item) = stream.next().await {
-                    res.push(item);
-                }
-
-                DataType::I32(DataUnitI32(res))
-            },
-            BitpixValue::I64 => {
-                let mut stream = ParseDataUnit::<i64>::new(buf, num_items);
-                let mut res = vec![];
-                while let Some(item) = stream.next().await {
-                    res.push(item);
-                }
-
-                DataType::I64(DataUnitI64(res))
-            },
-            BitpixValue::F32 => {
-                let mut stream = ParseDataUnit::<f32>::new(buf, num_items);
-                let mut res = vec![];
-                while let Some(item) = stream.next().await {
-                    res.push(item);
-                }
-
-                DataType::F32(DataUnitF32(res))
-            },
-            BitpixValue::F64 => {
-                let mut stream = ParseDataUnit::<f64>::new(buf, num_items);
-                let mut res = vec![];
-                while let Some(item) = stream.next().await {
-                    res.push(item);
-                }
-
-                DataType::F64(DataUnitF64(res))
-            }
-        };
-
-        Ok(Fits { header, data })
-    }
-
-    pub fn get_header(&'a self) -> &PrimaryHeader<'a> {
-        &self.header
-    }
-
-    pub fn get_data(&'a self) -> &DataType<'a> {
-        &self.data
-    }
-}
 
 struct ParseDataUnit<'a, T> {
     idx: usize,
@@ -322,21 +66,12 @@ where
     }
 }
 
-#[derive(Debug)]
-#[derive(Serialize)]
-pub enum DataType<'a> {
-    U8(DataUnitU8<'a>),
-    I16(DataUnitI16),
-    I32(DataUnitI32),
-    I64(DataUnitI64),
-    F32(DataUnitF32),
-    F64(DataUnitF64),
-}
-
 #[cfg(test)]
 mod tests {
+    use crate::FitsMemAligned;
+
     use super::primary_header::{BitpixValue, FITSCard};
-    use super::{Fits, PrimaryHeader};
+    use super::{PrimaryHeader};
     use std::io::Read;
     #[test]
     fn test_fits_tile() {
@@ -344,7 +79,7 @@ mod tests {
         let f = File::open("misc/Npix208.fits").unwrap();
         let bytes: Result<Vec<_>, _> = f.bytes().collect();
         let buf = bytes.unwrap();
-        let Fits { header, .. } = Fits::from_byte_slice(&buf).unwrap();
+        let FitsMemAligned { header, .. } = unsafe { FitsMemAligned::from_byte_slice(&buf).unwrap() };
         let PrimaryHeader { cards, .. } = header;
 
         let cards_expect = vec![
@@ -380,10 +115,10 @@ mod tests {
         let mut buf = Vec::new();
         f.read_to_end(&mut buf).unwrap();
 
-        let Fits { data, .. } = Fits::from_byte_slice(&buf[..]).unwrap();
+        let FitsMemAligned { data, .. } = unsafe { FitsMemAligned::from_byte_slice(&buf[..]).unwrap() };
 
         match data {
-            super::DataType::F32(_) => {}
+            crate::fits::DataTypeBorrowed::F32(_) => {}
             _ => (),
         }
     }
@@ -417,7 +152,7 @@ mod tests {
         let mut buf = Vec::new();
         f.read_to_end(&mut buf).unwrap();
 
-        let _fits = Fits::from_byte_slice(&buf[..]).unwrap();
+        let _fits = unsafe { FitsMemAligned::from_byte_slice(&buf[..]).unwrap() };
     }
 
     #[test]
@@ -428,7 +163,7 @@ mod tests {
         let mut buf = Vec::new();
         f.read_to_end(&mut buf).unwrap();
 
-        let _fits = Fits::from_byte_slice(&buf[..]).unwrap();
+        let _fits = unsafe { FitsMemAligned::from_byte_slice(&buf[..]).unwrap() };
     }
 
     #[test]
@@ -441,7 +176,7 @@ mod tests {
 
         println!("fsdfsd");
 
-        let _fits = Fits::from_byte_slice(&buf[..]).unwrap();
+        let _fits = unsafe { FitsMemAligned::from_byte_slice(&buf[..]).unwrap() };
     }
 
     #[test]
@@ -452,13 +187,13 @@ mod tests {
         let mut buf = Vec::new();
         f.read_to_end(&mut buf).unwrap();
 
-        let Fits { data, header } = Fits::from_byte_slice(&buf[..]).unwrap();
+        let FitsMemAligned { data, header } = unsafe { FitsMemAligned::from_byte_slice(&buf[..]).unwrap() };
 
         let naxis1 = header.get_axis_size(0).unwrap();
         let naxis2 = header.get_axis_size(1).unwrap();
 
         match data {
-            super::DataType::F32(data) => {
+            crate::fits::DataTypeBorrowed::F32(data) => {
                 assert_eq!(data.len(), naxis1 * naxis2);
             },
             _ => unreachable!(),
@@ -473,7 +208,7 @@ mod tests {
         let mut buf = Vec::new();
         f.read_to_end(&mut buf).unwrap();
 
-        let _fits = Fits::from_byte_slice(&buf[..]).unwrap();
+        let _fits = unsafe { FitsMemAligned::from_byte_slice(&buf[..]).unwrap() };
     }
     #[test]
     fn test_fits_tile6() {
@@ -483,7 +218,7 @@ mod tests {
         let mut buf = Vec::new();
         f.read_to_end(&mut buf).unwrap();
 
-        let _fits = Fits::from_byte_slice(&buf[..]).unwrap();
+        let _fits = unsafe { FitsMemAligned::from_byte_slice(&buf[..]).unwrap() };
     }
 
     #[test]
@@ -494,7 +229,7 @@ mod tests {
         let mut buf = Vec::new();
         f.read_to_end(&mut buf).unwrap();
 
-        let _fits = Fits::from_byte_slice(&buf[..]).unwrap();
+        let _fits = unsafe { FitsMemAligned::from_byte_slice(&buf[..]).unwrap() };
     }
 
     #[test]
@@ -514,6 +249,8 @@ mod tests {
             101, 114, 118, 101, 114, 46, 60, 47, 112, 62, 10, 60, 47, 98, 111, 100, 121, 62, 60,
             47, 104, 116, 109, 108, 62, 10,
         ];
-        assert!(Fits::from_byte_slice(bytes).is_err());
+        unsafe {
+            assert!(FitsMemAligned::from_byte_slice(bytes).is_err());            
+        }
     }
 }
