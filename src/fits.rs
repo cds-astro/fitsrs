@@ -134,6 +134,68 @@ impl<'a> FitsMemAligned<'a> {
     }
 }
 
+#[derive(Serialize)]
+#[derive(Debug)]
+pub struct FitsMemAlignedUnchecked<'a, T> {
+    pub header: PrimaryHeader<'a>,
+    pub data: &'a [T],
+}
+
+impl<'a, T> FitsMemAlignedUnchecked<'a, T>
+where
+    T: ToBigEndian
+{
+    /// Parse a FITS file correctly aligned in memory
+    ///
+    /// # Arguments
+    ///
+    /// * `buf` - a slice located at a aligned address location with respect to the type T.
+    ///   If T is f32, buf ptr must be divisible by 4
+    pub unsafe fn from_byte_slice(buf: &'a [u8]) -> Result<FitsMemAlignedUnchecked<'a, T>, Error<'a>> {
+        let num_total_bytes = buf.len();
+        let (buf, header) = PrimaryHeader::new(&buf)?;
+
+        // At this point the header is valid
+        let num_pixels = (0..header.get_naxis())
+            .map(|idx| header.get_axis_size(idx).unwrap())
+            .fold(1, |mut total, val| {
+                total *= val;
+                total
+            });
+
+        let num_bytes_consumed = num_total_bytes - buf.len();
+        let num_bytes_to_next_line = 80 - num_bytes_consumed % 80;
+
+        let (buf, _) = preceded(
+            count(tag(b" "), num_bytes_to_next_line),
+            many0(count(tag(b" "), 80)),
+        )(buf)?;
+
+        // 1. As the fits file is aligned and data begins at a
+        // 80 bytes multiple, then it also begins at a correctly
+        // aligned location.
+        let x_ptr = buf as *const [u8] as *mut [u8];
+        let x_mut_ref = &mut *x_ptr;
+        
+        let (_, data, _) = x_mut_ref.align_to_mut::<T>();
+        // 2. Convert to big endianness. This is O(N) over the size of the data
+        T::to_slice(data);
+        // 3. Keep only the pixels
+        assert!(data.len() >= num_pixels);
+        let data = &data[..num_pixels];
+
+        Ok(FitsMemAlignedUnchecked { header, data })
+    }
+
+    pub fn get_header(&'a self) -> &PrimaryHeader<'a> {
+        &self.header
+    }
+
+    pub fn get_data(&self) -> &[T] {
+        &self.data
+    }
+}
+
 pub trait ToBigEndian {
     fn read(buf: &[u8]) -> Self;
     fn to_slice(s: &mut [Self]) where Self: Sized;

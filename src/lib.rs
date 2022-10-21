@@ -7,7 +7,7 @@ mod error;
 mod primary_header;
 
 mod fits;
-pub use fits::{FitsMemAligned, ToBigEndian};
+pub use fits::{FitsMemAligned, FitsMemAlignedUnchecked, ToBigEndian};
 
 pub use card::FITSCardValue;
 pub use primary_header::FITSCard;
