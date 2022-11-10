@@ -7,10 +7,10 @@ mod error;
 mod primary_header;
 
 mod fits;
-pub use fits::{FitsMemAligned, FitsMemAlignedUnchecked, ToBigEndian};
+pub use fits::{Fits, ToBigEndian};
 
-pub use card::FITSCardValue;
-pub use primary_header::FITSCard;
+pub use card::Value;
+pub use card::Card;
 pub use primary_header::PrimaryHeader;
 pub use primary_header::BitpixValue;
 
@@ -38,7 +38,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use futures::stream::Stream;
 use futures::stream::StreamExt; // for `next`
-
+/*
 impl<'a, T> Stream for ParseDataUnit<'a, T>
 where
     T: ToBigEndian + Unpin
@@ -65,46 +65,31 @@ where
         }
     }
 }
-
+*/
 #[cfg(test)]
 mod tests {
-    use crate::FitsMemAligned;
+    use crate::{Fits, Value};
 
-    use super::primary_header::{BitpixValue, FITSCard};
+    use super::primary_header::BitpixValue;
+    use super::card::Card;
     use super::{PrimaryHeader};
     use std::io::Read;
+    use std::io::Cursor;
     #[test]
     fn test_fits_tile() {
         use std::fs::File;
         let f = File::open("misc/Npix208.fits").unwrap();
         let bytes: Result<Vec<_>, _> = f.bytes().collect();
         let buf = bytes.unwrap();
-        let FitsMemAligned { header, .. } = unsafe { FitsMemAligned::from_byte_slice(&buf).unwrap() };
-        let PrimaryHeader { cards, .. } = header;
 
-        let cards_expect = vec![
-            ("SIMPLE", FITSCard::Simple),
-            ("BITPIX", FITSCard::Bitpix(BitpixValue::F32)),
-            ("NAXIS", FITSCard::Naxis(2)),
-            (
-                "NAXIS1",
-                FITSCard::NaxisSize {
-                    name: "NAXIS1",
-                    idx: 1,
-                    size: 64,
-                },
-            ),
-            (
-                "NAXIS2",
-                FITSCard::NaxisSize {
-                    name: "NAXIS2",
-                    idx: 2,
-                    size: 64,
-                },
-            ),
-        ];
-        assert_eq!(cards, cards_expect);
-        println!("{:?}", cards);
+        let reader = Cursor::new(&buf[..]);
+
+        let Fits { hdu, .. } = unsafe { Fits::from_byte_slice(reader).unwrap() };
+
+        assert_eq!(hdu.get_axis_size(1).unwrap(), &64);
+        assert_eq!(hdu.get_axis_size(2).unwrap(), &64);
+        assert_eq!(hdu.get_naxis(), 2);
+        assert_eq!(hdu.get_bitpix(), &BitpixValue::F32);
     }
 
     #[test]
@@ -115,7 +100,8 @@ mod tests {
         let mut buf = Vec::new();
         f.read_to_end(&mut buf).unwrap();
 
-        let FitsMemAligned { data, .. } = unsafe { FitsMemAligned::from_byte_slice(&buf[..]).unwrap() };
+        let mut reader = Cursor::new(&buf[..]);
+        let Fits { data, .. } = unsafe { Fits::from_byte_slice(reader).unwrap() };
 
         match data {
             crate::fits::DataTypeBorrowed::F32(_) => {}
@@ -151,8 +137,9 @@ mod tests {
         let mut f = File::open("misc/Npix4906.fits").unwrap();
         let mut buf = Vec::new();
         f.read_to_end(&mut buf).unwrap();
+        let mut reader = Cursor::new(&buf[..]);
 
-        let _fits = unsafe { FitsMemAligned::from_byte_slice(&buf[..]).unwrap() };
+        let _fits = unsafe { Fits::from_byte_slice(reader).unwrap() };
     }
 
     #[test]
@@ -163,7 +150,8 @@ mod tests {
         let mut buf = Vec::new();
         f.read_to_end(&mut buf).unwrap();
 
-        let _fits = unsafe { FitsMemAligned::from_byte_slice(&buf[..]).unwrap() };
+        let mut reader = Cursor::new(&buf[..]);
+        let _fits = unsafe { Fits::from_byte_slice(reader).unwrap() };
     }
 
     #[test]
@@ -174,9 +162,8 @@ mod tests {
         let mut buf = Vec::new();
         f.read_to_end(&mut buf).unwrap();
 
-        println!("fsdfsd");
-
-        let _fits = unsafe { FitsMemAligned::from_byte_slice(&buf[..]).unwrap() };
+        let mut reader = Cursor::new(&buf[..]);
+        let _fits = unsafe { Fits::from_byte_slice(reader).unwrap() };
     }
 
     #[test]
@@ -186,11 +173,11 @@ mod tests {
         let mut f = File::open("misc/FOCx38i0101t_c0f.fits").unwrap();
         let mut buf = Vec::new();
         f.read_to_end(&mut buf).unwrap();
+        let mut reader = Cursor::new(&buf[..]);
+        let Fits { data, hdu } = unsafe { Fits::from_byte_slice(reader).unwrap() };
 
-        let FitsMemAligned { data, header } = unsafe { FitsMemAligned::from_byte_slice(&buf[..]).unwrap() };
-
-        let naxis1 = header.get_axis_size(0).unwrap();
-        let naxis2 = header.get_axis_size(1).unwrap();
+        let naxis1 = hdu.get_axis_size(0).unwrap();
+        let naxis2 = hdu.get_axis_size(1).unwrap();
 
         match data {
             crate::fits::DataTypeBorrowed::F32(data) => {
@@ -208,7 +195,8 @@ mod tests {
         let mut buf = Vec::new();
         f.read_to_end(&mut buf).unwrap();
 
-        let _fits = unsafe { FitsMemAligned::from_byte_slice(&buf[..]).unwrap() };
+        let mut reader = Cursor::new(&buf[..]);
+        let _ = unsafe { Fits::from_byte_slice(reader).unwrap() };
     }
     #[test]
     fn test_fits_tile6() {
@@ -218,7 +206,8 @@ mod tests {
         let mut buf = Vec::new();
         f.read_to_end(&mut buf).unwrap();
 
-        let _fits = unsafe { FitsMemAligned::from_byte_slice(&buf[..]).unwrap() };
+        let mut reader = Cursor::new(&buf[..]);
+        let _ = unsafe { Fits::from_byte_slice(reader).unwrap() };
     }
 
     #[test]
@@ -229,7 +218,8 @@ mod tests {
         let mut buf = Vec::new();
         f.read_to_end(&mut buf).unwrap();
 
-        let _fits = unsafe { FitsMemAligned::from_byte_slice(&buf[..]).unwrap() };
+        let mut reader = Cursor::new(&buf[..]);
+        let _ = unsafe { Fits::from_byte_slice(reader).unwrap() };
     }
 
     #[test]
@@ -249,8 +239,10 @@ mod tests {
             101, 114, 118, 101, 114, 46, 60, 47, 112, 62, 10, 60, 47, 98, 111, 100, 121, 62, 60,
             47, 104, 116, 109, 108, 62, 10,
         ];
+        let mut reader = Cursor::new(bytes);
+
         unsafe {
-            assert!(FitsMemAligned::from_byte_slice(bytes).is_err());            
+            assert!(Fits::from_byte_slice(reader).is_err());            
         }
     }
 }
