@@ -11,28 +11,34 @@ use nom::{
 use serde::Serialize;
 #[derive(Debug, PartialEq)]
 #[derive(Serialize)]
-pub struct Card<'a> {
-    kw: Keyword<'a>,
-    v: Value<'a>,
+pub struct Card {
+    pub kw: Keyword,
+    pub v: Value,
 }
 
-pub type Keyword<'a> = &'a str;
+impl Card {
+    pub fn new(kw: Keyword, v: Value) -> Self {
+        Self { kw, v }
+    }
+}
+
+pub type Keyword = [u8; 8];
 
 #[derive(Debug, PartialEq, Clone)]
 #[derive(Serialize)]
-pub enum Value<'a> {
-    IntegerNumber(i64),
+pub enum Value {
+    Integer(i64),
     Logical(bool),
-    CharacterString(&'a str),
-    FloatingPoint(f64),
+    String(String),
+    Float(f64),
     Undefined,
 }
 
 use crate::error::Error;
-impl<'a> Value<'a> {
+impl Value {
     pub fn check_for_integer(self) -> Result<i64, Error> {
         match self {
-            Value::IntegerNumber(num) => {
+            Value::Integer(num) => {
                 Ok(num)
             }
             _ => Err(Error::ValueBadParsing)
@@ -46,9 +52,9 @@ impl<'a> Value<'a> {
             _ => Err(Error::ValueBadParsing)
         }
     }
-    pub fn check_for_string(self) -> Result<&'a str, Error> {
+    pub fn check_for_string(self) -> Result<String, Error> {
         match self {
-            Value::CharacterString(s) => {
+            Value::String(s) => {
                 Ok(s)
             }
             _ => Err(Error::ValueBadParsing)
@@ -56,7 +62,7 @@ impl<'a> Value<'a> {
     }
     pub fn check_for_float(self) -> Result<f64, Error> {
         match self {
-            Value::FloatingPoint(f) => {
+            Value::Float(f) => {
                 Ok(f)
             }
             _ => Err(Error::ValueBadParsing)
@@ -68,24 +74,27 @@ pub(crate) fn white_space0(s: &[u8]) -> IResult<&[u8], &[u8]> {
     take_while(|s| s == b' ')(s)
 }
 
-pub(crate) fn parse_undefined(buf: &[u8]) -> IResult<&[u8], Value<'_>> {
+pub(crate) fn parse_undefined(buf: &[u8]) -> IResult<&[u8], Value> {
     value(Value::Undefined, white_space0)(buf)
 }
 
-pub(crate) fn parse_character_string(buf: &[u8]) -> IResult<&[u8], Value<'_>> {
+pub(crate) fn parse_character_string(buf: &[u8]) -> IResult<&[u8], Value> {
     map(
         preceded(
             space0,
             delimited(char('\''), take_till(|c| c == b'\''), char('\'')),
         ),
         |str: &[u8]| {
-            let str = std::str::from_utf8(str).unwrap();
-            Value::CharacterString(str)
+            // Copy the bytes to a new string
+            // This is not a big deal because it only concerns the parsing
+            // of the FITS header
+            let str = String::from_utf8_lossy(str).into_owned();
+            Value::String(str)
         },
     )(buf)
 }
 
-pub(crate) fn parse_logical(buf: &[u8]) -> IResult<&[u8], Value<'_>> {
+pub(crate) fn parse_logical(buf: &[u8]) -> IResult<&[u8], Value> {
     preceded(
         space0,
         alt((
@@ -95,10 +104,10 @@ pub(crate) fn parse_logical(buf: &[u8]) -> IResult<&[u8], Value<'_>> {
     )(buf)
 }
 
-pub(crate) fn parse_float(buf: &[u8]) -> IResult<&[u8], Value<'_>> {
+pub(crate) fn parse_float(buf: &[u8]) -> IResult<&[u8], Value> {
     preceded(
         space0,
-        map(float, |val| Value::FloatingPoint(val as f64)),
+        map(float, |val| Value::Float(val as f64)),
     )(buf)
 }
 
@@ -110,11 +119,11 @@ mod tests {
     fn test_float() {
         assert_eq!(
             parse_float(b"      -32768.0"),
-            Ok((b"" as &[u8], Value::FloatingPoint(-32768.0)))
+            Ok((b"" as &[u8], Value::Float(-32768.0)))
         );
         assert_eq!(
             parse_float(b"      -32767"),
-            Ok((b"" as &[u8], Value::FloatingPoint(-32767.0)))
+            Ok((b"" as &[u8], Value::Float(-32767.0)))
         );
     }
     #[test]
@@ -123,7 +132,7 @@ mod tests {
             parse_character_string(b"      'sdfs Zdfs MLKKLSFD sdf '"),
             Ok((
                 b"" as &[u8],
-                Value::CharacterString("sdfs Zdfs MLKKLSFD sdf ")
+                Value::String(String::from("sdfs Zdfs MLKKLSFD sdf "))
             ))
         );
     }

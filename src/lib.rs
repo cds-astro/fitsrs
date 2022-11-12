@@ -1,18 +1,15 @@
 extern crate nom;
-
 extern crate byteorder;
 
+mod hdu;
 mod card;
 mod error;
-mod primary_header;
-
 mod fits;
-pub use fits::{Fits, ToBigEndian};
+
+pub use fits::Fits;
 
 pub use card::Value;
 pub use card::Card;
-pub use primary_header::PrimaryHeader;
-pub use primary_header::BitpixValue;
 
 struct ParseDataUnit<'a, T> {
     idx: usize,
@@ -34,11 +31,11 @@ impl<'a, T> ParseDataUnit<'a, T> {
         }
     }
 }
-use std::pin::Pin;
+/*use std::pin::Pin;
 use std::task::{Context, Poll};
 use futures::stream::Stream;
 use futures::stream::StreamExt; // for `next`
-/*
+
 impl<'a, T> Stream for ParseDataUnit<'a, T>
 where
     T: ToBigEndian + Unpin
