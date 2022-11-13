@@ -66,43 +66,43 @@ where
 #[cfg(test)]
 mod tests {
     use crate::{Fits, Value};
+    use crate::hdu::header::BitpixValue;
+    use crate::hdu::data::{DataOwned, DataBorrowed};
 
-    use super::primary_header::BitpixValue;
-    use super::card::Card;
-    use super::{PrimaryHeader};
     use std::io::Read;
     use std::io::Cursor;
+    use std::fs::File;
+
     #[test]
     fn test_fits_tile() {
-        use std::fs::File;
         let f = File::open("misc/Npix208.fits").unwrap();
         let bytes: Result<Vec<_>, _> = f.bytes().collect();
         let buf = bytes.unwrap();
 
-        let reader = Cursor::new(&buf[..]);
+        let mut reader = Cursor::new(&buf[..]);
+        let fits = Fits::from_byte_slice(&mut reader).unwrap();
 
-        let Fits { hdu, .. } = unsafe { Fits::from_byte_slice(reader).unwrap() };
-
-        assert_eq!(hdu.get_axis_size(1).unwrap(), &64);
-        assert_eq!(hdu.get_axis_size(2).unwrap(), &64);
-        assert_eq!(hdu.get_naxis(), 2);
-        assert_eq!(hdu.get_bitpix(), &BitpixValue::F32);
+        let primary_header = fits.get_header();
+        assert_eq!(primary_header.get_axis_size(1).unwrap(), &64);
+        assert_eq!(primary_header.get_axis_size(2).unwrap(), &64);
+        assert_eq!(primary_header.get_naxis(), 2);
+        assert_eq!(primary_header.get_bitpix(), BitpixValue::F32);
     }
 
     #[test]
-    fn test_fits_tile2() {
-        use std::fs::File;
-
+    fn test_fits_f32() {
         let mut f = File::open("misc/Npix282.fits").unwrap();
-        let mut buf = Vec::new();
-        f.read_to_end(&mut buf).unwrap();
+        let mut raw_bytes = Vec::<u8>::new();
+        f.read_to_end(&mut raw_bytes).unwrap();
 
-        let mut reader = Cursor::new(&buf[..]);
-        let Fits { data, .. } = unsafe { Fits::from_byte_slice(reader).unwrap() };
-
-        match data {
-            crate::fits::DataTypeBorrowed::F32(_) => {}
-            _ => (),
+        let mut reader = Cursor::new(&raw_bytes[..]);
+        let fits = Fits::from_byte_slice(&mut reader).unwrap();
+        let header = fits.get_header();
+        match fits.get_data() {
+            DataBorrowed::F32(data) => {
+                assert!(data.len() == header.get_axis_size(1).unwrap() * header.get_axis_size(2).unwrap())
+            },
+            _ => unreachable!(),
         }
     }
 
@@ -136,7 +136,7 @@ mod tests {
         f.read_to_end(&mut buf).unwrap();
         let mut reader = Cursor::new(&buf[..]);
 
-        let _fits = unsafe { Fits::from_byte_slice(reader).unwrap() };
+        let _fits = Fits::from_byte_slice(&mut reader).unwrap();
     }
 
     #[test]
@@ -148,7 +148,7 @@ mod tests {
         f.read_to_end(&mut buf).unwrap();
 
         let mut reader = Cursor::new(&buf[..]);
-        let _fits = unsafe { Fits::from_byte_slice(reader).unwrap() };
+        let _fits = Fits::from_byte_slice(&mut reader).unwrap();
     }
 
     #[test]
@@ -160,24 +160,46 @@ mod tests {
         f.read_to_end(&mut buf).unwrap();
 
         let mut reader = Cursor::new(&buf[..]);
-        let _fits = unsafe { Fits::from_byte_slice(reader).unwrap() };
+        let _fits = Fits::from_byte_slice(&mut reader).unwrap();
     }
 
     #[test]
-    fn test_fits_image2() {
+    fn test_fits_image_owned() {
+        use std::fs::File;
+        use std::io::BufReader;
+
+        let f = File::open("misc/FOCx38i0101t_c0f.fits").unwrap();
+        let Fits { hdu } = Fits::from_byte_slice(BufReader::new(f)).unwrap();
+
+        let header = &hdu.header;
+        let naxis1 = header.get_axis_size(1).unwrap();
+        let naxis2 = header.get_axis_size(2).unwrap();
+
+        match hdu.data {
+            DataOwned::F32(it) => {
+                let data = it.collect::<Vec<_>>();
+                assert_eq!(data.len(), naxis1 * naxis2);
+            },
+            _ => unreachable!(),
+        }
+    }
+
+    #[test]
+    fn test_fits_image_borrowed() {
         use std::fs::File;
 
         let mut f = File::open("misc/FOCx38i0101t_c0f.fits").unwrap();
         let mut buf = Vec::new();
         f.read_to_end(&mut buf).unwrap();
-        let mut reader = Cursor::new(&buf[..]);
-        let Fits { data, hdu } = unsafe { Fits::from_byte_slice(reader).unwrap() };
 
-        let naxis1 = hdu.get_axis_size(0).unwrap();
-        let naxis2 = hdu.get_axis_size(1).unwrap();
+        let Fits { hdu } = Fits::from_byte_slice(&buf[..]).unwrap();
 
-        match data {
-            crate::fits::DataTypeBorrowed::F32(data) => {
+        let header = &hdu.header;
+        let naxis1 = header.get_axis_size(1).unwrap();
+        let naxis2 = header.get_axis_size(2).unwrap();
+
+        match hdu.data {
+            DataBorrowed::F32(data) => {
                 assert_eq!(data.len(), naxis1 * naxis2);
             },
             _ => unreachable!(),
@@ -193,7 +215,7 @@ mod tests {
         f.read_to_end(&mut buf).unwrap();
 
         let mut reader = Cursor::new(&buf[..]);
-        let _ = unsafe { Fits::from_byte_slice(reader).unwrap() };
+        Fits::from_byte_slice(&mut reader).unwrap();
     }
     #[test]
     fn test_fits_tile6() {
@@ -204,7 +226,7 @@ mod tests {
         f.read_to_end(&mut buf).unwrap();
 
         let mut reader = Cursor::new(&buf[..]);
-        let _ = unsafe { Fits::from_byte_slice(reader).unwrap() };
+        Fits::from_byte_slice(&mut reader).unwrap();
     }
 
     #[test]
@@ -216,7 +238,7 @@ mod tests {
         f.read_to_end(&mut buf).unwrap();
 
         let mut reader = Cursor::new(&buf[..]);
-        let _ = unsafe { Fits::from_byte_slice(reader).unwrap() };
+        Fits::from_byte_slice(&mut reader).unwrap();
     }
 
     #[test]
@@ -237,9 +259,6 @@ mod tests {
             47, 104, 116, 109, 108, 62, 10,
         ];
         let mut reader = Cursor::new(bytes);
-
-        unsafe {
-            assert!(Fits::from_byte_slice(reader).is_err());            
-        }
+        assert!(Fits::from_byte_slice(&mut reader).is_err());
     }
 }

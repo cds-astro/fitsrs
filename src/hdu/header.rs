@@ -20,7 +20,8 @@ pub struct Header {
 }
 
 use crate::error::Error;
-fn consume_next_card<R: BufRead>(reader: &mut R, buf: &mut [u8; 80]) -> Result<(), Error> {
+fn consume_next_card<R: BufRead>(reader: &mut R, buf: &mut [u8; 80], bytes_read: &mut usize) -> Result<(), Error> {
+    *bytes_read += 80;
     reader.read_exact(buf).map_err(|_| Error::FailReadingNextBytes)?;
     Ok(())
 }
@@ -56,7 +57,8 @@ fn check_card_keyword(card: &[u8; 80], keyword: &[u8; 8]) -> Result<card::Value,
 
 /* Parse mandatory keywords */
 fn parse_bitpix_card(card: &[u8; 80]) -> Result<BitpixValue, Error> {
-    match check_card_keyword(card, b"BITPIX  ")?.check_for_integer()? {
+    let bitpix = check_card_keyword(card, b"BITPIX  ")?.check_for_float()? as i32;
+    match bitpix {
         8 => Ok(BitpixValue::U8),
         16 => Ok(BitpixValue::I16),
         32 => Ok(BitpixValue::I32),
@@ -68,7 +70,7 @@ fn parse_bitpix_card(card: &[u8; 80]) -> Result<BitpixValue, Error> {
 }
 fn parse_naxis_card(card: &[u8; 80]) -> Result<usize, Error> {
     let naxis = check_card_keyword(card, b"NAXIS   ")?
-        .check_for_integer()?;
+        .check_for_float()?;
 
     Ok(naxis as usize)
 }
@@ -82,29 +84,29 @@ impl Header {
 
         /* Consume mandatory keywords */ 
         // SIMPLE
-        consume_next_card(reader, &mut card_80_bytes_buf)?;
+        consume_next_card(reader, &mut card_80_bytes_buf, bytes_read)?;
         let _ = check_card_keyword(&card_80_bytes_buf, b"SIMPLE  ")?;
         // BITPIX
-        consume_next_card(reader, &mut card_80_bytes_buf)?;
+        consume_next_card(reader, &mut card_80_bytes_buf, bytes_read)?;
         let bitpix = parse_bitpix_card(&card_80_bytes_buf)?;
         // NAXIS
-        consume_next_card(reader, &mut card_80_bytes_buf)?;
+        consume_next_card(reader, &mut card_80_bytes_buf, bytes_read)?;
         let naxis = parse_naxis_card(&card_80_bytes_buf)?;
         // The size of each NAXIS
         let naxis_size: Result<Vec<usize>, _> = (0..naxis)
             .map(|idx_axis| {
-                consume_next_card(reader, &mut card_80_bytes_buf)?;
+                consume_next_card(reader, &mut card_80_bytes_buf, bytes_read)?;
                 check_card_keyword(&card_80_bytes_buf, NAXIS_KW[idx_axis])?
-                    .check_for_integer()
+                    .check_for_float()
                     .map(|size| size as usize)
             })
             .collect();
 
         /* Consume next non mandatory keywords until `END` is reached */
-        consume_next_card(reader, &mut card_80_bytes_buf)?;
+        consume_next_card(reader, &mut card_80_bytes_buf, bytes_read)?;
         while let Some(card::Card { kw, v }) = parse_generic_card(&card_80_bytes_buf)? {
             cards.insert(kw, v);
-            consume_next_card(reader, &mut card_80_bytes_buf)?;
+            consume_next_card(reader, &mut card_80_bytes_buf, bytes_read)?;
         }
 
         /* The last card was a END one */
@@ -147,11 +149,10 @@ pub enum BitpixValue {
     F64,
 }
 
-type MyResult<'a, I, O> = Result<(I, O), Error>;
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_till},
-    character::complete::{digit1, multispace0},
+    character::complete::digit1,
     combinator::recognize,
     sequence::{pair, preceded},
     IResult,

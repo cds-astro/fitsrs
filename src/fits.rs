@@ -1,13 +1,12 @@
 pub use crate::hdu::HDU;
-use crate::hdu::{ Header, Data, DataRead};
+use crate::hdu::{Header, DataRead};
 use serde::Serialize;
-#[derive(Serialize)]
 #[derive(Debug)]
 pub struct Fits<'a, R>
 where
     R: DataRead<'a>
 {
-    hdu: HDU<'a, R>,
+    pub hdu: HDU<'a, R>,
 }
 
 use crate::error::Error;
@@ -21,7 +20,7 @@ where
     ///
     /// * `buf` - a slice located at a aligned address location with respect to the type T.
     ///   If T is f32, buf ptr must be divisible by 4
-    pub unsafe fn from_byte_slice(reader: R) -> Result<Self, Error> {
+    pub fn from_byte_slice(reader: R) -> Result<Self, Error> {
         let hdu = HDU::new(reader)?;
 
         Ok(Self { hdu })
@@ -31,7 +30,7 @@ where
         &self.hdu.header
     }
 
-    pub fn get_data(&self) -> &Data<'_, R> {
+    pub fn get_data(&self) -> &R::Data {
         &self.hdu.data
     }
 }
@@ -40,7 +39,7 @@ where
 mod tests {
     use super::Fits;
     use std::io::Read;
-    use std::io::BufReader;
+    use crate::hdu::data::DataBorrowed;
     use std::io::Cursor;
     use std::fs::File;
 
@@ -51,14 +50,13 @@ mod tests {
         f.read_to_end(&mut raw_bytes).unwrap();
 
         let mut reader = Cursor::new(&raw_bytes[..]);
-        unsafe {
-            let fits = Fits::from_byte_slice(reader).unwrap();
-            match fits.get_data() {
-                DataBorrowed::F32(data) => {
-                    assert!(data.len() == hdu.get_axis_size(0).unwrap() * hdu.get_axis_size(1).unwrap())
-                },
-                _ => unreachable!(),
-            }
+        let fits = Fits::from_byte_slice(&mut reader).unwrap();
+        let header = fits.get_header();
+        match fits.get_data() {
+            DataBorrowed::F32(data) => {
+                assert!(data.len() == header.get_axis_size(1).unwrap() * header.get_axis_size(2).unwrap())
+            },
+            _ => unreachable!(),
         }
     }
 
@@ -69,14 +67,13 @@ mod tests {
         f.read_to_end(&mut raw_bytes).unwrap();
 
         let mut reader = Cursor::new(&raw_bytes[..]);
-        unsafe {
-            let Fits { data, hdu } = Fits::from_byte_slice(reader).unwrap();
-            match data {
-                DataTypeBorrowed::I16(data) => {
-                    assert!(data.len() == hdu.get_axis_size(0).unwrap() * hdu.get_axis_size(1).unwrap())
-                },
-                _ => unreachable!(),
-            }
+        let fits = Fits::from_byte_slice(&mut reader).unwrap();
+        let header = fits.get_header();
+        match fits.get_data() {
+            DataBorrowed::I16(data) => {
+                assert!(data.len() == header.get_axis_size(1).unwrap() * header.get_axis_size(2).unwrap())
+            },
+            _ => unreachable!(),
         }
     }
 }
