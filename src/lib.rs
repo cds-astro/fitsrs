@@ -2,70 +2,14 @@ extern crate nom;
 extern crate byteorder;
 
 pub mod hdu;
-mod card;
+pub mod fits;
+pub mod card;
 mod error;
-mod fits;
 
-pub use fits::Fits;
-
-pub use card::Value;
-pub use card::Card;
-
-struct ParseDataUnit<'a, T> {
-    idx: usize,
-    num_bytes_per_item: usize,
-    num_total_bytes: usize,
-    data: &'a [u8],
-    val: Option<T>,
-}
-
-impl<'a, T> ParseDataUnit<'a, T> {
-    fn new(data: &'a [u8], num_items: usize) -> Self {
-        let num_bytes_per_item = std::mem::size_of::<T>();
-        Self {
-            idx: 0,
-            num_total_bytes: num_items * num_bytes_per_item,
-            num_bytes_per_item,
-            data,
-            val: None,
-        }
-    }
-}
-/*use std::pin::Pin;
-use std::task::{Context, Poll};
-use futures::stream::Stream;
-use futures::stream::StreamExt; // for `next`
-
-impl<'a, T> Stream for ParseDataUnit<'a, T>
-where
-    T: ToBigEndian + Unpin
-{
-    type Item = T;
-
-    /// Attempt to resolve the next item in the stream.
-    /// Returns `Poll::Pending` if not ready, `Poll::Ready(Some(x))` if a value
-    /// is ready, and `Poll::Ready(None)` if the stream has completed.
-    fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        // Deserialize row by row.
-        if let Some(v) = self.val.take() {
-            Poll::Ready(Some(v))
-        } else {
-            if self.idx < self.num_total_bytes {
-                let val = T::read(&self.data[self.idx..]);
-                self.idx += self.num_bytes_per_item;
-                self.val = Some(val);
-    
-                Poll::Pending
-            } else {
-                Poll::Ready(None)
-            }
-        }
-    }
-}
-*/
 #[cfg(test)]
 mod tests {
-    use crate::{Fits, Value};
+    use crate::fits::Fits;
+    use crate::card::Value;
     use crate::hdu::header::BitpixValue;
     use crate::hdu::data::{DataOwned, DataBorrowed};
 

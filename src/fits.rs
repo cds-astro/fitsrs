@@ -1,4 +1,4 @@
-pub use crate::hdu::HDU;
+use crate::hdu::HDU;
 use crate::hdu::{Header, DataRead};
 use serde::Serialize;
 #[derive(Debug)]

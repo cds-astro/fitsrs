@@ -1,6 +1,7 @@
 use byteorder::ByteOrder;
 
 use futures::AsyncReadExt;
+use futures::StreamExt;
 use serde::Serialize;
 
 use super::header::BitpixValue;
