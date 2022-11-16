@@ -20,8 +20,42 @@ where
     ///
     /// * `buf` - a slice located at a aligned address location with respect to the type T.
     ///   If T is f32, buf ptr must be divisible by 4
-    pub fn from_byte_slice(reader: R) -> Result<Self, Error> {
+    pub fn from_reader(reader: R) -> Result<Self, Error> {
         let hdu = HDU::new(reader)?;
+
+        Ok(Self { hdu })
+    }
+
+    pub fn get_header(&self) -> &Header {
+        &self.hdu.header
+    }
+
+    pub fn get_data(&self) -> &R::Data {
+        &self.hdu.data
+    }
+}
+
+use crate::hdu::{AsyncDataRead, AsyncHDU};
+#[derive(Debug)]
+pub struct AsyncFits<R>
+where
+    R: AsyncDataRead
+{
+    pub hdu: AsyncHDU<R>,
+}
+
+impl<R> AsyncFits<R>
+where
+    R: AsyncDataRead + std::marker::Unpin
+{
+    /// Parse a FITS file correctly aligned in memory
+    ///
+    /// # Arguments
+    ///
+    /// * `buf` - a slice located at a aligned address location with respect to the type T.
+    ///   If T is f32, buf ptr must be divisible by 4
+    pub async fn from_reader(reader: R) -> Result<Self, Error> {
+        let hdu = AsyncHDU::new(reader).await?;
 
         Ok(Self { hdu })
     }
@@ -50,7 +84,7 @@ mod tests {
         f.read_to_end(&mut raw_bytes).unwrap();
 
         let mut reader = Cursor::new(&raw_bytes[..]);
-        let fits = Fits::from_byte_slice(&mut reader).unwrap();
+        let fits = Fits::from_reader(&mut reader).unwrap();
         let header = fits.get_header();
         match fits.get_data() {
             DataBorrowed::F32(data) => {
@@ -67,7 +101,7 @@ mod tests {
         f.read_to_end(&mut raw_bytes).unwrap();
 
         let mut reader = Cursor::new(&raw_bytes[..]);
-        let fits = Fits::from_byte_slice(&mut reader).unwrap();
+        let fits = Fits::from_reader(&mut reader).unwrap();
         let header = fits.get_header();
         match fits.get_data() {
             DataBorrowed::I16(data) => {

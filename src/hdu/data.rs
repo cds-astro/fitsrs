@@ -6,6 +6,7 @@ use serde::Serialize;
 use super::header::BitpixValue;
 
 use std::fmt::Debug;
+
 /// Abstraction for reading a data block
 pub trait DataRead<'a>: BufRead {
     type Data: Debug;
@@ -287,6 +288,7 @@ where
         if self.num_pixels == self.counter {
             None
         } else {
+            //let item = self.reader.read_u8();
             let item = self.reader.read_u8();
             self.counter += 1;
 

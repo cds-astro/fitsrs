@@ -1,3 +1,4 @@
+use futures::{AsyncBufRead, AsyncReadExt};
 use serde::Serialize;
 use crate::card::{self, Card};
 
@@ -20,9 +21,15 @@ pub struct Header {
 }
 
 use crate::error::Error;
-fn consume_next_card<R: BufRead>(reader: &mut R, buf: &mut [u8; 80], bytes_read: &mut usize) -> Result<(), Error> {
+fn consume_next_card<'a, R: BufRead>(reader: &mut R, buf: &mut [u8; 80], bytes_read: &mut usize) -> Result<(), Error> {
     *bytes_read += 80;
     reader.read_exact(buf).map_err(|_| Error::FailReadingNextBytes)?;
+    Ok(())
+}
+
+async fn consume_next_card_async<'a, R: AsyncBufRead + std::marker::Unpin>(reader: &mut R, buf: &mut [u8; 80], bytes_read: &mut usize) -> Result<(), Error> {
+    *bytes_read += 80;
+    reader.read_exact(buf).await.map_err(|_| Error::FailReadingNextBytes)?;
     Ok(())
 }
 
@@ -76,8 +83,9 @@ fn parse_naxis_card(card: &[u8; 80]) -> Result<usize, Error> {
 }
 
 const NAXIS_KW: [&[u8; 8]; 3] = [b"NAXIS1  ", b"NAXIS2  ", b"NAXIS3  "];
+use super::data::DataRead;
 impl Header {
-    pub(crate) fn parse<R: BufRead>(reader: &mut R, bytes_read: &mut usize) -> Result<Self, Error> {
+    pub(crate) fn parse<'a, R: BufRead>(reader: &mut R, bytes_read: &mut usize) -> Result<Self, Error> {
         let mut cards = HashMap::new();
 
         let mut card_80_bytes_buf: [u8; 80] = [b' '; 80];
@@ -116,6 +124,48 @@ impl Header {
             bitpix,
             naxis,
             naxis_size: naxis_size?,
+        })
+    }
+
+    pub(crate) async fn parse_async<'a, R: AsyncBufRead + std::marker::Unpin>(reader: &mut R, bytes_read: &mut usize) -> Result<Self, Error> {
+        let mut cards = HashMap::new();
+
+        let mut card_80_bytes_buf: [u8; 80] = [b' '; 80];
+
+        /* Consume mandatory keywords */ 
+        // SIMPLE
+        consume_next_card_async(reader, &mut card_80_bytes_buf, bytes_read).await?;
+        let _ = check_card_keyword(&card_80_bytes_buf, b"SIMPLE  ")?;
+        // BITPIX
+        consume_next_card_async(reader, &mut card_80_bytes_buf, bytes_read).await?;
+        let bitpix = parse_bitpix_card(&card_80_bytes_buf)?;
+        // NAXIS
+        consume_next_card_async(reader, &mut card_80_bytes_buf, bytes_read).await?;
+        let naxis = parse_naxis_card(&card_80_bytes_buf)?;
+        // The size of each NAXIS
+        let mut naxis_size = vec![0; naxis];
+        for idx_axis in 0..naxis {
+            consume_next_card_async(reader, &mut card_80_bytes_buf, bytes_read).await?;
+            let naxis_len = check_card_keyword(&card_80_bytes_buf, NAXIS_KW[idx_axis])?
+                .check_for_float()
+                .map(|size| size as usize)?;
+            naxis_size[idx_axis] = naxis_len;
+        }
+
+        /* Consume next non mandatory keywords until `END` is reached */
+        consume_next_card_async(reader, &mut card_80_bytes_buf, bytes_read).await?;
+        while let Some(card::Card { kw, v }) = parse_generic_card(&card_80_bytes_buf)? {
+            cards.insert(kw, v);
+            consume_next_card_async(reader, &mut card_80_bytes_buf, bytes_read).await?;
+        }
+
+        /* The last card was a END one */
+        Ok(Self {
+            cards,
+
+            bitpix,
+            naxis,
+            naxis_size,
         })
     }
 

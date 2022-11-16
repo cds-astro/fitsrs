@@ -80,7 +80,7 @@ mod tests {
         let buf = bytes.unwrap();
 
         let mut reader = Cursor::new(&buf[..]);
-        let fits = Fits::from_byte_slice(&mut reader).unwrap();
+        let fits = Fits::from_reader(&mut reader).unwrap();
 
         let primary_header = fits.get_header();
         assert_eq!(primary_header.get_axis_size(1).unwrap(), &64);
@@ -96,7 +96,7 @@ mod tests {
         f.read_to_end(&mut raw_bytes).unwrap();
 
         let mut reader = Cursor::new(&raw_bytes[..]);
-        let fits = Fits::from_byte_slice(&mut reader).unwrap();
+        let fits = Fits::from_reader(&mut reader).unwrap();
         let header = fits.get_header();
         match fits.get_data() {
             DataBorrowed::F32(data) => {
@@ -136,7 +136,7 @@ mod tests {
         f.read_to_end(&mut buf).unwrap();
         let mut reader = Cursor::new(&buf[..]);
 
-        let _fits = Fits::from_byte_slice(&mut reader).unwrap();
+        let _fits = Fits::from_reader(&mut reader).unwrap();
     }
 
     #[test]
@@ -148,7 +148,7 @@ mod tests {
         f.read_to_end(&mut buf).unwrap();
 
         let mut reader = Cursor::new(&buf[..]);
-        let _fits = Fits::from_byte_slice(&mut reader).unwrap();
+        let _fits = Fits::from_reader(&mut reader).unwrap();
     }
 
     #[test]
@@ -160,7 +160,7 @@ mod tests {
         f.read_to_end(&mut buf).unwrap();
 
         let mut reader = Cursor::new(&buf[..]);
-        let _fits = Fits::from_byte_slice(&mut reader).unwrap();
+        let _fits = Fits::from_reader(&mut reader).unwrap();
     }
 
     #[test]
@@ -169,7 +169,7 @@ mod tests {
         use std::io::BufReader;
 
         let f = File::open("misc/FOCx38i0101t_c0f.fits").unwrap();
-        let Fits { hdu } = Fits::from_byte_slice(BufReader::new(f)).unwrap();
+        let Fits { hdu } = Fits::from_reader(BufReader::new(f)).unwrap();
 
         let header = &hdu.header;
         let naxis1 = header.get_axis_size(1).unwrap();
@@ -192,7 +192,7 @@ mod tests {
         let mut buf = Vec::new();
         f.read_to_end(&mut buf).unwrap();
 
-        let Fits { hdu } = Fits::from_byte_slice(&buf[..]).unwrap();
+        let Fits { hdu } = Fits::from_reader(&buf[..]).unwrap();
 
         let header = &hdu.header;
         let naxis1 = header.get_axis_size(1).unwrap();
@@ -215,7 +215,7 @@ mod tests {
         f.read_to_end(&mut buf).unwrap();
 
         let mut reader = Cursor::new(&buf[..]);
-        Fits::from_byte_slice(&mut reader).unwrap();
+        Fits::from_reader(&mut reader).unwrap();
     }
     #[test]
     fn test_fits_tile6() {
@@ -226,7 +226,7 @@ mod tests {
         f.read_to_end(&mut buf).unwrap();
 
         let mut reader = Cursor::new(&buf[..]);
-        Fits::from_byte_slice(&mut reader).unwrap();
+        Fits::from_reader(&mut reader).unwrap();
     }
 
     #[test]
@@ -238,7 +238,7 @@ mod tests {
         f.read_to_end(&mut buf).unwrap();
 
         let mut reader = Cursor::new(&buf[..]);
-        Fits::from_byte_slice(&mut reader).unwrap();
+        Fits::from_reader(&mut reader).unwrap();
     }
 
     #[test]
@@ -259,6 +259,6 @@ mod tests {
             47, 104, 116, 109, 108, 62, 10,
         ];
         let mut reader = Cursor::new(bytes);
-        assert!(Fits::from_byte_slice(&mut reader).is_err());
+        assert!(Fits::from_reader(&mut reader).is_err());
     }
 }

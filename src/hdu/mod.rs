@@ -1,8 +1,13 @@
 pub mod header;
 pub mod data;
+pub mod data_async;
 pub use header::Header;
 
 pub use data::DataRead;
+pub use data_async::AsyncDataRead;
+
+use std::fmt::Debug;
+
 #[derive(Debug)]
 pub struct HDU<'a, R>
 where
@@ -43,6 +48,47 @@ where
         })
     }
 }
+
+use std::pin::Pin;
+#[derive(Debug)]
+pub struct AsyncHDU<R>
+where
+    R: AsyncDataRead
+{
+    pub header: Header,
+    pub data: R::Data,
+}
+impl<R> AsyncHDU<R>
+where
+    R: AsyncDataRead + std::marker::Unpin
+{
+    pub async fn new(mut reader: R) -> Result<Self, Error> {
+        let mut bytes_read = 0;
+        /* 1. Parse the header first */
+        let header = Header::parse_async(&mut reader, &mut bytes_read).await?;
+        // At this point the header is valid
+        let num_pixels = (0..header.get_naxis())
+            .map(|idx| header.get_axis_size(idx + 1).unwrap())
+            .fold(1, |mut total, val| {
+                total *= val;
+                total
+            });
+        let bitpix = header.get_bitpix();
+
+        /* 2. Skip the next bytes to a new 2880 multiple of bytes
+        This is where the data block should start */
+        let off_data_block = 2880 - bytes_read % 2880;
+        Pin::new(&mut reader).consume(off_data_block);
+
+        let data = unsafe { reader.read_data_block(bitpix, num_pixels) };
+
+        Ok(Self {
+            header,
+            data
+        })
+    }
+}
+
 
 mod tests {
     use super::HDU;
