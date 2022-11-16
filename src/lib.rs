@@ -1,7 +1,7 @@
 extern crate nom;
 extern crate byteorder;
 
-mod hdu;
+pub mod hdu;
 mod card;
 mod error;
 mod fits;
