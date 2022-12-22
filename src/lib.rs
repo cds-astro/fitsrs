@@ -4,7 +4,7 @@ extern crate byteorder;
 pub mod hdu;
 pub mod fits;
 pub mod card;
-mod error;
+pub mod error;
 
 #[cfg(test)]
 mod tests {
