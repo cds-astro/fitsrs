@@ -8,6 +8,9 @@ use nom::{
     IResult,
 };
 
+use crate::error::Error;
+pub type Keyword = [u8; 8];
+
 use serde::Serialize;
 #[derive(Debug, PartialEq)]
 #[derive(Serialize)]
@@ -22,7 +25,30 @@ impl Card {
     }
 }
 
-pub type Keyword = [u8; 8];
+pub trait CardValue {
+    fn parse(value: Value) -> Result<Self, Error> where Self: Sized;
+}
+
+impl CardValue for f64 {
+    fn parse(value: Value) -> Result<Self, Error> {
+        Value::check_for_float(value)
+    }
+}
+impl CardValue for i64 {
+    fn parse(value: Value) -> Result<Self, Error> {
+        Value::check_for_integer(value)
+    }
+}
+impl CardValue for String {
+    fn parse(value: Value) -> Result<Self, Error> {
+        Value::check_for_string(value)
+    }
+}
+impl CardValue for bool {
+    fn parse(value: Value) -> Result<Self, Error> {
+        Value::check_for_boolean(value)
+    }
+}
 
 #[derive(Debug, PartialEq, Clone)]
 #[derive(Serialize)]
@@ -34,7 +60,6 @@ pub enum Value {
     Undefined,
 }
 
-use crate::error::Error;
 impl Value {
     pub fn check_for_integer(self) -> Result<i64, Error> {
         match self {

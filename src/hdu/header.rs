@@ -185,6 +185,14 @@ impl Header {
     pub fn get(&self, key: &[u8; 8]) -> Option<&card::Value> {
         self.cards.get(key)
     }
+
+    pub fn get_parsed<T>(&self, key: &[u8; 8]) -> Option<Result<T, Error>>
+    where
+        T: CardValue
+    {
+        self.get(key)
+            .map(|value| <T as CardValue>::parse(value.clone()))
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -207,88 +215,6 @@ use nom::{
     sequence::{pair, preceded},
     IResult,
 };
-
-/*pub(self) fn parse_card(card: &'_ [u8; 80]) -> Result<Card<'_>, Error<'_>> {
-    let (card, keyword) = preceded(multispace0, parse_card_keyword)(card.as_slice())?;
-    // We stop consuming tokens after the exit
-    if keyword == b"END" {
-        return Ok(Card::End);
-    }
-
-    let (_, value) = parse_card_value(card)?;
-    match (keyword, value) {
-        // SIMPLE = true check
-        (b"SIMPLE", value) => match value {
-            CardValue::Logical(true) => Ok(Card::Simple),
-            _ => Err(Error::MandatoryValueError("SIMPLE")),
-        },
-        // BITPIX in {8, 16, 32, 64, -32, -64} check
-        (b"BITPIX", value) => match value {
-            FITSCardValue::FloatingPoint(bitpix) => {
-                match bitpix as i32 {
-                    8 => Ok(Card::Bitpix(BitpixValue::U8)),
-                    16 => Ok(Card::Bitpix(BitpixValue::I16)),
-                    32 => Ok(Card::Bitpix(BitpixValue::I32)),
-                    64 => Ok(Card::Bitpix(BitpixValue::I64)),
-                    -32 => Ok(Card::Bitpix(BitpixValue::F32)),
-                    -64 => Ok(Card::Bitpix(BitpixValue::F64)),
-                    _ => Err(Error::BitpixBadValue),
-                }
-            }
-            _ => Err(Error::MandatoryValueError("BITPIX")),
-        },
-        // NAXIS > 0 integer check
-        (b"NAXIS", value) => match value {
-            CardValue::FloatingPoint(naxis) => {
-                if naxis <= 0.0 {
-                    Err(Error::NegativeOrNullNaxis)
-                } else {
-                    Ok(Card::Naxis(naxis as usize))
-                }
-            }
-            _ => Err(Error::MandatoryValueError("NAXIS")),
-        },
-        // BLANK value
-        (b"BLANK", value) => match value {
-            CardValue::FloatingPoint(blank) => Ok(Card::Blank(blank)),
-            _ => Err(Error::MandatoryValueError("BLANK")),
-        },
-        // Comment associated to a string check
-        (b"COMMENT", value) => match value {
-            CardValue::CharacterString(str) => Ok(Card::Comment(str)),
-            _ => Err(Error::MandatoryValueError("COMMENT")),
-        },
-        ([b'N', b'A', b'X', b'I', b'S', ..], value) => {
-            let name = std::str::from_utf8(keyword).unwrap();
-            let (_, idx_axis) =
-                (preceded(tag(b"NAXIS"), digit1)(keyword) as IResult<&[u8], &[u8]>).unwrap();
-
-            let idx_axis = std::str::from_utf8(idx_axis)
-                .map(|str| str.parse::<usize>().unwrap())
-                .unwrap();
-            if let CardValue::FloatingPoint(size) = value {
-                if size <= 0.0 {
-                    Err(Error::NegativeOrNullNaxisSize(idx_axis))
-                } else {
-                    // Check the value
-                    Ok(Card::NaxisSize {
-                        name,
-                        idx: idx_axis,
-                        size: size as usize,
-                    })
-                }
-            } else {
-                Err(Error::MandatoryValueError(name))
-            }
-        }
-        (keyword, value) => Ok(
-            Card::Other {
-                name: keyword,
-                value,
-            }
-        ),
-    }
-}*/
 
 pub(crate) fn parse_card_keyword(buf: &[u8]) -> IResult<&[u8], &[u8]> {
     alt((
