@@ -14,22 +14,21 @@ impl<'a, R> Fits<'a, R>
 where
     R: DataRead<'a> + 'a
 {
-    /// Parse a FITS file correctly aligned in memory
-    ///
-    /// # Arguments
-    ///
-    /// * `buf` - a slice located at a aligned address location with respect to the type T.
-    ///   If T is f32, buf ptr must be divisible by 4
+    /// Parse a FITS file
+    /// # Params
+    /// * `reader` - a reader created i.e. from the opening of a file
     pub fn from_reader(reader: R) -> Result<Self, Error> {
         let hdu = HDU::new(reader)?;
 
         Ok(Self { hdu })
     }
 
+    /// Returns the header of the first HDU
     pub fn get_header(&self) -> &Header {
         &self.hdu.header
     }
 
+    /// Returns the data of the first HDU
     pub fn get_data(&self) -> &R::Data {
         &self.hdu.data
     }
@@ -48,22 +47,21 @@ impl<R> AsyncFits<R>
 where
     R: AsyncDataRead + std::marker::Unpin
 {
-    /// Parse a FITS file correctly aligned in memory
-    ///
-    /// # Arguments
-    ///
-    /// * `buf` - a slice located at a aligned address location with respect to the type T.
-    ///   If T is f32, buf ptr must be divisible by 4
+    /// Parse a FITS file
+    /// # Params
+    /// * `reader` - a async reader created i.e. from the opening of a file
     pub async fn from_reader(reader: R) -> Result<Self, Error> {
         let hdu = AsyncHDU::new(reader).await?;
 
         Ok(Self { hdu })
     }
 
+    /// Returns the header of the first HDU
     pub fn get_header(&self) -> &Header {
         &self.hdu.header
     }
 
+    /// Returns the data of the first HDU
     pub fn get_data(&self) -> &R::Data {
         &self.hdu.data
     }

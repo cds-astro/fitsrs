@@ -50,6 +50,8 @@ impl CardValue for bool {
     }
 }
 
+/// Enum structure corresponding to all the possible type
+/// a card value can have that are supported by fitsrs
 #[derive(Debug, PartialEq, Clone)]
 #[derive(Serialize)]
 pub enum Value {

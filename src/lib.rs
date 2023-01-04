@@ -1,3 +1,36 @@
+//! This crate implements a fits image parser
+//!
+//! # Examples
+//!
+//! Basic usage:
+//!
+//! ```
+//! use std::fs::File;
+//! use std::io::BufReader;
+//! 
+//! use fitsrs::{hdu::data::DataOwned, fits::Fits};
+//! 
+//! let f = File::open("misc/FOCx38i0101t_c0f.fits").unwrap();
+//! let Fits { hdu } = Fits::from_reader(BufReader::new(f)).unwrap();
+//!
+//! // Get the header part of the HDU
+//! let header = &hdu.header;
+//! // Retrieve some card values
+//! let naxis1 = header.get_axis_size(1).unwrap();
+//! let naxis2 = header.get_axis_size(2).unwrap();
+//! 
+//! // Get the data part iterator
+//! match hdu.data {
+//!     // Knowing the BITPIX keyword you are able to know the correct data type
+//!     DataOwned::F32(it) => {
+//!         // Consume it when you want
+//!         let data = it.collect::<Vec<_>>();
+//!         assert_eq!(data.len(), naxis1 * naxis2);
+//!     },
+//!     _ => unreachable!(),
+//! }
+//! ```
+
 extern crate nom;
 extern crate byteorder;
 

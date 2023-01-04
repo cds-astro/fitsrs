@@ -1,16 +1,27 @@
-# FITS reader written in pure Rust using [nom](https://github.com/Geal/nom)
+Fits reader written in pure Rust using [nom](https://github.com/Geal/nom)
+-------------------------------------------------------------------------
 
-This crate is under heavy development, it was initiated for reading fits HiPS tile, i.e. generated from hipsgen and therefore taking into account that a fits tile:
+This crate is under heavy development, it was initiated for reading fits HiPS tile, i.e. generated from hipsgen.
 
-* Contains all its data the primary unit
-* Does not use any WCS
+This fits parser only supports image data (not tables), and does not know anything about WCS parsing.
+For WCS parsing, see [wcsrs](https://github.com/cds-astro/wcs-rs).
+This parser also does not parse multiple HDUs, extensions. If a fits file containing multiple extensions is given to fitsrs, 
+then only its first HDU will be parsed and the following ones will be ignored.
 
-## What is supported ?
+To Do list
+----------
 
-The read of a primary unit, i.e. the primary header and data unit
-The extensions are not supported
+* [X] Support single typed data block (i.e. image type data)
+* [X] Single HDU parsing, header and data units 
+* [X] Support big fits file parsing that may not fit in memory (iterator usage)
+* [X] Async reading (experimental and not tested)
+* [ ] Keep CARD comment
+* [ ] Support data table (each column can have a specific types)
+* [ ] Support of multiple HDU, fits extensions
+* [ ] WCS parsing, see [wcsrs](https://github.com/cds-astro/wcs-rs)
 
-## Exemple
+Example
+----------
 
 ```rust
 use std::fs::File;
@@ -34,8 +45,3 @@ fn main() {
     }
 }
 ```
-
-To run the tests:
-``
-cargo test
-``

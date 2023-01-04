@@ -8,12 +8,16 @@ pub use data_async::AsyncDataRead;
 
 use std::fmt::Debug;
 
+/// Structure storing the content of one HDU (i.e. Header Data Unit)
+/// of a fits file
 #[derive(Debug)]
 pub struct HDU<'a, R>
 where
     R: DataRead<'a>
 {
+    /// The header part that stores all the cards
     pub header: Header,
+    /// The data part
     pub data: R::Data,
 }
 
@@ -50,12 +54,16 @@ where
 }
 
 use std::pin::Pin;
+/// Structure storing the content of one HDU (i.e. Header Data Unit)
+/// of a fits file that is opened in an async way
 #[derive(Debug)]
 pub struct AsyncHDU<R>
 where
     R: AsyncDataRead
 {
+    /// The header part that stores all the cards
     pub header: Header,
+    /// The data part
     pub data: R::Data,
 }
 impl<R> AsyncHDU<R>

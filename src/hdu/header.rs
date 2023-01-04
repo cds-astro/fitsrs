@@ -1,3 +1,7 @@
+//! Module implementing the header part of a HDU
+//! 
+//! A header basically consists of a list a 80 long characters CARDS
+//! Each CARD is a dictionnary tuple-like of the (key, value) form.
 use futures::{AsyncBufRead, AsyncReadExt};
 use serde::Serialize;
 use crate::card::{self, Card};
@@ -169,23 +173,34 @@ impl Header {
         })
     }
 
+    /// Get the number of axis given by the "NAXIS" card
     pub fn get_naxis(&self) -> usize {
         self.naxis
     }
 
+    /// Get the size of an axis given by the "NAXISX" card
     pub fn get_axis_size(&self, idx: usize) -> Option<&usize> {
         // NAXIS indexes begins at 1 instead of 0
         self.naxis_size.get(idx - 1)
     }
 
+    /// Get the bitpix value given by the "BITPIX" card
     pub fn get_bitpix(&self) -> BitpixValue {
         self.bitpix
     }
 
+    /// Get the value of a specific card
+    /// # Params
+    /// * `key` - The key of a card 
     pub fn get(&self, key: &[u8; 8]) -> Option<&card::Value> {
         self.cards.get(key)
     }
 
+    /// Get the value a specific card and try to parse the value
+    /// Returns an error if the asking type does not match the true inner type of
+    /// the value got
+    /// # Params
+    /// * `key` - The key of a card 
     pub fn get_parsed<T>(&self, key: &[u8; 8]) -> Option<Result<T, Error>>
     where
         T: CardValue

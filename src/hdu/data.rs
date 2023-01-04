@@ -226,6 +226,13 @@ where
     }
 }
 
+/// The full slice of data found in-memory
+/// This is an enum whose content depends on the
+/// bitpix value found in the header part of the HDU
+/// 
+/// The data part is expressed as a `DataBorrowed` structure
+/// for in-memory readers (typically for `&[u8]` or a `Cursor<AsRef<[u8]>>`) that ensures
+/// all the data fits in memory
 #[derive(Serialize)]
 #[derive(Debug)]
 pub enum DataBorrowed<'a> {
@@ -237,6 +244,13 @@ pub enum DataBorrowed<'a> {
     F64(&'a [f64]),
 }
 
+/// An iterator on the data array
+/// This is an enum whose content depends on the
+/// bitpix value found in the header part of the HDU
+/// 
+/// The data part is expressed as a `DataOwned` structure
+/// for non in-memory readers (typically BufReader) that ensures
+/// a file may not fit in memory
 #[derive(Serialize)]
 #[derive(Debug)]
 pub enum DataOwned<R>

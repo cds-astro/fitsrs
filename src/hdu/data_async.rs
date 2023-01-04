@@ -34,6 +34,13 @@ where
     }
 }
 
+/// An async iterator on the data array
+/// This is an enum whose content depends on the
+/// bitpix value found in the header part of the HDU
+/// 
+/// The data part is expressed as a `DataOwned` structure
+/// for non in-memory readers (typically BufReader) that ensures
+/// a file may not fit in memory
 #[derive(Serialize)]
 #[derive(Debug)]
 pub enum DataOwned<R>
