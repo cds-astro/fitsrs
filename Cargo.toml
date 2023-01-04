@@ -11,6 +11,9 @@ keywords = ["fits"]
 documentation = "https://docs.rs/fitsrs"
 homepage = "https://github.com/cds-astro/fitsrs/"
 repository = "https://github.com/cds-astro/fitsrs/"
+exclude = [
+    "misc/*",
+]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
