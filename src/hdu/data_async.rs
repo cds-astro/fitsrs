@@ -10,19 +10,19 @@ use std::fmt::Debug;
 use futures::AsyncBufRead;
 
 /// Abstraction for reading a data block
-pub trait AsyncDataRead: AsyncBufRead {
+pub trait AsyncDataRead<'a>: AsyncBufRead {
     type Data: Debug;
 
-    unsafe fn read_data_block(self, bitpix: BitpixValue, num_pixels: usize) -> Self::Data where Self: Sized;
+    unsafe fn read_data_block(&'a mut self, bitpix: BitpixValue, num_pixels: usize) -> Self::Data where Self: Sized;
 }
 
-impl<R> AsyncDataRead for futures::io::BufReader<R>
+impl<'a, R> AsyncDataRead<'a> for futures::io::BufReader<R>
 where
-    R: futures::AsyncRead + std::marker::Unpin + Debug
+    R: futures::AsyncRead + std::marker::Unpin + Debug + 'a
 {
-    type Data = DataOwned<Self>;
+    type Data = DataOwned<'a, Self>;
 
-    unsafe fn read_data_block(self, bitpix: BitpixValue, num_pixels: usize) -> Self::Data {
+    unsafe fn read_data_block(&'a mut self, bitpix: BitpixValue, num_pixels: usize) -> Self::Data {
         match bitpix {
             BitpixValue::U8 => DataOwned::U8(DataOwnedSt::new(self, num_pixels)),
             BitpixValue::I16 => DataOwned::I16(DataOwnedSt::new(self, num_pixels)),
@@ -43,35 +43,35 @@ where
 /// a file may not fit in memory
 #[derive(Serialize)]
 #[derive(Debug)]
-pub enum DataOwned<R>
+pub enum DataOwned<'a, R>
 where
     R: AsyncBufRead
 {
-    U8(DataOwnedSt<R, u8>),
-    I16(DataOwnedSt<R, i16>),
-    I32(DataOwnedSt<R, i32>),
-    I64(DataOwnedSt<R, i64>),
-    F32(DataOwnedSt<R, f32>),
-    F64(DataOwnedSt<R, f64>),
+    U8(DataOwnedSt<'a, R, u8>),
+    I16(DataOwnedSt<'a, R, i16>),
+    I32(DataOwnedSt<'a, R, i32>),
+    I64(DataOwnedSt<'a, R, i64>),
+    F32(DataOwnedSt<'a, R, f32>),
+    F64(DataOwnedSt<'a, R, f64>),
 }
 
 #[derive(Serialize)]
 #[derive(Debug)]
-pub struct DataOwnedSt<R, T>
+pub struct DataOwnedSt<'a, R, T>
 where
     R: futures::AsyncBufRead
 {
-    reader: R,
+    reader: &'a mut R,
     num_pixels: usize,
     counter: usize,
     phantom: std::marker::PhantomData<T>,
 }
 
-impl<R, T> DataOwnedSt<R, T>
+impl<'a, R, T> DataOwnedSt<'a, R, T>
 where
     R: futures::AsyncBufRead
 {
-    fn new(reader: R, num_pixels: usize) -> Self {
+    fn new(reader: &'a mut R, num_pixels: usize) -> Self {
         let counter = 0;
         Self {
             reader,
@@ -87,7 +87,7 @@ use futures::task::Context;
 use futures::task::Poll;
 use futures::Future;
 
-impl<R> futures::Stream for DataOwnedSt<R, u8>
+impl<'a, R> futures::Stream for DataOwnedSt<'a, R, u8>
 where
     R: futures::AsyncBufReadExt + std::marker::Unpin
 {
@@ -117,7 +117,7 @@ where
     }
 }
 
-impl<R> futures::Stream for DataOwnedSt<R, i16>
+impl<'a, R> futures::Stream for DataOwnedSt<'a, R, i16>
 where
     R: futures::AsyncBufReadExt + std::marker::Unpin
 {
@@ -147,7 +147,7 @@ where
     }
 }
 
-impl<R> futures::Stream for DataOwnedSt<R, i32>
+impl<'a, R> futures::Stream for DataOwnedSt<'a, R, i32>
 where
     R: futures::AsyncBufReadExt + std::marker::Unpin
 {
@@ -177,7 +177,7 @@ where
     }
 }
 
-impl<R> futures::Stream for DataOwnedSt<R, i64>
+impl<'a, R> futures::Stream for DataOwnedSt<'a, R, i64>
 where
     R: futures::AsyncBufReadExt + std::marker::Unpin
 {
@@ -207,7 +207,7 @@ where
     }
 }
 
-impl<R> futures::Stream for DataOwnedSt<R, f32>
+impl<'a, R> futures::Stream for DataOwnedSt<'a, R, f32>
 where
     R: futures::AsyncBufReadExt + std::marker::Unpin
 {
@@ -237,7 +237,7 @@ where
     }
 }
 
-impl<R> futures::Stream for DataOwnedSt<R, f64>
+impl<'a, R> futures::Stream for DataOwnedSt<'a, R, f64>
 where
     R: futures::AsyncBufReadExt + std::marker::Unpin
 {

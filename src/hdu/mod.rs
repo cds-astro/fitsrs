@@ -54,26 +54,28 @@ where
 }
 
 use std::pin::Pin;
+use futures::AsyncBufRead;
+
 /// Structure storing the content of one HDU (i.e. Header Data Unit)
 /// of a fits file that is opened in an async way
 #[derive(Debug)]
-pub struct AsyncHDU<R>
+pub struct AsyncHDU<'a, R>
 where
-    R: AsyncDataRead
+    R: AsyncDataRead<'a>
 {
     /// The header part that stores all the cards
     pub header: Header,
     /// The data part
     pub data: R::Data,
 }
-impl<R> AsyncHDU<R>
+impl<'a, R> AsyncHDU<'a, R>
 where
-    R: AsyncDataRead + std::marker::Unpin
+    R: AsyncDataRead<'a> + std::marker::Unpin
 {
-    pub async fn new(mut reader: R) -> Result<Self, Error> {
+    pub async fn new(mut reader: &'a mut R) -> Result<AsyncHDU<'a, R>, Error> {
         let mut bytes_read = 0;
         /* 1. Parse the header first */
-        let header = Header::parse_async(&mut reader, &mut bytes_read).await?;
+        let header = Header::parse_async(reader, &mut bytes_read).await?;
         // At this point the header is valid
         let num_pixels = (0..header.get_naxis())
             .map(|idx| header.get_axis_size(idx + 1).unwrap())

@@ -35,34 +35,34 @@ where
 
 use crate::hdu::{AsyncDataRead, AsyncHDU};
 #[derive(Debug)]
-pub struct AsyncFits<R>
+pub struct AsyncFits<'a, R>
 where
-    R: AsyncDataRead
+    R: AsyncDataRead<'a>
 {
-    pub hdu: AsyncHDU<R>,
+    pub hdu: Vec<AsyncHDU<'a, R>>,
 }
 
-impl<R> AsyncFits<R>
+impl<'a, R> AsyncFits<'a, R>
 where
-    R: AsyncDataRead + std::marker::Unpin
+    R: AsyncDataRead<'a> + std::marker::Unpin
 {
     /// Parse a FITS file
     /// # Params
     /// * `reader` - a async reader created i.e. from the opening of a file
-    pub async fn from_reader(reader: R) -> Result<Self, Error> {
+    pub async fn from_reader(reader: &'a mut R) -> Result<AsyncFits<'a, R>, Error> {
         let hdu = AsyncHDU::new(reader).await?;
 
-        Ok(Self { hdu })
+        Ok(Self { hdu: vec![hdu] })
     }
 
     /// Returns the header of the first HDU
     pub fn get_header(&self) -> &Header {
-        &self.hdu.header
+        &self.hdu[0].header
     }
 
     /// Returns the data of the first HDU
     pub fn get_data(&self) -> &R::Data {
-        &self.hdu.data
+        &self.hdu[0].data
     }
 }
 
