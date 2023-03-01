@@ -26,10 +26,10 @@ impl<'a, R> HDU<'a, R>
 where
     R: DataRead<'a>
 {
-    pub fn new(mut reader: R) -> Result<Self, Error> {
+    pub fn new(reader: &'a mut R) -> Result<Self, Error> {
         let mut bytes_read = 0;
         /* 1. Parse the header first */
-        let header = Header::parse(&mut reader, &mut bytes_read)?;
+        let header = Header::parse(reader, &mut bytes_read)?;
         // At this point the header is valid
         let num_pixels = (0..header.get_naxis())
             .map(|idx| header.get_axis_size(idx + 1).unwrap())
@@ -110,16 +110,19 @@ mod tests {
         let mut raw_bytes = Vec::<u8>::new();
         f.read_to_end(&mut raw_bytes).unwrap();
         // Here all the file content is in memory
-        let hdu = HDU::new(&raw_bytes[..]).unwrap();
+        let mut reader = Cursor::new(&raw_bytes[..]);
+        let hdu = HDU::new(&mut reader).unwrap();
 
         assert_eq!(hdu.header.get_bitpix(), BitpixValue::F32);
     }
 
     #[test]
     fn test_file_lifetime() {
+        let f = File::open("misc/Npix208.fits").unwrap();
+        let mut reader = BufReader::new(f);
+
         let hdu = {
-            let f = File::open("misc/Npix208.fits").unwrap();
-            HDU::new(BufReader::new(f)).unwrap()
+            HDU::new(&mut reader).unwrap()
         };
 
         assert_eq!(hdu.header.get_bitpix(), BitpixValue::F32);

@@ -11,16 +11,16 @@ use std::fmt::Debug;
 pub trait DataRead<'a>: BufRead {
     type Data: Debug;
 
-    unsafe fn read_data_block(self, bitpix: BitpixValue, num_pixels: usize) -> Self::Data where Self: Sized;
+    unsafe fn read_data_block(&'a mut self, bitpix: BitpixValue, num_pixels: usize) -> Self::Data where Self: Sized;
 }
 
-impl<'a, R> DataRead<'a> for &'a mut Cursor<R>
+impl<'a, R> DataRead<'a> for Cursor<R>
 where
     R: AsRef<[u8]> + 'a
 {
     type Data = DataBorrowed<'a>;
 
-    unsafe fn read_data_block(self, bitpix: BitpixValue, num_pixels: usize) -> Self::Data {
+    unsafe fn read_data_block(&mut self, bitpix: BitpixValue, num_pixels: usize) -> Self::Data {
         let bytes = self.get_ref();
         let bytes = bytes.as_ref();
 
@@ -115,106 +115,13 @@ where
     }
 }
 
-impl<'a> DataRead<'a> for &'a [u8] {
-    type Data = DataBorrowed<'a>;
-
-    unsafe fn read_data_block(self, bitpix: BitpixValue, num_pixels: usize) -> Self::Data {
-        let mut bytes = self;
-        let x_ptr = bytes as *const [u8] as *mut [u8];
-        let x_mut_ref = &mut *x_ptr;
-
-        match bitpix {
-            BitpixValue::U8 => {
-                let (_, data, _) = x_mut_ref.align_to_mut::<u8>();
-                debug_assert!(data.len() >= num_pixels);
-                let data = &data[..num_pixels];
-
-                let num_bytes = num_pixels;
-                bytes.consume(num_bytes);
-
-                DataBorrowed::U8(data)
-            },
-            BitpixValue::I16 => {
-                // 1. Verify the alignement
-                let (_, data, _) = x_mut_ref.align_to_mut::<i16>();
-                // 2. Convert to big endianness. This is O(N) over the size of the data
-                BigEndian::from_slice_i16(data);
-                // 3. Keep only the pixels
-                debug_assert!(data.len() >= num_pixels);
-                let data = &data[..num_pixels];
-
-                let num_bytes = num_pixels * std::mem::size_of::<i16>();
-                bytes.consume(num_bytes);
-
-                DataBorrowed::I16(data)
-            },
-            BitpixValue::I32 => {
-                // 1. Verify the alignement
-                let (_, data, _) = x_mut_ref.align_to_mut::<i32>();
-                // 2. Convert to big endianness. This is O(N) over the size of the data
-                BigEndian::from_slice_i32(data);
-                // 3. Keep only the pixels
-                debug_assert!(data.len() >= num_pixels);
-                let data = &data[..num_pixels];
-
-                let num_bytes = num_pixels * std::mem::size_of::<i32>();
-                bytes.consume(num_bytes);
-
-                DataBorrowed::I32(data)
-            },
-            BitpixValue::I64 => {
-                // 1. Verify the alignement
-                let (_, data, _) = x_mut_ref.align_to_mut::<i64>();
-                // 2. Convert to big endianness. This is O(N) over the size of the data
-                BigEndian::from_slice_i64(data);
-                // 3. Keep only the pixels
-                debug_assert!(data.len() >= num_pixels);
-                let data = &data[..num_pixels];
-
-                let num_bytes = num_pixels * std::mem::size_of::<i64>();
-                bytes.consume(num_bytes);
-
-                DataBorrowed::I64(data)
-            },
-            BitpixValue::F32 => {
-                // 1. Verify the alignement
-                let (_, data, _) = x_mut_ref.align_to_mut::<f32>();
-                // 2. Convert to big endianness. This is O(N) over the size of the data
-                BigEndian::from_slice_f32(data);
-                // 3. Keep only the pixels
-                debug_assert!(data.len() >= num_pixels);
-                let data = &data[..num_pixels];
-
-                let num_bytes = num_pixels * std::mem::size_of::<f32>();
-                bytes.consume(num_bytes);
-
-                DataBorrowed::F32(data)
-            },
-            BitpixValue::F64 => {
-                // 1. Verify the alignement
-                let (_, data, _) = x_mut_ref.align_to_mut::<f64>();
-                // 2. Convert to big endianness. This is O(N) over the size of the data
-                BigEndian::from_slice_f64(data);
-                // 3. Keep only the pixels
-                debug_assert!(data.len() >= num_pixels);
-                let data = &data[..num_pixels];
-
-                let num_bytes = num_pixels * std::mem::size_of::<f64>();
-                bytes.consume(num_bytes);
-
-                DataBorrowed::F64(data)
-            }
-        }
-    }
-}
-
 impl<'a, R> DataRead<'a> for BufReader<R>
 where
-    R: Read + Debug
+    R: Read + Debug + 'a
 {
-    type Data = DataOwned<Self>;
+    type Data = DataOwned<'a, Self>;
 
-    unsafe fn read_data_block(self, bitpix: BitpixValue, num_pixels: usize) -> Self::Data {
+    unsafe fn read_data_block(&'a mut self, bitpix: BitpixValue, num_pixels: usize) -> Self::Data {
         match bitpix {
             BitpixValue::U8 => DataOwned::U8(DataOwnedIt::new(self, num_pixels)),
             BitpixValue::I16 => DataOwned::I16(DataOwnedIt::new(self, num_pixels)),
@@ -253,35 +160,35 @@ pub enum DataBorrowed<'a> {
 /// a file may not fit in memory
 #[derive(Serialize)]
 #[derive(Debug)]
-pub enum DataOwned<R>
+pub enum DataOwned<'a, R>
 where
     R: BufRead
 {
-    U8(DataOwnedIt<R, u8>),
-    I16(DataOwnedIt<R, i16>),
-    I32(DataOwnedIt<R, i32>),
-    I64(DataOwnedIt<R, i64>),
-    F32(DataOwnedIt<R, f32>),
-    F64(DataOwnedIt<R, f64>),
+    U8(DataOwnedIt<'a, R, u8>),
+    I16(DataOwnedIt<'a, R, i16>),
+    I32(DataOwnedIt<'a, R, i32>),
+    I64(DataOwnedIt<'a, R, i64>),
+    F32(DataOwnedIt<'a, R, f32>),
+    F64(DataOwnedIt<'a, R, f64>),
 }
 
 #[derive(Serialize)]
 #[derive(Debug)]
-pub struct DataOwnedIt<R, T>
+pub struct DataOwnedIt<'a, R, T>
 where
     R: BufRead
 {
-    reader: R,
+    reader: &'a mut R,
     num_pixels: usize,
     counter: usize,
     phantom: std::marker::PhantomData<T>,
 }
 
-impl<R, T> DataOwnedIt<R, T>
+impl<'a, R, T> DataOwnedIt<'a, R, T>
 where
     R: BufRead
 {
-    fn new(reader: R, num_pixels: usize) -> Self {
+    fn new(reader: &'a mut R, num_pixels: usize) -> Self {
         let counter = 0;
         Self {
             reader,
@@ -292,7 +199,7 @@ where
     }
 }
 
-impl<R> Iterator for DataOwnedIt<R, u8>
+impl<'a, R> Iterator for DataOwnedIt<'a, R, u8>
 where
     R: BufRead
 {
@@ -311,7 +218,7 @@ where
     }
 }
 
-impl<R> Iterator for DataOwnedIt<R, i16>
+impl<'a, R> Iterator for DataOwnedIt<'a, R, i16>
 where
     R: BufRead
 {
@@ -329,7 +236,7 @@ where
     }
 }
 
-impl<R> Iterator for DataOwnedIt<R, i32>
+impl<'a, R> Iterator for DataOwnedIt<'a, R, i32>
 where
     R: BufRead
 {
@@ -347,7 +254,7 @@ where
     }
 }
 
-impl<R> Iterator for DataOwnedIt<R, i64>
+impl<'a, R> Iterator for DataOwnedIt<'a, R, i64>
 where
     R: BufRead
 {
@@ -365,7 +272,7 @@ where
     }
 }
 
-impl<R> Iterator for DataOwnedIt<R, f32>
+impl<'a, R> Iterator for DataOwnedIt<'a, R, f32>
 where
     R: BufRead
 {
@@ -383,7 +290,7 @@ where
     }
 }
 
-impl<R> Iterator for DataOwnedIt<R, f64>
+impl<'a, R> Iterator for DataOwnedIt<'a, R, f64>
 where
     R: BufRead
 {

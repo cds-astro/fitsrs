@@ -1,12 +1,11 @@
 use crate::hdu::HDU;
 use crate::hdu::{Header, DataRead};
-use serde::Serialize;
 #[derive(Debug)]
 pub struct Fits<'a, R>
 where
     R: DataRead<'a>
 {
-    pub hdu: HDU<'a, R>,
+    pub hdu: Vec<HDU<'a, R>>,
 }
 
 use crate::error::Error;
@@ -17,20 +16,20 @@ where
     /// Parse a FITS file
     /// # Params
     /// * `reader` - a reader created i.e. from the opening of a file
-    pub fn from_reader(reader: R) -> Result<Self, Error> {
+    pub fn from_reader(reader: &'a mut R) -> Result<Self, Error> {
         let hdu = HDU::new(reader)?;
 
-        Ok(Self { hdu })
+        Ok(Self { hdu: vec![hdu] })
     }
 
     /// Returns the header of the first HDU
     pub fn get_header(&self) -> &Header {
-        &self.hdu.header
+        &self.hdu[0].header
     }
 
     /// Returns the data of the first HDU
     pub fn get_data(&self) -> &R::Data {
-        &self.hdu.data
+        &self.hdu[0].data
     }
 }
 

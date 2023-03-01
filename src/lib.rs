@@ -8,26 +8,26 @@
 //! use std::fs::File;
 //! use std::io::BufReader;
 //! 
-//! use fitsrs::{hdu::data::DataOwned, fits::Fits};
+//! use fitsrs::{hdu::data::DataOwned, fits::Fits, hdu::HDU};
 //! 
 //! let f = File::open("misc/FOCx38i0101t_c0f.fits").unwrap();
-//! let Fits { hdu } = Fits::from_reader(BufReader::new(f)).unwrap();
-//!
-//! // Get the header part of the HDU
-//! let header = &hdu.header;
-//! // Retrieve some card values
-//! let naxis1 = header.get_axis_size(1).unwrap();
-//! let naxis2 = header.get_axis_size(2).unwrap();
+//! let mut reader = BufReader::new(f);
+//! let Fits { mut hdu } = Fits::from_reader(&mut reader).unwrap();
+//! for HDU { header, data } in hdu {
+//!     // Retrieve some card values
+//!     let naxis1 = header.get_axis_size(1).unwrap();
+//!     let naxis2 = header.get_axis_size(2).unwrap();
 //! 
-//! // Get the data part iterator
-//! match hdu.data {
-//!     // Knowing the BITPIX keyword you are able to know the correct data type
-//!     DataOwned::F32(it) => {
-//!         // Consume it when you want
-//!         let data = it.collect::<Vec<_>>();
-//!         assert_eq!(data.len(), naxis1 * naxis2);
-//!     },
-//!     _ => unreachable!(),
+//!     // Get the data part iterator
+//!     match data {
+//!         // Knowing the BITPIX keyword you are able to know the correct data type
+//!         DataOwned::F32(it) => {
+//!             // Consume it when you want
+//!             let data = it.collect::<Vec<_>>();
+//!             assert_eq!(data.len(), naxis1 * naxis2);
+//!         },
+//!         _ => unreachable!(),
+//!     }
 //! }
 //! ```
 
@@ -42,7 +42,6 @@ pub mod error;
 #[cfg(test)]
 mod tests {
     use crate::fits::Fits;
-    use crate::card::Value;
     use crate::hdu::header::BitpixValue;
     use crate::hdu::data::{DataOwned, DataBorrowed};
 
@@ -146,18 +145,21 @@ mod tests {
         use std::io::BufReader;
 
         let f = File::open("misc/FOCx38i0101t_c0f.fits").unwrap();
-        let Fits { hdu } = Fits::from_reader(BufReader::new(f)).unwrap();
+        let mut reader = BufReader::new(f);
+        let Fits { hdu } = Fits::from_reader(&mut reader).unwrap();
 
-        let header = &hdu.header;
-        let naxis1 = header.get_axis_size(1).unwrap();
-        let naxis2 = header.get_axis_size(2).unwrap();
-
-        match hdu.data {
-            DataOwned::F32(it) => {
-                let data = it.collect::<Vec<_>>();
-                assert_eq!(data.len(), naxis1 * naxis2);
-            },
-            _ => unreachable!(),
+        use crate::hdu::HDU;
+        for HDU { data, header} in hdu {
+            let naxis1 = header.get_axis_size(1).unwrap();
+            let naxis2 = header.get_axis_size(2).unwrap();
+    
+            match data {
+                DataOwned::F32(it) => {
+                    let data = it.collect::<Vec<_>>();
+                    assert_eq!(data.len(), naxis1 * naxis2);
+                },
+                _ => unreachable!(),
+            }
         }
     }
 
@@ -169,13 +171,14 @@ mod tests {
         let mut buf = Vec::new();
         f.read_to_end(&mut buf).unwrap();
 
-        let Fits { hdu } = Fits::from_reader(&buf[..]).unwrap();
+        let mut reader = Cursor::new(&buf[..]);
+        let Fits { hdu } = Fits::from_reader(&mut reader).unwrap();
 
-        let header = &hdu.header;
+        let header = &hdu[0].header;
         let naxis1 = header.get_axis_size(1).unwrap();
         let naxis2 = header.get_axis_size(2).unwrap();
 
-        match hdu.data {
+        match hdu[0].data {
             DataBorrowed::F32(data) => {
                 assert_eq!(data.len(), naxis1 * naxis2);
             },

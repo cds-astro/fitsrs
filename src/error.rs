@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 #[derive(Debug, PartialEq)]
 pub enum Error {
     CardSizeNotRespected(usize),
