@@ -92,7 +92,7 @@ where
     R: futures::AsyncBufReadExt + std::marker::Unpin
 {
     /// The type of the value yielded by the stream.
-    type Item = u8;
+    type Item = Result<u8, futures::io::Error>;
 
     /// Attempt to resolve the next item in the stream.
     /// Returns `Poll::Pending` if not ready, `Poll::Ready(Some(x))` if a value
@@ -107,10 +107,10 @@ where
             let mut reader_exact = self.reader.read_exact(&mut buf);
             match Pin::new(&mut reader_exact).poll(cx) {
                 Poll::Pending => Poll::Pending,
-                Poll::Ready(Err(_)) => Poll::Ready(None),
+                Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
                 Poll::Ready(Ok(())) => {
                     self.counter += 1;
-                    Poll::Ready(Some(buf[0]))
+                    Poll::Ready(Some(Ok(buf[0])))
                 }
             }
         }
@@ -122,7 +122,7 @@ where
     R: futures::AsyncBufReadExt + std::marker::Unpin
 {
     /// The type of the value yielded by the stream.
-    type Item = i16;
+    type Item = Result<i16, futures::io::Error>;
 
     /// Attempt to resolve the next item in the stream.
     /// Returns `Poll::Pending` if not ready, `Poll::Ready(Some(x))` if a value
@@ -136,11 +136,11 @@ where
             let mut reader_exact = self.reader.read_exact(&mut buf);
             match Pin::new(&mut reader_exact).poll(cx) {
                 Poll::Pending => Poll::Pending,
-                Poll::Ready(Err(_)) => Poll::Ready(None),
+                Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
                 Poll::Ready(Ok(())) => {
                     let item = byteorder::BigEndian::read_i16(&buf);
                     self.counter += 1;
-                    Poll::Ready(Some(item))
+                    Poll::Ready(Some(Ok(item)))
                 }
             }
         }
@@ -152,7 +152,7 @@ where
     R: futures::AsyncBufReadExt + std::marker::Unpin
 {
     /// The type of the value yielded by the stream.
-    type Item = i32;
+    type Item = Result<i32, futures::io::Error>;
 
     /// Attempt to resolve the next item in the stream.
     /// Returns `Poll::Pending` if not ready, `Poll::Ready(Some(x))` if a value
@@ -166,11 +166,11 @@ where
             let mut reader_exact = self.reader.read_exact(&mut buf);
             match Pin::new(&mut reader_exact).poll(cx) {
                 Poll::Pending => Poll::Pending,
-                Poll::Ready(Err(_)) => Poll::Ready(None),
+                Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
                 Poll::Ready(Ok(())) => {
                     let item = byteorder::BigEndian::read_i32(&buf);
                     self.counter += 1;
-                    Poll::Ready(Some(item))
+                    Poll::Ready(Some(Ok(item)))
                 }
             }
         }
@@ -182,7 +182,7 @@ where
     R: futures::AsyncBufReadExt + std::marker::Unpin
 {
     /// The type of the value yielded by the stream.
-    type Item = i64;
+    type Item = Result<i64, futures::io::Error>;
 
     /// Attempt to resolve the next item in the stream.
     /// Returns `Poll::Pending` if not ready, `Poll::Ready(Some(x))` if a value
@@ -196,11 +196,11 @@ where
             let mut reader_exact = self.reader.read_exact(&mut buf);
             match Pin::new(&mut reader_exact).poll(cx) {
                 Poll::Pending => Poll::Pending,
-                Poll::Ready(Err(_)) => Poll::Ready(None),
+                Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
                 Poll::Ready(Ok(())) => {
                     let item = byteorder::BigEndian::read_i64(&buf);
                     self.counter += 1;
-                    Poll::Ready(Some(item))
+                    Poll::Ready(Some(Ok(item)))
                 }
             }
         }
@@ -212,7 +212,7 @@ where
     R: futures::AsyncBufReadExt + std::marker::Unpin
 {
     /// The type of the value yielded by the stream.
-    type Item = f32;
+    type Item = Result<f32, futures::io::Error>;
 
     /// Attempt to resolve the next item in the stream.
     /// Returns `Poll::Pending` if not ready, `Poll::Ready(Some(x))` if a value
@@ -226,11 +226,11 @@ where
             let mut reader_exact = self.reader.read_exact(&mut buf);
             match Pin::new(&mut reader_exact).poll(cx) {
                 Poll::Pending => Poll::Pending,
-                Poll::Ready(Err(_)) => Poll::Ready(None),
+                Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
                 Poll::Ready(Ok(())) => {
                     let item = byteorder::BigEndian::read_f32(&buf);
                     self.counter += 1;
-                    Poll::Ready(Some(item))
+                    Poll::Ready(Some(Ok(item)))
                 }
             }
         }
@@ -242,7 +242,7 @@ where
     R: futures::AsyncBufReadExt + std::marker::Unpin
 {
     /// The type of the value yielded by the stream.
-    type Item = f64;
+    type Item = Result<f64, futures::io::Error>;
 
     /// Attempt to resolve the next item in the stream.
     /// Returns `Poll::Pending` if not ready, `Poll::Ready(Some(x))` if a value
@@ -256,11 +256,11 @@ where
             let mut reader_exact = self.reader.read_exact(&mut buf);
             match Pin::new(&mut reader_exact).poll(cx) {
                 Poll::Pending => Poll::Pending,
-                Poll::Ready(Err(_)) => Poll::Ready(None),
+                Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
                 Poll::Ready(Ok(())) => {
                     let item = byteorder::BigEndian::read_f64(&buf);
                     self.counter += 1;
-                    Poll::Ready(Some(item))
+                    Poll::Ready(Some(Ok(item)))
                 }
             }
         }
