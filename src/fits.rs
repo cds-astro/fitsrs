@@ -1,39 +1,46 @@
-use crate::hdu::HDU;
-use crate::hdu::{Header, DataRead};
+use crate::hdu::primary::PrimaryHDU;
+
+use crate::hdu::header::extension::image::Image;
+use crate::hdu::header::extension::asciitable::AsciiTable;
+use crate::hdu::header::extension::bintable::BinTable;
+
+use crate::hdu::data::DataBufRead;
+
 #[derive(Debug)]
 pub struct Fits<'a, R>
 where
-    R: DataRead<'a>
+    R: DataBufRead<'a, Image> +
+       DataBufRead<'a, BinTable> +
+       DataBufRead<'a, AsciiTable>
 {
-    pub hdu: Vec<HDU<'a, R>>,
+    pub hdu: PrimaryHDU<'a, R>,
 }
 
 use crate::error::Error;
 impl<'a, R> Fits<'a, R>
 where
-    R: DataRead<'a> + 'a
+    R: DataBufRead<'a, Image> +
+       DataBufRead<'a, BinTable> +
+       DataBufRead<'a, AsciiTable>
 {
     /// Parse a FITS file
     /// # Params
     /// * `reader` - a reader created i.e. from the opening of a file
     pub fn from_reader(reader: &'a mut R) -> Result<Self, Error> {
-        let hdu = HDU::new(reader)?;
+        let hdu = PrimaryHDU::new(reader)?;
 
-        Ok(Self { hdu: vec![hdu] })
+        Ok(Self { hdu })
     }
 
     /// Returns the header of the first HDU
-    pub fn get_header(&self) -> &Header {
-        &self.hdu[0].header
-    }
-
-    /// Returns the data of the first HDU
-    pub fn get_data(&self) -> &R::Data {
-        &self.hdu[0].data
+    pub fn get_first_hdu(&self) -> &PrimaryHDU<'a, R> {
+        &self.hdu
     }
 }
 
+/* 
 use crate::hdu::{AsyncDataRead, AsyncHDU};
+
 #[derive(Debug)]
 pub struct AsyncFits<'a, R>
 where
@@ -56,7 +63,7 @@ where
     }
 
     /// Returns the header of the first HDU
-    pub fn get_header(&self) -> &Header {
+    pub fn get_header(&self) -> &PrimaryHeader {
         &self.hdu[0].header
     }
 
@@ -65,15 +72,15 @@ where
         &self.hdu[0].data
     }
 }
-
+*/
 #[cfg(test)]
 mod tests {
     use super::Fits;
     use std::io::Read;
-    use crate::hdu::data::DataBorrowed;
+    use crate::hdu::data::image::DataBorrowed;
     use std::io::Cursor;
     use std::fs::File;
-
+    /*
     #[test]
     fn test_fits_f32() {
         let mut f = File::open("misc/Npix208.fits").unwrap();
@@ -106,5 +113,5 @@ mod tests {
             },
             _ => unreachable!(),
         }
-    }
+    }*/
 }

@@ -4,34 +4,35 @@
 //! Each CARD is a dictionnary tuple-like of the (key, value) form.
 use futures::{AsyncBufRead, AsyncReadExt};
 use serde::Serialize;
-use crate::card::{self, Card};
+
+pub mod extension;
 
 use std::collections::HashMap;
-use std::io::BufRead;
-
-#[derive(Debug, PartialEq)]
-#[derive(Serialize)]
-pub struct Header {
-    /* Non mandatory keywords */
-    cards: HashMap<card::Keyword, card::Value>,
-
-    /* Mandatory keywords for fits images parsing */
-    // BITPIX: type of the pixel stored in the data block
-    bitpix: BitpixValue,
-    // NAXIS1, NAXIS2 ,...: size in pixels of each axis
-    naxis_size: Vec<usize>,
-    // NAXIS: the number of axis
-    naxis: usize,
-}
+use std::io::Read;
 
 use crate::error::Error;
-fn consume_next_card<'a, R: BufRead>(reader: &mut R, buf: &mut [u8; 80], bytes_read: &mut usize) -> Result<(), Error> {
+use crate::card::{self, Card};
+use crate::card::*;
+
+use crate::hdu::Xtension;
+
+use nom::{
+    branch::alt,
+    bytes::complete::{tag, take_till},
+    character::complete::digit1,
+    combinator::recognize,
+    sequence::{pair, preceded},
+    IResult,
+};
+
+
+pub fn consume_next_card<'a, R: Read>(reader: &mut R, buf: &mut [u8; 80], bytes_read: &mut usize) -> Result<(), Error> {
     *bytes_read += 80;
     reader.read_exact(buf).map_err(|_| Error::FailReadingNextBytes)?;
     Ok(())
 }
 
-async fn consume_next_card_async<'a, R: AsyncBufRead + std::marker::Unpin>(reader: &mut R, buf: &mut [u8; 80], bytes_read: &mut usize) -> Result<(), Error> {
+pub async fn consume_next_card_async<'a, R: AsyncBufRead + std::marker::Unpin>(reader: &mut R, buf: &mut [u8; 80], bytes_read: &mut usize) -> Result<(), Error> {
     *bytes_read += 80;
     reader.read_exact(buf).await.map_err(|_| Error::FailReadingNextBytes)?;
     Ok(())
@@ -54,7 +55,7 @@ fn parse_generic_card(card: &[u8; 80]) -> Result<Option<Card>, Error> {
     Ok(card)
 }
 
-fn check_card_keyword(card: &[u8; 80], keyword: &[u8; 8]) -> Result<card::Value, Error> {
+pub fn check_card_keyword(card: &[u8; 80], keyword: &[u8; 8]) -> Result<card::Value, Error> {
     if let Some(Card { kw, v }) = parse_generic_card(card)? {
         if &kw == keyword {
             Ok(v)
@@ -87,59 +88,83 @@ fn parse_naxis_card(card: &[u8; 80]) -> Result<usize, Error> {
 }
 
 const NAXIS_KW: [&[u8; 8]; 3] = [b"NAXIS1  ", b"NAXIS2  ", b"NAXIS3  "];
-use super::data::DataRead;
-impl Header {
-    pub(crate) fn parse<'a, R: BufRead>(reader: &mut R, bytes_read: &mut usize) -> Result<Self, Error> {
+
+#[derive(Debug, PartialEq)]
+#[derive(Serialize)]
+#[derive(Clone, Copy)]
+pub enum BitpixValue {
+    U8 = 8,
+    I16 = 16,
+    I32 = 32,
+    I64 = 64,
+    F32 = -32,
+    F64 = -64,
+}
+
+pub(crate) fn parse_card_keyword(buf: &[u8]) -> IResult<&[u8], &[u8]> {
+    alt((
+        recognize(pair(tag(b"NAXIS"), digit1)),
+        take_till(|c| c == b' ' || c == b'\t' || c == b'='),
+    ))(buf)
+}
+
+pub(crate) fn parse_card_value(buf: &[u8]) -> IResult<&[u8], Value> {
+    preceded(
+        white_space0,
+        alt((
+            preceded(
+                tag(b"= "),
+                alt((parse_character_string, parse_logical, parse_float)),
+            ),
+            parse_undefined,
+        )),
+    )(buf)
+}
+
+#[derive(Debug, PartialEq)]
+#[derive(Serialize)]
+pub struct Header<X> {
+    /* Non mandatory keywords */
+    cards: HashMap<Keyword, Value>,
+
+    /* Mandatory keywords for fits ext parsing */
+    xtension: X,
+}
+
+impl<X> Header<X>
+where
+    X: Xtension + std::fmt::Debug
+{
+    pub(crate) fn parse<'a, R: Read>(reader: &mut R, num_bytes_read: &mut usize, card_80_bytes_buf: &mut [u8; 80]) -> Result<Self, Error> {
         let mut cards = HashMap::new();
 
-        let mut card_80_bytes_buf: [u8; 80] = [b' '; 80];
-
         /* Consume mandatory keywords */ 
-        // SIMPLE
-        consume_next_card(reader, &mut card_80_bytes_buf, bytes_read)?;
-        let _ = check_card_keyword(&card_80_bytes_buf, b"SIMPLE  ")?;
-        // BITPIX
-        consume_next_card(reader, &mut card_80_bytes_buf, bytes_read)?;
-        let bitpix = parse_bitpix_card(&card_80_bytes_buf)?;
-        // NAXIS
-        consume_next_card(reader, &mut card_80_bytes_buf, bytes_read)?;
-        let naxis = parse_naxis_card(&card_80_bytes_buf)?;
-        // The size of each NAXIS
-        let naxis_size: Result<Vec<usize>, _> = (0..naxis)
-            .map(|idx_axis| {
-                consume_next_card(reader, &mut card_80_bytes_buf, bytes_read)?;
-                check_card_keyword(&card_80_bytes_buf, NAXIS_KW[idx_axis])?
-                    .check_for_float()
-                    .map(|size| size as usize)
-            })
-            .collect();
+        let xtension = Xtension::parse(reader, num_bytes_read, card_80_bytes_buf)?;
 
         /* Consume next non mandatory keywords until `END` is reached */
-        consume_next_card(reader, &mut card_80_bytes_buf, bytes_read)?;
-        while let Some(card::Card { kw, v }) = parse_generic_card(&card_80_bytes_buf)? {
+        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
+        while let Some(Card { kw, v }) = parse_generic_card(&card_80_bytes_buf)? {
             cards.insert(kw, v);
-            consume_next_card(reader, &mut card_80_bytes_buf, bytes_read)?;
+            consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
         }
 
         /* The last card was a END one */
-        Ok(Self {
+        Ok(dbg!(Self {
             cards,
 
-            bitpix,
-            naxis,
-            naxis_size: naxis_size?,
-        })
+            xtension,
+        }))
     }
 
-    pub(crate) async fn parse_async<'a, R: AsyncBufRead + std::marker::Unpin>(reader: &mut R, bytes_read: &mut usize) -> Result<Self, Error> {
+    /*pub(crate) async fn parse_async<'a, R: AsyncBufRead + std::marker::Unpin>(reader: &mut R, bytes_read: &mut usize) -> Result<Self, Error> {
         let mut cards = HashMap::new();
 
         let mut card_80_bytes_buf: [u8; 80] = [b' '; 80];
 
         /* Consume mandatory keywords */ 
-        // SIMPLE
+        // XTENSION
         consume_next_card_async(reader, &mut card_80_bytes_buf, bytes_read).await?;
-        let _ = check_card_keyword(&card_80_bytes_buf, b"SIMPLE  ")?;
+        let xtension = parse_xtension_card(&card_80_bytes_buf)?;
         // BITPIX
         consume_next_card_async(reader, &mut card_80_bytes_buf, bytes_read).await?;
         let bitpix = parse_bitpix_card(&card_80_bytes_buf)?;
@@ -155,10 +180,16 @@ impl Header {
                 .map(|size| size as usize)?;
             naxis_size[idx_axis] = naxis_len;
         }
+        // GCOUNT
+        consume_next_card_async(reader, &mut card_80_bytes_buf, bytes_read).await?;
+        let gcount = parse_gcount_card(&card_80_bytes_buf)?;
+        // PCOUNT
+        consume_next_card_async(reader, &mut card_80_bytes_buf, bytes_read).await?;
+        let pcount = parse_pcount_card(&card_80_bytes_buf)?;
 
         /* Consume next non mandatory keywords until `END` is reached */
         consume_next_card_async(reader, &mut card_80_bytes_buf, bytes_read).await?;
-        while let Some(card::Card { kw, v }) = parse_generic_card(&card_80_bytes_buf)? {
+        while let Some(Card { kw, v }) = parse_generic_card(&card_80_bytes_buf)? {
             cards.insert(kw, v);
             consume_next_card_async(reader, &mut card_80_bytes_buf, bytes_read).await?;
         }
@@ -167,32 +198,24 @@ impl Header {
         Ok(Self {
             cards,
 
+            xtension,
             bitpix,
             naxis,
             naxis_size,
+            gcount,
+            pcount
         })
-    }
+    }*/
 
-    /// Get the number of axis given by the "NAXIS" card
-    pub fn get_naxis(&self) -> usize {
-        self.naxis
-    }
-
-    /// Get the size of an axis given by the "NAXISX" card
-    pub fn get_axis_size(&self, idx: usize) -> Option<&usize> {
-        // NAXIS indexes begins at 1 instead of 0
-        self.naxis_size.get(idx - 1)
-    }
-
-    /// Get the bitpix value given by the "BITPIX" card
-    pub fn get_bitpix(&self) -> BitpixValue {
-        self.bitpix
+    /// Get the gcount value given by the "PCOUNT" card
+    pub fn get_xtension(&self) -> &X {
+        &self.xtension
     }
 
     /// Get the value of a specific card
     /// # Params
     /// * `key` - The key of a card 
-    pub fn get(&self, key: &[u8; 8]) -> Option<&card::Value> {
+    pub fn get(&self, key: &[u8; 8]) -> Option<&Value> {
         self.cards.get(key)
     }
 
@@ -210,46 +233,18 @@ impl Header {
     }
 }
 
-#[derive(Debug, PartialEq)]
-#[derive(Serialize)]
-#[derive(Clone, Copy)]
-pub enum BitpixValue {
-    U8,
-    I16,
-    I32,
-    I64,
-    F32,
-    F64,
+fn parse_pcount_card(card: &[u8; 80]) -> Result<usize, Error> {
+    let pcount = check_card_keyword(card, b"PCOUNT  ")?
+        .check_for_float()?;
+
+    Ok(pcount as usize)
 }
 
-use nom::{
-    branch::alt,
-    bytes::complete::{tag, take_till},
-    character::complete::digit1,
-    combinator::recognize,
-    sequence::{pair, preceded},
-    IResult,
-};
+fn parse_gcount_card(card: &[u8; 80]) -> Result<usize, Error> {
+    let gcount = check_card_keyword(card, b"GCOUNT  ")?
+        .check_for_float()?;
 
-pub(crate) fn parse_card_keyword(buf: &[u8]) -> IResult<&[u8], &[u8]> {
-    alt((
-        recognize(pair(tag(b"NAXIS"), digit1)),
-        take_till(|c| c == b' ' || c == b'\t' || c == b'='),
-    ))(buf)
-}
-
-use crate::card::*;
-pub(crate) fn parse_card_value(buf: &[u8]) -> IResult<&[u8], Value> {
-    preceded(
-        white_space0,
-        alt((
-            preceded(
-                tag(b"= "),
-                alt((parse_character_string, parse_logical, parse_float)),
-            ),
-            parse_undefined,
-        )),
-    )(buf)
+    Ok(gcount as usize)
 }
 
 #[cfg(test)]
