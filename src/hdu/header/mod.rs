@@ -29,6 +29,7 @@ use nom::{
 pub fn consume_next_card<'a, R: Read>(reader: &mut R, buf: &mut [u8; 80], bytes_read: &mut usize) -> Result<(), Error> {
     *bytes_read += 80;
     reader.read_exact(buf).map_err(|_| Error::FailReadingNextBytes)?;
+
     Ok(())
 }
 
@@ -40,19 +41,17 @@ pub async fn consume_next_card_async<'a, R: AsyncBufRead + std::marker::Unpin>(r
 
 fn parse_generic_card(card: &[u8; 80]) -> Result<Option<Card>, Error> {
     let kw = &card[..8];
-    let card = if kw != b"END     " {
+    if kw != b"END     " {
         let (_, v) = parse_card_value(&card[8..])?;
         // 1. Init the fixed keyword slice
         let mut owned_kw: [u8; 8] = [0; 8];
         // 2. Copy from slice
         owned_kw.copy_from_slice(&kw);
 
-        Some(Card::new(owned_kw, v))
+        Ok(Some(Card::new(owned_kw, v)))
     } else {
-        None
-    };
-
-    Ok(card)
+        Ok(None)
+    }
 }
 
 pub fn check_card_keyword(card: &[u8; 80], keyword: &[u8; 8]) -> Result<card::Value, Error> {
@@ -149,11 +148,11 @@ where
         }
 
         /* The last card was a END one */
-        Ok(dbg!(Self {
+        Ok(Self {
             cards,
 
             xtension,
-        }))
+        })
     }
 
     /*pub(crate) async fn parse_async<'a, R: AsyncBufRead + std::marker::Unpin>(reader: &mut R, bytes_read: &mut usize) -> Result<Self, Error> {

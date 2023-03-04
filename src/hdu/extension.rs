@@ -36,7 +36,6 @@ R: DataBufRead<'a, Image> +
 
         // XTENSION
         consume_next_card(reader, &mut card_80_bytes_buf, &mut num_bytes_read)?;
-
         let xtension_type = parse_xtension_card(&card_80_bytes_buf)?;
 
         let hdu = match xtension_type {

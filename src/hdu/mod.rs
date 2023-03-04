@@ -31,15 +31,19 @@ where
         let header = Header::parse(reader, num_bytes_read, card_80_bytes_buf)?;
         /* 2. Skip the next bytes to a new 2880 multiple of bytes
         This is where the data block should start */
+        let is_remaining_bytes = ((*num_bytes_read) % 2880) > 0;
 
-        let mut block_mem_buf: [u8; 2880] = [0; 2880];
+        // Skip the remaining bytes to set the reader where a new HDU begins
+        if is_remaining_bytes {
+            let mut block_mem_buf: [u8; 2880] = [0; 2880];
 
-        let num_off_bytes = 2880 - (*num_bytes_read) % 2880;
-        reader.read_exact(&mut block_mem_buf[..num_off_bytes])
-            .map_err(|_| Error::StaticError("Unexpected EOF"))?;
+            let num_off_bytes = 2880 - ((*num_bytes_read) % 2880);
+            reader.read_exact(&mut block_mem_buf[..num_off_bytes])
+                .map_err(|_| Error::StaticError("EOF reached"))?;
+        }
 
         // Data block
-        let xtension = header.get_xtension();
+        let xtension = dbg!(header.get_xtension());
         let data = reader.new_data_block(xtension);
 
         Ok(Self {
@@ -52,16 +56,21 @@ where
         let mut num_bytes_read = 0;
         let reader = <R as DataBufRead<'a, X>>::consume_data_block(self.data, &mut num_bytes_read)?;
 
-        // Skip the remaining bytes to set the reader where
-        // a new HDU begins
-        let mut block_mem_buf: [u8; 2880] = [0; 2880];
+        let is_remaining_bytes = (num_bytes_read % 2880) > 0;
+        // Skip the remaining bytes to set the reader where a new HDU begins
+        let reader = if is_remaining_bytes {
+            let mut block_mem_buf: [u8; 2880] = [0; 2880];
 
-        let num_off_bytes = 2880 - num_bytes_read % 2880;
-        let reader = reader.read_exact(&mut block_mem_buf[..num_off_bytes])
-            .ok() // An error like unexpected EOF is not standard frendly but we make it pass
-            // interpreting it as the last HDU in the file
-            .map(|_| reader);
-
+            let num_off_bytes = 2880 - (num_bytes_read % 2880);
+            reader.read_exact(&mut block_mem_buf[..num_off_bytes])
+                .ok() // An error like unexpected EOF is not standard frendly but we make it pass
+                // interpreting it as the last HDU in the file
+                .map(|_| reader)
+        } else {
+            // We are at a multiple of 2880 byte
+            Some(reader)
+        };
+        
         if let Some(reader) = reader {
             let is_eof = reader.fill_buf().map_err(|_| Error::StaticError("Unable to fill the buffer to check if data is remaining"))?.is_empty();
             if !is_eof {

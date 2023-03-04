@@ -19,7 +19,8 @@ where
     type Data = DataBorrowed<'a, Self>;
 
     fn new_data_block(&'a mut self, ctx: &Image) -> Self::Data where Self: Sized {
-        let num_bytes_read = dbg!(ctx.get_num_bytes_data_block());
+        let num_bytes_read = ctx.get_num_bytes_data_block();
+
         let bitpix = ctx.get_bitpix();
         
         let bytes = self.get_ref();
@@ -27,7 +28,10 @@ where
 
         let pos = self.position() as usize;
 
-        let bytes = &bytes[pos..];
+        let start_byte_pos = pos;
+        let end_byte_pos = pos + num_bytes_read;
+
+        let bytes = &bytes[start_byte_pos..end_byte_pos];
         let x_ptr = bytes as *const [u8] as *mut [u8];
         unsafe {
             let x_mut_ref = &mut *x_ptr;

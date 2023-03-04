@@ -44,8 +44,9 @@ mod tests {
     use crate::fits::Fits;
     use crate::hdu::header::BitpixValue;
     use crate::hdu::data::image::DataBorrowed;
-    use crate::hdu::{primary::PrimaryHDU, HDU};
+    use crate::hdu::{primary::PrimaryHDU, HDU, extension::HDUExt};
 
+    use core::num;
     use std::io::Read;
     use std::io::Cursor;
     use std::fs::File;
@@ -69,6 +70,31 @@ mod tests {
         } else {
             assert!(false);
         }
+    }
+
+    #[test]
+    fn test_hst_nicmos() {
+        let f = File::open("misc/HST_NICMOS.fits").unwrap();
+        let bytes: Result<Vec<_>, _> = f.bytes().collect();
+        let buf = bytes.unwrap();
+
+        let mut reader = Cursor::new(&buf[..]);
+        let Fits { hdu } = Fits::from_reader(&mut reader).unwrap();
+
+        let mut hdu_ext = hdu.next();
+        let mut num_image_ext = 0;
+        while let Ok(Some(hdu)) = hdu_ext {
+            match hdu {
+                HDUExt::Image(_) => {
+                    num_image_ext += 1;
+                },
+                _ => ()
+            }
+
+            hdu_ext = hdu.next();
+        }
+
+        assert_eq!(num_image_ext, 5);
     }
     /*
     #[test]

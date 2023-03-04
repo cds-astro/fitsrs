@@ -43,12 +43,16 @@ impl Image {
 
 impl Xtension for Image {
     fn get_num_bytes_data_block(&self) -> usize {
-        let num_pixels = self.naxisn
-            .iter()
-            .fold(1, |mut total, val| {
-                total *= val;
-                total
-            });
+        let num_pixels = if self.naxisn.is_empty() {
+            0
+        } else {
+            self.naxisn
+                .iter()
+                .fold(1, |mut total, val| {
+                    total *= val;
+                    total
+                })
+        };
 
         let num_bits = ((self.bitpix as i32).abs() as usize) * num_pixels;
         num_bits >> 3

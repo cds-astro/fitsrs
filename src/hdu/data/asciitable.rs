@@ -24,8 +24,11 @@ where
         let bytes = bytes.as_ref();
 
         let pos = self.position() as usize;
+        let start_byte_pos = pos;
+        let end_byte_pos = pos + num_bytes_read;
 
-        let bytes = &bytes[pos..];
+        let bytes = &bytes[start_byte_pos..end_byte_pos];
+
         let x_ptr = bytes as *const [u8] as *mut [u8];
         unsafe {
             let x_mut_ref = &mut *x_ptr;
