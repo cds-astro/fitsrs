@@ -45,7 +45,7 @@ where
         let DataBorrowed {reader, num_bytes_read: num_bytes, ..} = data;
         *num_bytes_read = num_bytes;
 
-        <Self as DataBufRead<'_, AsciiTable>>::read_n_bytes_exact(reader, num_bytes)?;
+        reader.set_position(reader.position() + num_bytes as u64);
 
         Ok(reader)
     }
