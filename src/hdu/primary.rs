@@ -1,4 +1,4 @@
-use super::extension::HDUExt;
+use super::extension::XtensionHDU;
 use std::fmt::Debug;
 
 use crate::hdu::header::extension::image::Image;
@@ -79,9 +79,9 @@ where
         self.0.consume()
     }
 
-    pub fn next(self) -> Result<Option<HDUExt<'a, R>>, Error> {
+    pub fn next(self) -> Result<Option<XtensionHDU<'a, R>>, Error> {
         if let Some(reader) = self.consume()? { 
-            let hdu = HDUExt::new(reader)?;
+            let hdu = XtensionHDU::new(reader)?;
             Ok(Some(hdu))
         } else {
             Ok(None)

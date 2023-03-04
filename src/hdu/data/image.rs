@@ -4,6 +4,7 @@ use crate::error::Error;
 use serde::Serialize;
 
 use crate::hdu::header::BitpixValue;
+pub use super::Access;
 
 use std::fmt::Debug;
 
@@ -216,8 +217,24 @@ where
     pub data: InMemData<'a>
 }
 
+impl<'a, R> Access<'a> for DataBorrowed<'a, R>
+where
+    R: Read + Debug + 'a
+{
+    type Type = InMemData<'a>;
+
+    fn get_data(&self) -> &Self::Type {
+        &self.data
+    }
+
+    fn get_data_mut(&mut self) -> &mut Self::Type {
+        &mut self.data
+    }
+}
+
+
 #[derive(Serialize)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum InMemData<'a> {
     U8(&'a [u8]),
     I16(&'a [i16]),
@@ -246,6 +263,21 @@ where
     I64(DataOwnedIt<'a, R, i64>),
     F32(DataOwnedIt<'a, R, f32>),
     F64(DataOwnedIt<'a, R, f64>),
+}
+
+impl<'a, R> Access<'a> for DataOwned<'a, R>
+where
+    R: BufRead
+{
+    type Type = Self;
+
+    fn get_data(&self) -> &Self::Type {
+        self
+    }
+
+    fn get_data_mut(&mut self) -> &mut Self::Type {
+        self
+    }
 }
 
 #[derive(Serialize)]

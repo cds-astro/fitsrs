@@ -21,6 +21,9 @@ where
 }
 
 use crate::error::Error;
+
+use self::data::Access;
+
 impl<'a, R, X> HDU<'a, R, X>
 where
     X: Xtension + std::fmt::Debug,
@@ -87,8 +90,12 @@ where
         &self.header
     }
 
-    pub fn get_data(&mut self) -> &mut <R as DataBufRead<'a, X>>::Data {
-        &mut self.data
+    pub fn get_data(&'a self) -> &'a <<R as DataBufRead<'a, X>>::Data as Access<'a>>::Type {
+        self.data.get_data()
+    }
+
+    pub fn get_data_mut(&'a mut self) -> &'a mut <<R as DataBufRead<'a, X>>::Data as Access<'a>>::Type {
+        self.data.get_data_mut()
     }
 }
 

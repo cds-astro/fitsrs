@@ -1,8 +1,11 @@
 use std::io::Read;
 use std::fmt::Debug;
+use std::collections::HashMap;
 
+use nom::AsChar;
 use serde::Serialize;
 
+use crate::card::parse_integer;
 use crate::hdu::Xtension;
 use crate::hdu::primary::consume_next_card;
 use crate::error::Error;
@@ -13,6 +16,8 @@ use crate::hdu::header::NAXIS_KW;
 use crate::hdu::header::parse_naxis_card;
 use crate::hdu::header::parse_bitpix_card;
 use crate::hdu::header::BitpixValue;
+
+use crate::card::Value;
 
 #[derive(Debug, PartialEq)]
 #[derive(Serialize)]
@@ -45,97 +50,52 @@ impl Xtension for BinTable {
         self.naxis1 * self.naxis2
     }
 
-    fn parse<R: Read>(reader: &mut R, num_bytes_read: &mut usize, card_80_bytes_buf: &mut [u8; 80]) -> Result<Self, Error> {
-        // BITPIX
-        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let bitpix = parse_bitpix_card(&card_80_bytes_buf)?;
-        if bitpix != BitpixValue::U8 {
-            return Err(Error::StaticError("Binary Table HDU must have a BITPIX = 8"));
-        }
-
-        // NAXIS
-        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let naxis = parse_naxis_card(&card_80_bytes_buf)?;
-
-        if naxis != 2 {
-            return Err(Error::StaticError("Binary Table HDU must have NAXIS = 2"));
-        }
-        // NAXIS1
-        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let naxis1 = check_card_keyword(&card_80_bytes_buf, NAXIS_KW[0])?
-            .check_for_float()? as usize;
-        // NAXIS2
-        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let naxis2 = check_card_keyword(&card_80_bytes_buf, NAXIS_KW[1])?
-            .check_for_float()? as usize;
-
-        // GCOUNT
-        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let gcount = parse_gcount_card(&card_80_bytes_buf)?;
-        if gcount != 1 {
-            return Err(Error::StaticError("Ascii Table HDU must have GCOUNT = 1"));
-        }
-
-        // PCOUNT
-        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let pcount = parse_pcount_card(&card_80_bytes_buf)?;
-
-        // FIELDS
-        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let tfields = check_card_keyword(&card_80_bytes_buf, b"TFIELDS ")?
-            .check_for_float()? as usize;
-
+    fn update_with_parsed_header(&mut self, cards: &HashMap<[u8; 8], Value>) -> Result<(), Error> {
         // TFORMS
-        /*let tforms: Vec<_> = (0..tfields)
+        self.tforms = (0..self.tfields)
             .map(|idx_field| {
                 let idx_field = idx_field + 1;
-                let kw = format!("TFORM{:?}       ", idx_field)
-                    .as_str()
-                    .as_bytes();
+                let kw = format!("TFORM{:?}       ", idx_field);
+                let kw_bytes = kw.as_bytes();
 
                 // 1. Init the fixed keyword slice
                 let mut owned_kw: [u8; 8] = [0; 8];
                 // 2. Copy from slice
-                owned_kw.copy_from_slice(&kw[..8]);
+                owned_kw.copy_from_slice(&kw_bytes[..8]);
 
-                check_card_keyword(&card_80_bytes_buf, &owned_kw)?
-                    .check_for_string()
-                    .map(|tform| {
-                        match tform[0] {
-                            'A' => {
-                                let w = tforms[1..].parse::<i32>()
-                                    .map_err(Error::StaticError("expected w after the "))?;
-                                Ok(TFormAsciiTable::A { w })
-                            },
-                            'I' => {
-                                let w = tforms[1..].parse::<i32>()
-                                    .map_err(Error::StaticError("expected w after the "))?;
-                                Ok(TFormAsciiTable::I { w })
-                            },
-                            'F' => {
-                                let wd = tforms[1..]
-                                    .to_string();
-                                Ok(TFormAsciiTable::F { wd })
-                            },
-                            'E' => {
-                                let wd = tforms[1..]
-                                    .to_string();
-                                Ok(TFormAsciiTable::E { wd })
-                            },
-                            'D' => {
-                                let wd = tforms[1..]
-                                    .to_string();
-                                Ok(TFormAsciiTable::D { wd })
-                            },
-                            _ => Err(StaticError("Ascii Table TFORM not recognized"))
-                        }
-                    })
+                let card_value = dbg!(cards.get(&owned_kw))
+                    .ok_or(Error::StaticError("TFIELDS idx does not map any TFORM!"))?
+                    .clone()
+                    .check_for_string()?;
+
+                let (field_type_char, repeat_count) = if let Ok((remaining_bytes, Value::Float(repeat_count))) = parse_integer(card_value.as_bytes()) {
+                    dbg!((remaining_bytes[0].as_char(), repeat_count))
+                } else {
+                    dbg!((owned_kw[0].as_char(), 1.0))
+                };
+                let repeat_count = repeat_count as usize;
+
+                match field_type_char.as_char() {
+                    'L' => Ok(TFormBinaryTableType::L(TFormBinaryTable::new(repeat_count))), // Logical
+                    'X' => Ok(TFormBinaryTableType::X(TFormBinaryTable::new(repeat_count))), // Bit
+                    'B' => Ok(TFormBinaryTableType::B(TFormBinaryTable::new(repeat_count))), // Unsigned Byte
+                    'I' => Ok(TFormBinaryTableType::I(TFormBinaryTable::new(repeat_count))), // 16-bit integer
+                    'J' => Ok(TFormBinaryTableType::J(TFormBinaryTable::new(repeat_count))), // 32-bit integer
+                    'K' => Ok(TFormBinaryTableType::K(TFormBinaryTable::new(repeat_count))), // 64-bit integer
+                    'A' => Ok(TFormBinaryTableType::A(TFormBinaryTable::new(repeat_count))), // Character
+                    'E' => Ok(TFormBinaryTableType::E(TFormBinaryTable::new(repeat_count))), // Single-precision floating point
+                    'D' => Ok(TFormBinaryTableType::D(TFormBinaryTable::new(repeat_count))), // Double-precision floating point
+                    'C' => Ok(TFormBinaryTableType::C(TFormBinaryTable::new(repeat_count))), // Single-precision complex
+                    'M' => Ok(TFormBinaryTableType::M(TFormBinaryTable::new(repeat_count))), // Double-precision complex
+                    'P' => Ok(TFormBinaryTableType::P(TFormBinaryTable::new(repeat_count))), // Array Descriptor (32-bit)
+                    'Q' => Ok(TFormBinaryTableType::Q(TFormBinaryTable::new(repeat_count))), // Array Descriptor (64-bit)
+                    _ => Err(Error::StaticError("Ascii Table TFORM not recognized"))
+                }
+
             })
-            .collect()?;
-        */
-        let tforms = vec![];
-        /*
-        let num_bits_per_row = tforms.iter()
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let num_bits_per_row: usize = self.tforms.iter()
             .map(|tform| {
                 tform.num_bits_field()
             })
@@ -145,7 +105,51 @@ impl Xtension for BinTable {
         if num_bytes_per_row != self.naxis1 {
             return Err(Error::StaticError("BinTable NAXIS1 and TFORMS does not give the same amount of bytes the table should have per row."));
         }
-        */
+
+        Ok(())
+    }
+
+    fn parse<R: Read>(reader: &mut R, num_bytes_read: &mut usize, card_80_bytes_buf: &mut [u8; 80]) -> Result<Self, Error> {
+        // BITPIX
+        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
+        let bitpix = dbg!(parse_bitpix_card(&card_80_bytes_buf)?);
+        if bitpix != BitpixValue::U8 {
+            return Err(Error::StaticError("Binary Table HDU must have a BITPIX = 8"));
+        }
+
+        // NAXIS
+        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
+        let naxis = parse_naxis_card(&card_80_bytes_buf)?;
+        if naxis != 2 {
+            return Err(Error::StaticError("Binary Table HDU must have NAXIS = 2"));
+        }
+
+        // NAXIS1
+        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
+        let naxis1 = check_card_keyword(&card_80_bytes_buf, NAXIS_KW[0])?
+            .check_for_float()? as usize;
+        // NAXIS2
+        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
+        let naxis2 = check_card_keyword(&card_80_bytes_buf, NAXIS_KW[1])?
+            .check_for_float()? as usize;
+
+        // PCOUNT
+        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
+        let pcount = parse_pcount_card(&card_80_bytes_buf)?;
+
+        // GCOUNT
+        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
+        let gcount = dbg!(parse_gcount_card(&card_80_bytes_buf)?);
+        if gcount != 1 {
+            return Err(Error::StaticError("Ascii Table HDU must have GCOUNT = 1"));
+        }
+
+        // FIELDS
+        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
+        let tfields = check_card_keyword(&card_80_bytes_buf, b"TFIELDS ")?
+            .check_for_float()? as usize;
+
+        let tforms = vec![];
 
         Ok(BinTable {
             bitpix,
@@ -294,18 +298,25 @@ where
     T: TFormType + Clone + Copy + Debug + Serialize + PartialEq
 {
     repeat_count: usize,
-    tform_type: T,
+    phantom: std::marker::PhantomData<T>,
 }
 
 impl<T> TFormBinaryTable<T>
 where
     T: TFormType + Clone + Copy + Debug + PartialEq + Serialize
 {
-    fn get_repeat_count(&self) -> usize {
+    pub fn new(repeat_count: usize) -> Self {
+        Self {
+            repeat_count,
+            phantom: std::marker::PhantomData,
+        }
+    }
+
+    pub fn get_repeat_count(&self) -> usize {
         self.repeat_count
     }
 
-    fn num_bits_field(&self) -> usize {
+    pub fn num_bits_field(&self) -> usize {
         let ri = self.get_repeat_count();
         let bi = <T as TFormType>::BITS_NUM;
 

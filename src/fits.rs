@@ -1,3 +1,5 @@
+use crate::hdu;
+use crate::hdu::extension::XtensionHDU;
 use crate::hdu::primary::PrimaryHDU;
 
 use crate::hdu::header::extension::image::Image;
@@ -30,6 +32,36 @@ where
         let hdu = PrimaryHDU::new(reader)?;
 
         Ok(Self { hdu })
+    }
+
+    pub fn get_primary_hdu(self) -> PrimaryHDU<'a, R> {
+        self.hdu
+    }
+
+    pub fn get_xtension_hdu(self, mut idx: usize) -> Result<XtensionHDU<'a, R>, Error> {
+        let mut hdu_ext = self.hdu.next()?;
+        if idx == 0 {
+            if let Some(hdu) = hdu_ext {
+                Ok(hdu)
+            } else {
+                Err(Error::StaticError("No more ext HDU found"))
+            }
+        } else {
+            while let Some(hdu) = hdu_ext {
+                hdu_ext = hdu.next()?;
+                idx -= 1;
+
+                if idx == 0 {
+                    break;
+                }
+            }
+
+            if let Some(hdu) = hdu_ext {
+                Ok(hdu)
+            } else {
+                Err(Error::StaticError("No more ext HDU found"))
+            }
+        }
     }
 }
 

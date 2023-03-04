@@ -1,4 +1,5 @@
 use std::io::Read;
+use std::collections::HashMap;
 
 use serde::Serialize;
 
@@ -12,6 +13,7 @@ use crate::hdu::header::NAXIS_KW;
 use crate::hdu::header::parse_naxis_card;
 use crate::hdu::header::parse_bitpix_card;
 use crate::hdu::header::BitpixValue;
+use crate::card::Value;
 
 #[derive(Debug, PartialEq)]
 #[derive(Serialize)]
@@ -102,6 +104,107 @@ impl Xtension for AsciiTable {
         num_ascii_char
     }
 
+    fn update_with_parsed_header(&mut self, cards: &HashMap<[u8; 8], Value>) -> Result<(), Error> {
+        // TBCOLS
+        self.tbcols = (0..self.tfields)
+            .map(|idx_field| {
+                let idx_field = idx_field + 1;
+                let kw = format!("TBCOL{:?}       ", idx_field);
+                let kw_bytes = kw.as_bytes();
+
+                // 1. Init the fixed keyword slice
+                let mut owned_kw: [u8; 8] = [0; 8];
+                // 2. Copy from slice
+                owned_kw.copy_from_slice(&kw_bytes[..8]);
+
+                cards.get(&owned_kw)
+                    .ok_or(Error::StaticError("TBCOLX card not found"))?
+                    .clone()
+                    .check_for_float()
+                    .map(|tbcol| tbcol as usize)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        // TFORMS
+        self.tforms = (0..self.tfields)
+            .map(|idx_field| {
+                let idx_field = idx_field + 1;
+                let kw = format!("TFORM{:?}       ", idx_field);
+                let kw_bytes = kw.as_bytes();
+
+                // 1. Init the fixed keyword slice
+                let mut owned_kw: [u8; 8] = [0; 8];
+                // 2. Copy from slice
+                owned_kw.copy_from_slice(&kw_bytes[..8]);
+
+                let tform = dbg!(cards.get(&owned_kw)
+                    .ok_or(Error::StaticError("TFORMX card not found"))?
+                    .clone()
+                    .check_for_string()?);
+
+
+
+                let first_char = &tform[0..1];
+                match first_char {
+                    "A" => {
+                        let w = tform[1..].trim_end().parse::<i32>()
+                            .map_err(|_| Error::StaticError("expected w after the "))?;
+
+                        Ok(TFormAsciiTable::Character { w: w as usize })
+                    },
+                    "I" => {
+                        let w = tform[1..].trim_end().parse::<i32>()
+                            .map_err(|_| Error::StaticError("expected w after the "))?;
+
+                        Ok(TFormAsciiTable::DecimalInteger { w: w as usize })
+                    },
+                    "F" => {
+                        let wd = tform[1..].trim_end().split(".").collect::<Vec<_>>();
+
+                        let w = dbg!(wd[0]
+                            .parse::<i32>()
+                            .map_err(|_| Error::StaticError("TFORM E type: w part does not parse into an integer"))?);
+
+                        let d = wd[1]
+                            .parse::<i32>()
+                            .map_err(|_| Error::StaticError("TFORM E type: d part does not parse into an integer"))?;
+
+                        Ok(TFormAsciiTable::FloatingPointFixed { w: w as usize, d: d as usize })
+                    },
+                    "E" => {
+                        let wd = tform[1..].trim_end().split(".").collect::<Vec<_>>();
+
+                        let w = dbg!(wd[0]
+                            .parse::<i32>()
+                            .map_err(|_| Error::StaticError("TFORM E type: w part does not parse into an integer"))?);
+
+                        let d = wd[1]
+                            .parse::<i32>()
+                            .map_err(|_| Error::StaticError("TFORM E type: d part does not parse into an integer"))?;
+
+                        Ok(TFormAsciiTable::EFloatingPointExp { w: dbg!(w as usize), d: d as usize })
+                    },
+                    "D" => {
+                        let wd = tform[1..].trim_end().split(".").collect::<Vec<_>>();
+
+                        let w = dbg!(wd[0]
+                            .parse::<i32>()
+                            .map_err(|_| Error::StaticError("TFORM E type: w part does not parse into an integer"))?);
+
+                        let d = dbg!(wd[1]
+                            .parse::<i32>()
+                            .map_err(|_| Error::StaticError("TFORM E type: d part does not parse into an integer"))?);
+
+                        Ok(TFormAsciiTable::DFloatingPointExp { w: dbg!(w) as usize, d: dbg!(d) as usize })
+                    },
+                    _ => Err(Error::StaticError("Ascii Table TFORM not recognized"))
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(())
+    }
+
     fn parse<R: Read>(reader: &mut R, num_bytes_read: &mut usize, card_80_bytes_buf: &mut [u8; 80]) -> Result<Self, Error> {
         // BITPIX
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
@@ -125,13 +228,6 @@ impl Xtension for AsciiTable {
         let naxis2 = check_card_keyword(&card_80_bytes_buf, NAXIS_KW[1])?
             .check_for_float()? as usize;
 
-        // GCOUNT
-        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let gcount = parse_gcount_card(&card_80_bytes_buf)?;
-        if gcount != 1 {
-            return Err(Error::StaticError("Ascii Table HDU must have GCOUNT = 1"));
-        }
-
         // PCOUNT
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
         let pcount = parse_pcount_card(&card_80_bytes_buf)?;
@@ -139,110 +235,20 @@ impl Xtension for AsciiTable {
             return Err(Error::StaticError("Ascii Table HDU must have PCOUNT = 0"));
         }
 
+        // GCOUNT
+        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
+        let gcount = parse_gcount_card(&card_80_bytes_buf)?;
+        if gcount != 1 {
+            return Err(Error::StaticError("Ascii Table HDU must have GCOUNT = 1"));
+        }
+
         // FIELDS
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
         let tfields = check_card_keyword(&card_80_bytes_buf, b"TFIELDS ")?
             .check_for_float()? as usize;
-        
-        // TBCOLS
-        let tbcols = (0..tfields)
-            .map(|idx_field| {
-                let idx_field = idx_field + 1;
-                let kw = format!("TBCOL{:?}       ", idx_field);
 
-                let kw_bytes = kw.as_bytes();
-
-                // 1. Init the fixed keyword slice
-                let mut owned_kw: [u8; 8] = [0; 8];
-                // 2. Copy from slice
-                owned_kw.copy_from_slice(&kw_bytes[..8]);
-
-                check_card_keyword(&card_80_bytes_buf, &owned_kw)?
-                    .check_for_float()
-                    .map(|tbcol| tbcol as usize)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        // TFORMS
-        let tforms = (0..tfields)
-            .map(|idx_field| {
-                let idx_field = idx_field + 1;
-                let kw = format!("TFORM{:?}       ", idx_field);
-                let kw_bytes = kw.as_bytes();
-
-                // 1. Init the fixed keyword slice
-                let mut owned_kw: [u8; 8] = [0; 8];
-                // 2. Copy from slice
-                owned_kw.copy_from_slice(&kw_bytes[..8]);
-
-                let tform = check_card_keyword(&card_80_bytes_buf, &owned_kw)?
-                    .check_for_string()?;
-
-                let first_char = tform.chars().nth(0)
-                    .ok_or(Error::StaticError("TFORM for AsciiTable must begin with either A, I, F, E or D"))?;
-
-                match first_char {
-                    'A' => {
-                        let w = tform[1..].parse::<i32>()
-                            .map_err(|_| Error::StaticError("expected w after the "))?;
-
-                        Ok(TFormAsciiTable::Character { w: w as usize })
-                    },
-                    'I' => {
-                        let w = tform[1..].parse::<i32>()
-                            .map_err(|_| Error::StaticError("expected w after the "))?;
-
-                        Ok(TFormAsciiTable::DecimalInteger { w: w as usize })
-                    },
-                    'F' => {
-                        let mut wd = tform[1..].split(".");
-
-                        let w = wd.next()
-                            .ok_or(Error::StaticError("TFORM F type: has not the format w.d"))?
-                            .parse::<i32>()
-                            .map_err(|_| Error::StaticError("TFORM F type: w part does not parse into an integer"))?;
-
-                        let d = wd.next()
-                            .ok_or(Error::StaticError("TFORM F type: has not the format w.d"))?
-                            .parse::<i32>()
-                            .map_err(|_| Error::StaticError("TFORM F type: d part does not parse into an integer"))?;
-
-                        Ok(TFormAsciiTable::FloatingPointFixed { w: w as usize, d: d as usize })
-                    },
-                    'E' => {
-                        let mut wd = tform[1..].split(".");
-
-                        let w = wd.next()
-                            .ok_or(Error::StaticError("TFORM E type: has not the format w.d"))?
-                            .parse::<i32>()
-                            .map_err(|_| Error::StaticError("TFORM E type: w part does not parse into an integer"))?;
-
-                        let d = wd.next()
-                            .ok_or(Error::StaticError("TFORM E type: has not the format w.d"))?
-                            .parse::<i32>()
-                            .map_err(|_| Error::StaticError("TFORM E type: d part does not parse into an integer"))?;
-
-                        Ok(TFormAsciiTable::EFloatingPointExp { w: w as usize, d: d as usize })
-                    },
-                    'D' => {
-                        let mut wd = tform[1..].split(".");
-
-                        let w = wd.next()
-                            .ok_or(Error::StaticError("TFORM D type: has not the format w.d"))?
-                            .parse::<i32>()
-                            .map_err(|_| Error::StaticError("TFORM D type: w part does not parse into an integer"))?;
-
-                        let d = wd.next()
-                            .ok_or(Error::StaticError("TFORM D type: has not the format w.d"))?
-                            .parse::<i32>()
-                            .map_err(|_| Error::StaticError("TFORM D type: d part does not parse into an integer"))?;
-
-                        Ok(TFormAsciiTable::DFloatingPointExp { w: w as usize, d: d as usize })
-                    },
-                    _ => Err(Error::StaticError("Ascii Table TFORM not recognized"))
-                }
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let tbcols = vec![];
+        let tforms = vec![];
 
         Ok(AsciiTable {
             bitpix,

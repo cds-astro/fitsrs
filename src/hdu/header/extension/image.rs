@@ -1,4 +1,5 @@
 use std::io::Read;
+use std::collections::HashMap;
 
 use serde::Serialize;
 
@@ -10,6 +11,7 @@ use crate::hdu::header::NAXIS_KW;
 use crate::hdu::header::parse_naxis_card;
 use crate::hdu::header::parse_bitpix_card;
 use crate::hdu::header::BitpixValue;
+use crate::card::Value;
 
 #[derive(Debug, PartialEq)]
 #[derive(Serialize)]
@@ -56,6 +58,10 @@ impl Xtension for Image {
 
         let num_bits = ((self.bitpix as i32).abs() as usize) * num_pixels;
         num_bits >> 3
+    }
+
+    fn update_with_parsed_header(&mut self, _cards: &HashMap<[u8; 8], Value>) -> Result<(), Error> {
+        Ok(())
     }
 
     fn parse<R: Read>(reader: &mut R, num_bytes_read: &mut usize, card_80_bytes_buf: &mut [u8; 80]) -> Result<Self, Error> {

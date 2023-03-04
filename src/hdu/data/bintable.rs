@@ -1,4 +1,4 @@
-use std::io::{Cursor, BufReader, Read};
+use std::io::{Cursor, BufReader, Read, BufRead};
 use std::fmt::Debug;
 
 use crate::error::Error;
@@ -9,6 +9,8 @@ use crate::hdu::data::image::InMemData;
 use crate::hdu::data::image::DataBorrowed;
 
 use crate::hdu::header::extension::Xtension;
+
+use super::Access;
 
 impl<'a, R> DataBufRead<'a, BinTable> for Cursor<R>
 where
@@ -74,5 +76,20 @@ where
         *num_bytes_read = num_bytes_to_read;
 
         Ok(reader)
+    }
+}
+
+impl<'a, R> Access<'a> for DataOwnedIt<'a, R, u8>
+where
+    R: BufRead
+{
+    type Type = Self;
+
+    fn get_data(&self) -> &Self::Type {
+        self
+    }
+
+    fn get_data_mut(&mut self) -> &mut Self::Type {
+        self
     }
 }

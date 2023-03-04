@@ -4,8 +4,11 @@ pub mod asciitable;
 
 use std::io::Read;
 
+use crate::card::Value;
 use crate::error::Error;
 use crate::hdu::primary::check_card_keyword;
+
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub enum XtensionType {
@@ -26,6 +29,8 @@ pub fn parse_xtension_card(card: &[u8; 80]) -> Result<XtensionType, Error> {
 
 pub trait Xtension {
     fn get_num_bytes_data_block(&self) -> usize;
+
+    fn update_with_parsed_header(&mut self, cards: &HashMap<[u8; 8], Value>) -> Result<(), Error>;
 
     // Parse the Xtension keywords
     // During the parsing, some checks will be made

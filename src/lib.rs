@@ -43,17 +43,18 @@ pub mod error;
 mod tests {
     use crate::fits::Fits;
     use crate::hdu::header::BitpixValue;
-    use crate::hdu::data::image::DataBorrowed;
-    use crate::hdu::{primary::PrimaryHDU, HDU, extension::HDUExt};
+    use crate::hdu::data::image::{InMemData};
+    use crate::hdu::{extension::XtensionHDU};
 
-    use core::num;
     use std::io::Read;
     use std::io::Cursor;
     use std::fs::File;
 
+    use test_case::test_case;
+
     #[test]
     fn test_fits_tile() {
-        let f = File::open("misc/Npix208.fits").unwrap();
+        let f = File::open("samples/hipsgen/Npix208.fits").unwrap();
         let bytes: Result<Vec<_>, _> = f.bytes().collect();
         let buf = bytes.unwrap();
 
@@ -72,9 +73,18 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_hst_nicmos() {
-        let f = File::open("misc/HST_NICMOS.fits").unwrap();
+    #[test_case("samples/fits.gsfc.nasa.gov/Astro_UIT.fits", 1, 0, 0)]
+    #[test_case("samples/fits.gsfc.nasa.gov/EUVE.fits", 5, 0, 4)]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_FGS.fits", 1, 1, 0)]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_FOC.fits", 1, 1, 0)]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_FOS.fits", 1, 1, 0)]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_HRS.fits", 1, 1, 0)]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_NICMOS.fits", 6, 0, 0)]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_WFPC_II.fits", 1, 1, 0)]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_WFPC_II_bis.fits", 1, 0, 0)]
+    #[test_case("samples/fits.gsfc.nasa.gov/IUE_LWP.fits", 1, 0, 1)]
+    fn test_count_hdu(filename: &str, num_image_ext: usize, num_asciitable_ext: usize, num_bintable_ext: usize) {
+        let f = File::open(filename).unwrap();
         let bytes: Result<Vec<_>, _> = f.bytes().collect();
         let buf = bytes.unwrap();
 
@@ -82,33 +92,46 @@ mod tests {
         let Fits { hdu } = Fits::from_reader(&mut reader).unwrap();
 
         let mut hdu_ext = hdu.next();
-        let mut num_image_ext = 0;
+        let mut n_image_ext = 1; // because the primary hdu is an image
+        let mut n_bintable_ext = 0;
+        let mut n_asciitable_ext = 0;
+
         while let Ok(Some(hdu)) = hdu_ext {
             match hdu {
-                HDUExt::Image(_) => {
-                    num_image_ext += 1;
+                XtensionHDU::Image(_) => {
+                    n_image_ext += 1;
                 },
-                _ => ()
+                XtensionHDU::BinTable(_) => {
+                    n_bintable_ext += 1;
+                },
+                XtensionHDU::AsciiTable(_) => {
+                    n_asciitable_ext += 1;
+                },
             }
 
             hdu_ext = hdu.next();
         }
 
-        assert_eq!(num_image_ext, 5);
+        assert_eq!(n_image_ext, num_image_ext);
+        assert_eq!(n_bintable_ext, num_bintable_ext);
+        assert_eq!(n_asciitable_ext, num_asciitable_ext);
     }
-    /*
+    
     #[test]
     fn test_fits_f32() {
-        let mut f = File::open("misc/Npix282.fits").unwrap();
-        let mut raw_bytes = Vec::<u8>::new();
-        f.read_to_end(&mut raw_bytes).unwrap();
+        let f = File::open("samples/hipsgen/Npix208.fits").unwrap();
+        let bytes: Result<Vec<_>, _> = f.bytes().collect();
+        let buf = bytes.unwrap();
 
-        let mut reader = Cursor::new(&raw_bytes[..]);
-        let fits = Fits::from_reader(&mut reader).unwrap();
-        let header = fits.get_header();
-        match fits.get_data() {
-            DataBorrowed::F32(data) => {
-                assert!(data.len() == header.get_axis_size(1).unwrap() * header.get_axis_size(2).unwrap())
+        let mut reader = Cursor::new(&buf[..]);
+        let Fits { hdu } = Fits::from_reader(&mut reader).unwrap();
+
+        let header = hdu.get_header();
+        let num_pixels = header.get_xtension().get_naxisn(1).unwrap() * header.get_xtension().get_naxisn(2).unwrap();
+        let data = hdu.get_data();
+        match data {
+            InMemData::F32(slice) => {
+                assert!(slice.len() == num_pixels);
             },
             _ => unreachable!(),
         }
@@ -135,7 +158,7 @@ mod tests {
         });
     }*/
 
-    #[test]
+    /*#[test]
     fn test_fits_tile3() {
         use std::fs::File;
 

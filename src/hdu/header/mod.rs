@@ -138,7 +138,7 @@ where
         let mut cards = HashMap::new();
 
         /* Consume mandatory keywords */ 
-        let xtension = Xtension::parse(reader, num_bytes_read, card_80_bytes_buf)?;
+        let mut xtension: X = Xtension::parse(reader, num_bytes_read, card_80_bytes_buf)?;
 
         /* Consume next non mandatory keywords until `END` is reached */
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
@@ -146,6 +146,8 @@ where
             cards.insert(kw, v);
             consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
         }
+
+        xtension.update_with_parsed_header(&cards)?;
 
         /* The last card was a END one */
         Ok(Self {

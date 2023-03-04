@@ -11,7 +11,7 @@ use crate::error::Error;
 use crate::hdu::DataBufRead;
 
 #[derive(Debug)]
-pub enum HDUExt<'a, R>
+pub enum XtensionHDU<'a, R>
 where
     R: DataBufRead<'a, Image> +
        DataBufRead<'a, BinTable> +
@@ -23,7 +23,7 @@ where
     BinTable(HDU<'a, R, BinTable>),
 }
 
-impl<'a, R> HDUExt<'a, R>
+impl<'a, R> XtensionHDU<'a, R>
 where
 R: DataBufRead<'a, Image> +
    DataBufRead<'a, BinTable> +
@@ -36,12 +36,12 @@ R: DataBufRead<'a, Image> +
 
         // XTENSION
         consume_next_card(reader, &mut card_80_bytes_buf, &mut num_bytes_read)?;
-        let xtension_type = parse_xtension_card(&card_80_bytes_buf)?;
+        let xtension_type = dbg!(parse_xtension_card(&card_80_bytes_buf)?);
 
         let hdu = match xtension_type {
-            XtensionType::Image => HDUExt::Image(HDU::<'a, R, Image>::new(reader, &mut num_bytes_read, &mut card_80_bytes_buf)?),
-            XtensionType::BinTable => HDUExt::BinTable(HDU::<'a, R, BinTable>::new(reader, &mut num_bytes_read, &mut card_80_bytes_buf)?),
-            XtensionType::AsciiTable => HDUExt::AsciiTable(HDU::<'a, R, AsciiTable>::new(reader, &mut num_bytes_read, &mut card_80_bytes_buf)?),
+            XtensionType::Image => XtensionHDU::Image(HDU::<'a, R, Image>::new(reader, &mut num_bytes_read, &mut card_80_bytes_buf)?),
+            XtensionType::BinTable => XtensionHDU::BinTable(HDU::<'a, R, BinTable>::new(reader, &mut num_bytes_read, &mut card_80_bytes_buf)?),
+            XtensionType::AsciiTable => XtensionHDU::AsciiTable(HDU::<'a, R, AsciiTable>::new(reader, &mut num_bytes_read, &mut card_80_bytes_buf)?),
         };
 
         Ok(hdu)
@@ -49,9 +49,9 @@ R: DataBufRead<'a, Image> +
 
     fn consume(self) -> Result<Option<&'a mut R>, Error> {
         match self {
-            HDUExt::Image(hdu) => hdu.consume(),
-            HDUExt::AsciiTable(hdu) => hdu.consume(),
-            HDUExt::BinTable(hdu) => hdu.consume(),
+            XtensionHDU::Image(hdu) => hdu.consume(),
+            XtensionHDU::AsciiTable(hdu) => hdu.consume(),
+            XtensionHDU::BinTable(hdu) => hdu.consume(),
         }
     }
 
