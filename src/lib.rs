@@ -57,14 +57,18 @@ mod tests {
         let buf = bytes.unwrap();
 
         let mut reader = Cursor::new(&buf[..]);
-        let fits = Fits::from_reader(&mut reader).unwrap();
+        let Fits { hdu } = Fits::from_reader(&mut reader).unwrap();
 
-        let primary_hdu = fits.get_first_hdu();
-        let PrimaryHDU(HDU { header, data }) = primary_hdu;
+        let header = hdu.get_header();
         assert_eq!(header.get_xtension().get_naxisn(1), Some(&64));
         assert_eq!(header.get_xtension().get_naxisn(2), Some(&64));
         assert_eq!(header.get_xtension().get_naxis(), 2);
         assert_eq!(header.get_xtension().get_bitpix(), BitpixValue::F32);
+        if let Ok(None) = dbg!(hdu.next()) {
+            assert!(true)
+        } else {
+            assert!(false);
+        }
     }
     /*
     #[test]

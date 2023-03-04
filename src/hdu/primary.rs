@@ -80,9 +80,8 @@ where
     }
 
     pub fn next(self) -> Result<Option<HDUExt<'a, R>>, Error> {
-        if let Some(reader) = self.consume()? {
+        if let Some(reader) = self.consume()? { 
             let hdu = HDUExt::new(reader)?;
-
             Ok(Some(hdu))
         } else {
             Ok(None)

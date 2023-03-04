@@ -15,9 +15,9 @@ where
     R: DataBufRead<'a, X>
 {
     /// The header part that stores all the cards
-    pub header: Header<X>,
+    header: Header<X>,
     /// The data part
-    pub data: <R as DataBufRead<'a, X>>::Data,
+    data: <R as DataBufRead<'a, X>>::Data,
 }
 
 use crate::error::Error;
@@ -36,7 +36,7 @@ where
 
         let num_off_bytes = 2880 - (*num_bytes_read) % 2880;
         reader.read_exact(&mut block_mem_buf[..num_off_bytes])
-            .map_err(|_| Error::StaticError("uUnexpected EOF"))?;
+            .map_err(|_| Error::StaticError("Unexpected EOF"))?;
 
         // Data block
         let xtension = header.get_xtension();
@@ -62,7 +62,24 @@ where
             // interpreting it as the last HDU in the file
             .map(|_| reader);
 
-        Ok(reader)
+        if let Some(reader) = reader {
+            let is_eof = reader.fill_buf().map_err(|_| Error::StaticError("Unable to fill the buffer to check if data is remaining"))?.is_empty();
+            if !is_eof {
+                Ok(Some(reader))
+            } else {
+                Ok(None)
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn get_header(&self) -> &Header<X> {
+        &self.header
+    }
+
+    pub fn get_data(&mut self) -> &mut <R as DataBufRead<'a, X>>::Data {
+        &mut self.data
     }
 }
 

@@ -31,11 +31,6 @@ where
 
         Ok(Self { hdu })
     }
-
-    /// Returns the header of the first HDU
-    pub fn get_first_hdu(&self) -> &PrimaryHDU<'a, R> {
-        &self.hdu
-    }
 }
 
 /* 
