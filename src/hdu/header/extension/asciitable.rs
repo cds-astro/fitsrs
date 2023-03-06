@@ -20,30 +20,30 @@ use crate::card::Value;
 #[derive(Clone)]
 pub struct AsciiTable {
     // Should be 1
-    pub bitpix: BitpixValue,
+    bitpix: BitpixValue,
     // Number of axis, Should be 2,
-    pub naxis: usize,
+    naxis: usize,
     // A non-negative integer, giving the number of ASCII characters in each row of
     // the table. This includes all the characters in the defined fields
     // plus any characters that are not included in any field.
-    pub naxis1: usize,
+    naxis1: usize,
     // A non-negative integer, giving the number of rows in the table
-    pub naxis2: usize,
+    naxis2: usize,
     // A non-negative integer representing the number of fields in each row.
     // The maximum permissible value is 999.
-    pub tfields: usize,
+    tfields: usize,
     // Integers specifying the column in which Field n starts.
     // The first column of a row is numbered 1.
-    pub tbcols: Vec<usize>,
+    tbcols: Vec<usize>,
     // Contain a character string describing the format in which Field n is encoded.
     // Only the formats in Table 15, interpreted as Fortran (ISO 2004)
     // input formats and discussed in more detail in Sect. 7.2.5, are
     // permitted for encoding
-    pub tforms: Vec<TFormAsciiTable>,
+    tforms: Vec<TFormAsciiTable>,
     // Should be 0
-    pub pcount: usize,
+    pcount: usize,
     // Should be 1
-    pub gcount: usize,
+    gcount: usize,
 }
 
 impl AsciiTable {
