@@ -1,4 +1,3 @@
-use crate::hdu;
 use crate::hdu::extension::XtensionHDU;
 use crate::hdu::primary::PrimaryHDU;
 
@@ -100,45 +99,3 @@ where
     }
 }
 */
-#[cfg(test)]
-mod tests {
-    use super::Fits;
-    use std::io::Read;
-    use crate::hdu::data::image::DataBorrowed;
-    use std::io::Cursor;
-    use std::fs::File;
-    /*
-    #[test]
-    fn test_fits_f32() {
-        let mut f = File::open("misc/Npix208.fits").unwrap();
-        let mut raw_bytes = Vec::<u8>::new();
-        f.read_to_end(&mut raw_bytes).unwrap();
-
-        let mut reader = Cursor::new(&raw_bytes[..]);
-        let fits = Fits::from_reader(&mut reader).unwrap();
-        let header = fits.get_header();
-        match fits.get_data() {
-            DataBorrowed::F32(data) => {
-                assert!(data.len() == header.get_axis_size(1).unwrap() * header.get_axis_size(2).unwrap())
-            },
-            _ => unreachable!(),
-        }
-    }
-
-    #[test]
-    fn test_fits_i16() {
-        let mut f = File::open("misc/Npix4906.fits").unwrap();
-        let mut raw_bytes = Vec::<u8>::new();
-        f.read_to_end(&mut raw_bytes).unwrap();
-
-        let mut reader = Cursor::new(&raw_bytes[..]);
-        let fits = Fits::from_reader(&mut reader).unwrap();
-        let header = fits.get_header();
-        match fits.get_data() {
-            DataBorrowed::I16(data) => {
-                assert!(data.len() == header.get_axis_size(1).unwrap() * header.get_axis_size(2).unwrap())
-            },
-            _ => unreachable!(),
-        }
-    }*/
-}

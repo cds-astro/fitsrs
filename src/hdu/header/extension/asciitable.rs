@@ -20,30 +20,30 @@ use crate::card::Value;
 #[derive(Clone)]
 pub struct AsciiTable {
     // Should be 1
-    bitpix: BitpixValue,
+    pub bitpix: BitpixValue,
     // Number of axis, Should be 2,
-    naxis: usize,
+    pub naxis: usize,
     // A non-negative integer, giving the number of ASCII characters in each row of
     // the table. This includes all the characters in the defined fields
     // plus any characters that are not included in any field.
-    naxis1: usize,
+    pub naxis1: usize,
     // A non-negative integer, giving the number of rows in the table
-    naxis2: usize,
+    pub naxis2: usize,
     // A non-negative integer representing the number of fields in each row.
     // The maximum permissible value is 999.
-    tfields: usize,
+    pub tfields: usize,
     // Integers specifying the column in which Field n starts.
     // The first column of a row is numbered 1.
-    tbcols: Vec<usize>,
+    pub tbcols: Vec<usize>,
     // Contain a character string describing the format in which Field n is encoded.
     // Only the formats in Table 15, interpreted as Fortran (ISO 2004)
     // input formats and discussed in more detail in Sect. 7.2.5, are
     // permitted for encoding
-    tforms: Vec<TFormAsciiTable>,
+    pub tforms: Vec<TFormAsciiTable>,
     // Should be 0
-    pcount: usize,
+    pub pcount: usize,
     // Should be 1
-    gcount: usize,
+    pub gcount: usize,
 }
 
 impl AsciiTable {
@@ -296,4 +296,220 @@ pub enum TFormAsciiTable {
         w: usize,
         d: usize,
     },
+}
+
+
+#[cfg(test)]
+mod tests {
+    use crate::{hdu::{header::BitpixValue, extension::XtensionHDU}, fits::Fits};
+    use super::{AsciiTable, TFormAsciiTable};
+    use std::{fs::File, io::BufReader};
+
+    fn compare_ascii_ext(filename: &str, ascii_table: AsciiTable) {
+        let f = File::open(filename).unwrap();
+
+        let mut reader = BufReader::new(f);
+        let Fits { hdu } = Fits::from_reader(&mut reader).unwrap();
+
+        // Get the first HDU extension,
+        // this should be the table for these fits examples
+        let hdu = hdu.next()
+            .expect("Should contain an extension HDU")
+            .unwrap();
+        match hdu {
+            XtensionHDU::AsciiTable(hdu) => {
+                let xtension = hdu.get_header().get_xtension();
+                assert_eq!(xtension.clone(), ascii_table);
+            },
+            _ => panic!("Should contain a ASCII table HDU extension")
+        }
+    }
+
+    // These tests have been manually created thanks to this command on the fits files:
+    // strings  samples/fits.gsfc.nasa.gov/HST_HRS.fits | fold -80 | grep "TBCOL" | tr -s ' ' | cut -d ' ' -f 3
+    #[test]
+    fn test_asciitable_extension() {
+        compare_ascii_ext("samples/fits.gsfc.nasa.gov/HST_FGS.fits", AsciiTable {
+            bitpix: BitpixValue::U8,
+            naxis: 2,
+            naxis1: 99,
+            naxis2: 7,
+            tfields: 6,
+            tbcols: vec![1, 17, 33, 49, 65, 91],
+            tforms: vec![
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::DFloatingPointExp { w: 25, d: 17 },
+                TFormAsciiTable::Character { w: 8 },
+            ],
+            // Should be 0
+            pcount: 0,
+            // Should be 1
+            gcount: 1
+        });
+
+        compare_ascii_ext("samples/fits.gsfc.nasa.gov/HST_FOC.fits", AsciiTable {
+            bitpix: BitpixValue::U8,
+            naxis: 2,
+            naxis1: 312,
+            naxis2: 1,
+            tfields: 18,
+            tbcols: vec![1, 29, 57, 73, 89, 105, 121, 137, 153, 169, 185, 193, 209, 221, 233, 261, 289, 301],
+            tforms: vec![
+                TFormAsciiTable::DFloatingPointExp { w: 25, d: 16 },
+                TFormAsciiTable::DFloatingPointExp { w: 25, d: 16 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::Character { w: 4 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::DecimalInteger { w: 11 },
+                TFormAsciiTable::DecimalInteger { w: 11 },
+                TFormAsciiTable::DFloatingPointExp { w: 25, d: 16 },
+                TFormAsciiTable::DFloatingPointExp { w: 25, d: 16 },
+                TFormAsciiTable::Character { w: 8 },
+                TFormAsciiTable::Character { w: 8 },
+            ],
+            // Should be 0
+            pcount: 0,
+            // Should be 1
+            gcount: 1
+        });
+
+        compare_ascii_ext("samples/fits.gsfc.nasa.gov/HST_HRS.fits", AsciiTable {
+            bitpix: BitpixValue::U8,
+            naxis: 2,
+            naxis1: 412,
+            naxis2: 4,
+            tfields: 25,
+            tbcols: vec![1, 29, 45, 61, 77, 93, 121, 149, 161, 173, 201, 213, 225, 237, 249, 261, 277, 293, 309, 325, 337, 349, 365, 381, 397],
+            tforms: vec![
+                TFormAsciiTable::DFloatingPointExp { w: 25, d: 16 },
+
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+
+                TFormAsciiTable::DFloatingPointExp { w: 25, d: 16 },
+                TFormAsciiTable::DFloatingPointExp { w: 25, d: 16 },
+
+                TFormAsciiTable::DecimalInteger { w: 11 },
+                TFormAsciiTable::DecimalInteger { w: 11 },
+
+                TFormAsciiTable::DFloatingPointExp { w: 25, d: 16 },
+
+                TFormAsciiTable::Character { w: 8 },
+
+                TFormAsciiTable::DecimalInteger { w: 11 },
+                TFormAsciiTable::DecimalInteger { w: 11 },
+                TFormAsciiTable::DecimalInteger { w: 11 },
+                TFormAsciiTable::DecimalInteger { w: 11 },
+
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+
+                TFormAsciiTable::DecimalInteger { w: 11 },
+                TFormAsciiTable::DecimalInteger { w: 11 },
+
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+            ],
+            // Should be 0
+            pcount: 0,
+            // Should be 1
+            gcount: 1
+        });
+
+        compare_ascii_ext("samples/fits.gsfc.nasa.gov/HST_WFPC_II.fits", AsciiTable {
+            bitpix: BitpixValue::U8,
+            naxis: 2,
+            naxis1: 796,
+            naxis2: 4,
+            tfields: 49,
+            tbcols: vec![
+                1, 27, 53, 69, 85, 101, 117, 133, 149, 165, 181, 183, 199, 212, 225, 251, 277,
+                286, 295, 308, 324, 340, 356, 372, 388, 404, 417, 430, 443, 456, 469, 482, 495,
+                508, 557, 573, 589, 605, 621, 637, 653, 669, 685, 701, 717, 733, 749, 765, 781
+            ],
+            tforms: vec![
+                TFormAsciiTable::DFloatingPointExp { w: 25, d: 17 },
+                TFormAsciiTable::DFloatingPointExp { w: 25, d: 17 },
+
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+
+                TFormAsciiTable::Character { w: 1 },
+
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+
+                TFormAsciiTable::DecimalInteger { w: 12 },
+                TFormAsciiTable::DecimalInteger { w: 12 },
+
+                TFormAsciiTable::DFloatingPointExp { w: 25, d: 17 },
+                TFormAsciiTable::DFloatingPointExp { w: 25, d: 17 },
+
+                TFormAsciiTable::Character { w: 8 },
+                TFormAsciiTable::Character { w: 8 },
+
+                TFormAsciiTable::DecimalInteger { w: 12 },
+
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+
+                TFormAsciiTable::DecimalInteger { w: 12 },
+                TFormAsciiTable::DecimalInteger { w: 12 },
+                TFormAsciiTable::DecimalInteger { w: 12 },
+                TFormAsciiTable::DecimalInteger { w: 12 },
+                TFormAsciiTable::DecimalInteger { w: 12 },
+                TFormAsciiTable::DecimalInteger { w: 12 },
+                TFormAsciiTable::DecimalInteger { w: 12 },
+                TFormAsciiTable::DecimalInteger { w: 12 },
+
+                TFormAsciiTable::Character { w: 48 },
+
+
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+                TFormAsciiTable::EFloatingPointExp { w: 15, d: 7 },
+            ],
+            // Should be 0
+            pcount: 0,
+            // Should be 1
+            gcount: 1
+        });
+    }
 }

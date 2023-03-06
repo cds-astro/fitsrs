@@ -98,34 +98,3 @@ where
         self.data.get_data_mut()
     }
 }
-
-mod tests {
-    use crate::hdu::primary::PrimaryHDU;
-    use super::header::BitpixValue;
-    use std::io::{Cursor, Read, BufReader};
-    use std::fs::File;
-    /*
-    #[test]
-    fn test_cursor_lifetime() {
-        let mut f = File::open("misc/Npix208.fits").unwrap();
-        let mut raw_bytes = Vec::<u8>::new();
-        f.read_to_end(&mut raw_bytes).unwrap();
-        // Here all the file content is in memory
-        let mut reader = Cursor::new(&raw_bytes[..]);
-        let hdu = HDU::new(&mut reader).unwrap();
-
-        assert_eq!(hdu.header.get_bitpix(), BitpixValue::F32);
-    }
-
-    #[test]
-    fn test_file_lifetime() {
-        let f = File::open("misc/Npix208.fits").unwrap();
-        let mut reader = BufReader::new(f);
-
-        let hdu = {
-            HDU::new(&mut reader).unwrap()
-        };
-
-        assert_eq!(hdu.header.get_bitpix(), BitpixValue::F32);
-    }*/
-}

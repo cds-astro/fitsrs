@@ -8,27 +8,24 @@
 //! use std::fs::File;
 //! use std::io::BufReader;
 //! 
-//! use fitsrs::{hdu::data::DataOwned, fits::Fits, hdu::HDU};
+//! use fitsrs::{fits::Fits, hdu::HDU};
+//! use fitsrs::hdu::data::image::DataOwned;
 //! 
-//! let f = File::open("misc/FOCx38i0101t_c0f.fits").unwrap();
+//! let f = File::open("samples/fits.gsfc.nasa.gov/HST_FOC.fits").unwrap();
 //! let mut reader = BufReader::new(f);
 //! let Fits { mut hdu } = Fits::from_reader(&mut reader).unwrap();
-//! for HDU { header, data } in hdu {
-//!     // Retrieve some card values
-//!     let naxis1 = header.get_axis_size(1).unwrap();
-//!     let naxis2 = header.get_axis_size(2).unwrap();
+//! let xtension = hdu.get_header().get_xtension();
+//! let naxis1 = *xtension.get_naxisn(1).unwrap();
+//! let naxis2 = *xtension.get_naxisn(2).unwrap();
 //! 
-//!     // Get the data part iterator
-//!     match data {
-//!         // Knowing the BITPIX keyword you are able to know the correct data type
-//!         DataOwned::F32(it) => {
-//!             // Consume it when you want
-//!             let data = it.collect::<Vec<_>>();
-//!             assert_eq!(data.len(), naxis1 * naxis2);
-//!         },
-//!         _ => unreachable!(),
-//!     }
-//! }
+//! let data = match hdu.get_data_mut() {
+//!     DataOwned::F32(it) => {
+//!         it.collect::<Vec<_>>()
+//!     },
+//!    _ => unreachable!(),
+//! };
+//! 
+//! assert_eq!(data.len(), naxis1 * naxis2);
 //! ```
 
 extern crate nom;
@@ -43,7 +40,7 @@ pub mod error;
 mod tests {
     use crate::fits::Fits;
     use crate::hdu::header::BitpixValue;
-    use crate::hdu::data::image::{InMemData};
+    use crate::hdu::data::image::{InMemData, DataOwned};
     use crate::hdu::{extension::XtensionHDU};
 
     use std::io::Read;
@@ -53,7 +50,7 @@ mod tests {
     use test_case::test_case;
 
     #[test]
-    fn test_fits_tile() {
+    fn test_fits_image_mandatory_kw() {
         let f = File::open("samples/hipsgen/Npix208.fits").unwrap();
         let bytes: Result<Vec<_>, _> = f.bytes().collect();
         let buf = bytes.unwrap();
@@ -118,7 +115,7 @@ mod tests {
     }
     
     #[test]
-    fn test_fits_f32() {
+    fn test_fits_image_f32() {
         let f = File::open("samples/hipsgen/Npix208.fits").unwrap();
         let bytes: Result<Vec<_>, _> = f.bytes().collect();
         let buf = bytes.unwrap();
@@ -137,61 +134,54 @@ mod tests {
         }
     }
 
-    /*#[test]
-    fn test_fits_async() {
-        use std::fs::File;
-        use std::io::BufReader;
+    #[test]
+    fn test_fits_i16() {
+        let mut f = File::open("samples/hipsgen/Npix4906.fits").unwrap();
+        let mut raw_bytes = Vec::<u8>::new();
+        f.read_to_end(&mut raw_bytes).unwrap();
 
-        let mut f = File::open("misc/Npix282.fits").unwrap();
-        let mut buf = Vec::new();
-        f.read_to_end(&mut buf).unwrap();
-
-        use futures::executor::LocalPool;
-
-        let mut pool = LocalPool::new();
-
-        // run tasks in the pool until `my_app` completes
-        pool.run_until(async {
-            let Fits { data, .. } = Fits::from_byte_slice_async(&buf[..]).await.unwrap();
-
-            matches!(data, super::DataType::F32(_));
-        });
-    }*/
-
-    /*#[test]
-    fn test_fits_tile3() {
-        use std::fs::File;
-
-        let mut f = File::open("misc/Npix4906.fits").unwrap();
-        let mut buf = Vec::new();
-        f.read_to_end(&mut buf).unwrap();
-        let mut reader = Cursor::new(&buf[..]);
-
-        let _fits = Fits::from_reader(&mut reader).unwrap();
+        let mut reader = Cursor::new(&raw_bytes[..]);
+        let Fits { hdu } = Fits::from_reader(&mut reader).unwrap();
+        let xtension = hdu.get_header().get_xtension();
+        match hdu.get_data() {
+            &InMemData::I16(data) => {
+                assert!(data.len() == xtension.get_naxisn(1).unwrap() * xtension.get_naxisn(2).unwrap())
+            },
+            _ => unreachable!(),
+        }
     }
 
-    #[test]
-    fn test_fits_tile4() {
+    #[test_case("samples/hipsgen/Npix8.fits")]
+    #[test_case("samples/hipsgen/Npix9.fits")]
+    #[test_case("samples/hipsgen/Npix132.fits")]
+    #[test_case("samples/hipsgen/Npix133.fits")]
+    #[test_case("samples/hipsgen/Npix134.fits")]
+    #[test_case("samples/hipsgen/Npix140.fits")]
+    #[test_case("samples/hipsgen/Npix208.fits")]
+    #[test_case("samples/hipsgen/Npix282.fits")]
+    #[test_case("samples/hipsgen/Npix4906.fits")]
+    #[test_case("samples/hipsgen/Npix691539.fits")]
+    #[test_case("samples/hips2fits/allsky_panstarrs.fits")]
+    #[test_case("samples/hips2fits/cutout-CDS_P_HST_PHAT_F475W.fits")]
+    #[test_case("samples/fits.gsfc.nasa.gov/Astro_UIT.fits")]
+    #[test_case("samples/fits.gsfc.nasa.gov/EUVE.fits")]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_FGS.fits")]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_FOC.fits")]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_FOS.fits")]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_HRS.fits")]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_NICMOS.fits")]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_WFPC_II.fits")]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_WFPC_II_bis.fits")]
+    #[test_case("samples/fits.gsfc.nasa.gov/IUE_LWP.fits")]
+    fn test_fits_opening(filename: &str) {
         use std::fs::File;
 
-        let mut f = File::open("misc/Npix9.fits").unwrap();
+        let mut f = File::open(filename).unwrap();
         let mut buf = Vec::new();
         f.read_to_end(&mut buf).unwrap();
 
         let mut reader = Cursor::new(&buf[..]);
-        let _fits = Fits::from_reader(&mut reader).unwrap();
-    }
-
-    #[test]
-    fn test_fits_image() {
-        use std::fs::File;
-
-        let mut f = File::open("misc/cutout-CDS_P_HST_PHAT_F475W.fits").unwrap();
-        let mut buf = Vec::new();
-        f.read_to_end(&mut buf).unwrap();
-
-        let mut reader = Cursor::new(&buf[..]);
-        let _fits = Fits::from_reader(&mut reader).unwrap();
+        assert!(Fits::from_reader(&mut reader).is_ok());
     }
 
     #[test]
@@ -199,42 +189,16 @@ mod tests {
         use std::fs::File;
         use std::io::BufReader;
 
-        let f = File::open("misc/FOCx38i0101t_c0f.fits").unwrap();
+        let f = File::open("samples/fits.gsfc.nasa.gov/HST_FOC.fits").unwrap();
         let mut reader = BufReader::new(f);
-        let Fits { hdu } = Fits::from_reader(&mut reader).unwrap();
+        let Fits { mut hdu } = Fits::from_reader(&mut reader).unwrap();
 
-        use crate::hdu::HDU;
-        for HDU { data, header} in hdu {
-            let naxis1 = header.get_axis_size(1).unwrap();
-            let naxis2 = header.get_axis_size(2).unwrap();
-    
-            match data {
-                DataOwned::F32(it) => {
-                    let data = it.collect::<Vec<_>>();
-                    assert_eq!(data.len(), naxis1 * naxis2);
-                },
-                _ => unreachable!(),
-            }
-        }
-    }
-
-    #[test]
-    fn test_fits_image_borrowed() {
-        use std::fs::File;
-
-        let mut f = File::open("misc/FOCx38i0101t_c0f.fits").unwrap();
-        let mut buf = Vec::new();
-        f.read_to_end(&mut buf).unwrap();
-
-        let mut reader = Cursor::new(&buf[..]);
-        let Fits { hdu } = Fits::from_reader(&mut reader).unwrap();
-
-        let header = &hdu[0].header;
-        let naxis1 = header.get_axis_size(1).unwrap();
-        let naxis2 = header.get_axis_size(2).unwrap();
-
-        match hdu[0].data {
-            DataBorrowed::F32(data) => {
+        let naxis1 = *hdu.get_header().get_xtension().get_naxisn(1).unwrap();
+        let naxis2 = *hdu.get_header().get_xtension().get_naxisn(2).unwrap();
+        let data = hdu.get_data_mut();
+        match data {
+            DataOwned::F32(it) => {
+                let data = it.collect::<Vec<_>>();
                 assert_eq!(data.len(), naxis1 * naxis2);
             },
             _ => unreachable!(),
@@ -242,38 +206,25 @@ mod tests {
     }
 
     #[test]
-    fn test_fits_tile5() {
+    fn test_fits_image_borrowed() {
         use std::fs::File;
 
-        let mut f = File::open("misc/Npix133.fits").unwrap();
+        let mut f = File::open("samples/fits.gsfc.nasa.gov/HST_FOC.fits").unwrap();
         let mut buf = Vec::new();
         f.read_to_end(&mut buf).unwrap();
 
         let mut reader = Cursor::new(&buf[..]);
-        Fits::from_reader(&mut reader).unwrap();
-    }
-    #[test]
-    fn test_fits_tile6() {
-        use std::fs::File;
+        let Fits { hdu } = Fits::from_reader(&mut reader).unwrap();
 
-        let mut f = File::open("misc/Npix8.fits").unwrap();
-        let mut buf = Vec::new();
-        f.read_to_end(&mut buf).unwrap();
-
-        let mut reader = Cursor::new(&buf[..]);
-        Fits::from_reader(&mut reader).unwrap();
-    }
-
-    #[test]
-    fn test_fits_tile7() {
-        use std::fs::File;
-
-        let mut f = File::open("misc/allsky_panstarrs.fits").unwrap();
-        let mut buf = Vec::new();
-        f.read_to_end(&mut buf).unwrap();
-
-        let mut reader = Cursor::new(&buf[..]);
-        Fits::from_reader(&mut reader).unwrap();
+        let naxis1 = *hdu.get_header().get_xtension().get_naxisn(1).unwrap();
+        let naxis2 = *hdu.get_header().get_xtension().get_naxisn(2).unwrap();
+        let data = hdu.get_data();
+        match data {
+            &InMemData::F32(data) => {
+                assert_eq!(data.len(), naxis1 * naxis2);
+            },
+            _ => unreachable!(),
+        }
     }
 
     #[test]
@@ -295,5 +246,26 @@ mod tests {
         ];
         let mut reader = Cursor::new(bytes);
         assert!(Fits::from_reader(&mut reader).is_err());
+    }
+
+    /*#[test]
+    fn test_fits_async() {
+        use std::fs::File;
+        use std::io::BufReader;
+
+        let mut f = File::open("misc/Npix282.fits").unwrap();
+        let mut buf = Vec::new();
+        f.read_to_end(&mut buf).unwrap();
+
+        use futures::executor::LocalPool;
+
+        let mut pool = LocalPool::new();
+
+        // run tasks in the pool until `my_app` completes
+        pool.run_until(async {
+            let Fits { data, .. } = Fits::from_byte_slice_async(&buf[..]).await.unwrap();
+
+            matches!(data, super::DataType::F32(_));
+        });
     }*/
 }

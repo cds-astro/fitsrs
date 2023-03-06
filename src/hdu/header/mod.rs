@@ -18,13 +18,10 @@ use crate::hdu::Xtension;
 
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_till},
-    character::complete::digit1,
-    combinator::recognize,
-    sequence::{pair, preceded},
+    bytes::complete::tag,
+    sequence::preceded,
     IResult,
 };
-
 
 pub fn consume_next_card<'a, R: Read>(reader: &mut R, buf: &mut [u8; 80], bytes_read: &mut usize) -> Result<(), Error> {
     *bytes_read += 80;
@@ -98,13 +95,6 @@ pub enum BitpixValue {
     I64 = 64,
     F32 = -32,
     F64 = -64,
-}
-
-pub(crate) fn parse_card_keyword(buf: &[u8]) -> IResult<&[u8], &[u8]> {
-    alt((
-        recognize(pair(tag(b"NAXIS"), digit1)),
-        take_till(|c| c == b' ' || c == b'\t' || c == b'='),
-    ))(buf)
 }
 
 pub(crate) fn parse_card_value(buf: &[u8]) -> IResult<&[u8], Value> {

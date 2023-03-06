@@ -363,3 +363,59 @@ impl TFormBinaryTableType {
         }
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use crate::{hdu::{header::BitpixValue, extension::XtensionHDU}, fits::Fits};
+    use super::{TFormBinaryTableType, BinTable, TFormBinaryTable};
+    use std::{fs::File, io::BufReader};
+
+    fn compare_bintable_ext(filename: &str, bin_table: BinTable) {
+        let f = File::open(filename).unwrap();
+
+        let mut reader = BufReader::new(f);
+        let Fits { hdu } = Fits::from_reader(&mut reader).unwrap();
+
+        // Get the first HDU extension,
+        // this should be the table for these fits examples
+        let hdu = hdu.next()
+            .expect("Should contain an extension HDU")
+            .unwrap();
+        match hdu {
+            XtensionHDU::BinTable(hdu) => {
+                let xtension = hdu.get_header().get_xtension();
+                assert_eq!(xtension.clone(), bin_table);
+            },
+            _ => panic!("Should contain a BinTable table HDU extension")
+        }
+    }
+
+    // These tests have been manually created thanks to this command on the fits files:
+    // strings  samples/fits.gsfc.nasa.gov/HST_HRS.fits | fold -80 | grep "TBCOL" | tr -s ' ' | cut -d ' ' -f 3
+    #[test]
+    fn test_bintable_extension() {
+        compare_bintable_ext("samples/fits.gsfc.nasa.gov/IUE_LWP.fits", BinTable {
+            bitpix: BitpixValue::U8,
+            naxis: 2,
+            naxis1: 11535,
+            naxis2: 1,
+            tfields: 9,
+            tforms: vec![
+                TFormBinaryTableType::A(TFormBinaryTable::new(5)),
+                TFormBinaryTableType::I(TFormBinaryTable::new(1)),
+                TFormBinaryTableType::E(TFormBinaryTable::new(1)),
+                TFormBinaryTableType::E(TFormBinaryTable::new(1)),
+                TFormBinaryTableType::E(TFormBinaryTable::new(640)),
+                TFormBinaryTableType::E(TFormBinaryTable::new(640)),
+                TFormBinaryTableType::E(TFormBinaryTable::new(640)),
+                TFormBinaryTableType::I(TFormBinaryTable::new(640)),
+                TFormBinaryTableType::E(TFormBinaryTable::new(640)),
+            ],
+            // Should be 0
+            pcount: 0,
+            // Should be 1
+            gcount: 1
+        });
+    }
+}
