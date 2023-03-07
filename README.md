@@ -27,25 +27,132 @@ To Do list
 Example
 ----------
 
+For files that can fit in memory
 ```rust
 use std::fs::File;
 
-use std::io::prelude::*;
+let mut f = File::open("samples/fits.gsfc.nasa.gov/EUVE.fits").unwrap();
 
-extern crate fitsrs;
-use fitsrs::{Fits, DataType};
+let mut buf = Vec::new();
+f.read_to_end(&mut buf).unwrap();
+let mut reader = Cursor::new(&buf[..]);
 
-fn main() {
-    let mut f = File::open("../fitsreader/misc/allsky_panstarrs.fits").unwrap();
-    let mut buffer = Vec::new();
-    f.read_to_end(&mut buffer).unwrap();
+let Fits { hdu } = Fits::from_reader(&mut reader).unwrap();
 
-    let Fits { header: _header, data } = Fits::from_byte_slice(&buffer.as_slice()).unwrap();
-    match data {
-        DataType::F32(_v) => {
-            // v
+// Access the HDU extensions
+let mut hdu_ext = hdu.next();
+
+while let Ok(Some(hdu)) = hdu_ext {
+    match &hdu {
+        XtensionHDU::Image(xhdu) => {
+            let xtension = xhdu.get_header().get_xtension();
+
+            let naxis1 = *xtension.get_naxisn(1).unwrap();
+            let naxis2 = *xtension.get_naxisn(2).unwrap();
+
+            let num_pixels = naxis2 * naxis1;
+
+            match xhdu.get_data() {
+                InMemData::U8(mem) => assert_eq!(num_pixels, mem.len()),
+                InMemData::I16(mem) => assert_eq!(num_pixels, mem.len()),
+                InMemData::I32(mem) => assert_eq!(num_pixels, mem.len()),
+                InMemData::I64(mem) => assert_eq!(num_pixels, mem.len()),
+                InMemData::F32(mem) => assert_eq!(num_pixels, mem.len()),
+                InMemData::F64(mem) => assert_eq!(num_pixels, mem.len()),
+            }
         },
-        _ => ()
+        XtensionHDU::BinTable(xhdu) => {
+            let num_bytes = xhdu.get_header()
+                .get_xtension()
+                .get_num_bytes_data_block();
+
+            match xhdu.get_data() {
+                InMemData::U8(mem) => assert_eq!(num_bytes, mem.len()),
+                _ => unreachable!()
+            }
+        },
+        XtensionHDU::AsciiTable(xhdu) => {
+            let num_bytes = xhdu.get_header()
+                .get_xtension()
+                .get_num_bytes_data_block();
+
+            match xhdu.get_data() {
+                InMemData::U8(mem) => assert_eq!(num_bytes, mem.len()),
+                _ => unreachable!()
+            }
+        },
     }
+
+    hdu_ext = hdu.next();
+}
+```
+
+For files that may not be contained into the memory
+```rust
+let f = File::open("samples/fits.gsfc.nasa.gov/EUVE.fits").unwrap();
+let mut reader = BufReader::new(f);
+
+let Fits { hdu } = Fits::from_reader(&mut reader).unwrap();
+
+let mut hdu_ext = hdu.next();
+
+while let Ok(Some(mut hdu)) = hdu_ext {
+    match &mut hdu {
+        XtensionHDU::Image(xhdu) => {
+            let xtension = xhdu.get_header().get_xtension();
+
+            let naxis1 = *xtension.get_naxisn(1).unwrap();
+            let naxis2 = *xtension.get_naxisn(2).unwrap();
+
+            let num_pixels = naxis2 * naxis1;
+
+            match xhdu.get_data_mut() {
+                DataOwned::U8(it) => {
+                    let data = it.collect::<Vec<_>>();
+                    assert_eq!(num_pixels, data.len())
+                },
+                DataOwned::I16(it) => {
+                    let data = it.collect::<Vec<_>>();
+                    assert_eq!(num_pixels, data.len())
+                },
+                DataOwned::I32(it) => {
+                    let data = it.collect::<Vec<_>>();
+                    assert_eq!(num_pixels, data.len())
+                },
+                DataOwned::I64(it) => {
+                    let data = it.collect::<Vec<_>>();
+                    assert_eq!(num_pixels, data.len())
+                },
+                DataOwned::F32(it) => {
+                    let data = it.collect::<Vec<_>>();
+                    assert_eq!(num_pixels, data.len())
+                },
+                DataOwned::F64(it) => {
+                    let data = it.collect::<Vec<_>>();
+                    assert_eq!(num_pixels, data.len())
+                },
+            }
+        },
+        XtensionHDU::BinTable(xhdu) => {
+            let num_bytes = xhdu.get_header()
+                .get_xtension()
+                .get_num_bytes_data_block();
+
+            let it_bytes = xhdu.get_data_mut();
+            let data = it_bytes.collect::<Vec<_>>();
+            assert_eq!(num_bytes, data.len());
+        },
+        XtensionHDU::AsciiTable(xhdu) => {
+            let num_bytes = xhdu.get_header()
+                .get_xtension()
+                .get_num_bytes_data_block();
+
+            let it_bytes = xhdu.get_data_mut();
+            let data = it_bytes.collect::<Vec<_>>();
+            assert_eq!(num_bytes, data.len());
+        },
+    }
+
+    hdu_ext = hdu.next();
 }
 ```
