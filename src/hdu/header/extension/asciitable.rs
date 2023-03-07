@@ -137,12 +137,10 @@ impl Xtension for AsciiTable {
                 // 2. Copy from slice
                 owned_kw.copy_from_slice(&kw_bytes[..8]);
 
-                let tform = dbg!(cards.get(&owned_kw)
+                let tform = cards.get(&owned_kw)
                     .ok_or(Error::StaticError("TFORMX card not found"))?
                     .clone()
-                    .check_for_string()?);
-
-
+                    .check_for_string()?;
 
                 let first_char = &tform[0..1];
                 match first_char {
@@ -161,9 +159,9 @@ impl Xtension for AsciiTable {
                     "F" => {
                         let wd = tform[1..].trim_end().split(".").collect::<Vec<_>>();
 
-                        let w = dbg!(wd[0]
+                        let w = wd[0]
                             .parse::<i32>()
-                            .map_err(|_| Error::StaticError("TFORM E type: w part does not parse into an integer"))?);
+                            .map_err(|_| Error::StaticError("TFORM E type: w part does not parse into an integer"))?;
 
                         let d = wd[1]
                             .parse::<i32>()
@@ -174,28 +172,28 @@ impl Xtension for AsciiTable {
                     "E" => {
                         let wd = tform[1..].trim_end().split(".").collect::<Vec<_>>();
 
-                        let w = dbg!(wd[0]
+                        let w = wd[0]
                             .parse::<i32>()
-                            .map_err(|_| Error::StaticError("TFORM E type: w part does not parse into an integer"))?);
+                            .map_err(|_| Error::StaticError("TFORM E type: w part does not parse into an integer"))?;
 
                         let d = wd[1]
                             .parse::<i32>()
                             .map_err(|_| Error::StaticError("TFORM E type: d part does not parse into an integer"))?;
 
-                        Ok(TFormAsciiTable::EFloatingPointExp { w: dbg!(w as usize), d: d as usize })
+                        Ok(TFormAsciiTable::EFloatingPointExp { w: w as usize, d: d as usize })
                     },
                     "D" => {
                         let wd = tform[1..].trim_end().split(".").collect::<Vec<_>>();
 
-                        let w = dbg!(wd[0]
+                        let w = wd[0]
                             .parse::<i32>()
-                            .map_err(|_| Error::StaticError("TFORM E type: w part does not parse into an integer"))?);
+                            .map_err(|_| Error::StaticError("TFORM E type: w part does not parse into an integer"))?;
 
-                        let d = dbg!(wd[1]
+                        let d = wd[1]
                             .parse::<i32>()
-                            .map_err(|_| Error::StaticError("TFORM E type: d part does not parse into an integer"))?);
+                            .map_err(|_| Error::StaticError("TFORM E type: d part does not parse into an integer"))?;
 
-                        Ok(TFormAsciiTable::DFloatingPointExp { w: dbg!(w) as usize, d: dbg!(d) as usize })
+                        Ok(TFormAsciiTable::DFloatingPointExp { w: w as usize, d: d as usize })
                     },
                     _ => Err(Error::StaticError("Ascii Table TFORM not recognized"))
                 }

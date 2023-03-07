@@ -46,7 +46,7 @@ where
         }
 
         // Data block
-        let xtension = dbg!(header.get_xtension());
+        let xtension = header.get_xtension();
         let data = reader.new_data_block(xtension);
 
         Ok(Self {
@@ -90,11 +90,11 @@ where
         &self.header
     }
 
-    pub fn get_data(&'a self) -> &'a <<R as DataBufRead<'a, X>>::Data as Access<'a>>::Type {
+    pub fn get_data(&self) -> &<<R as DataBufRead<'a, X>>::Data as Access>::Type {
         self.data.get_data()
     }
 
-    pub fn get_data_mut(&'a mut self) -> &'a mut <<R as DataBufRead<'a, X>>::Data as Access<'a>>::Type {
+    pub fn get_data_mut(&mut self) -> &mut <<R as DataBufRead<'a, X>>::Data as Access>::Type {
         self.data.get_data_mut()
     }
 }

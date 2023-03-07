@@ -191,7 +191,7 @@ where
         let remaining_bytes_to_read = num_bytes_to_read - num_bytes_already_read;
         <Self as DataBufRead<'_, Image>>::read_n_bytes_exact(reader, remaining_bytes_to_read)?;
 
-            // All the data block have been read
+        // All the data block have been read
         *num_bytes_read = num_bytes_to_read;
 
         Ok(reader)
@@ -217,7 +217,7 @@ where
     pub data: InMemData<'a>
 }
 
-impl<'a, R> Access<'a> for DataBorrowed<'a, R>
+impl<'a, R> Access for DataBorrowed<'a, R>
 where
     R: Read + Debug + 'a
 {
@@ -231,7 +231,6 @@ where
         &mut self.data
     }
 }
-
 
 #[derive(Serialize)]
 #[derive(Debug, Clone)]
@@ -265,7 +264,7 @@ where
     F64(DataOwnedIt<'a, R, f64>),
 }
 
-impl<'a, R> Access<'a> for DataOwned<'a, R>
+impl<'a, R> Access for DataOwned<'a, R>
 where
     R: BufRead
 {

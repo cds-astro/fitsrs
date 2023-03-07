@@ -11,7 +11,7 @@ pub trait DataBufRead<'a, X>: BufRead
 where
     X: Xtension
 {
-    type Data: Access<'a> + Debug;
+    type Data: Access + Debug;
 
     fn new_data_block(&'a mut self, ctx: &X) -> Self::Data where Self: Sized;
 
@@ -61,10 +61,9 @@ where
     }
 }
 
-pub trait Access<'a> {
+pub trait Access {
     type Type;
 
     fn get_data(&self) -> &Self::Type;
     fn get_data_mut(&mut self) -> &mut Self::Type;
-
 }

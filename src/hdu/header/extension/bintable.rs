@@ -63,15 +63,15 @@ impl Xtension for BinTable {
                 // 2. Copy from slice
                 owned_kw.copy_from_slice(&kw_bytes[..8]);
 
-                let card_value = dbg!(cards.get(&owned_kw))
+                let card_value = cards.get(&owned_kw)
                     .ok_or(Error::StaticError("TFIELDS idx does not map any TFORM!"))?
                     .clone()
                     .check_for_string()?;
 
                 let (field_type_char, repeat_count) = if let Ok((remaining_bytes, Value::Float(repeat_count))) = parse_integer(card_value.as_bytes()) {
-                    dbg!((remaining_bytes[0].as_char(), repeat_count))
+                    (remaining_bytes[0].as_char(), repeat_count)
                 } else {
-                    dbg!((owned_kw[0].as_char(), 1.0))
+                    (owned_kw[0].as_char(), 1.0)
                 };
                 let repeat_count = repeat_count as usize;
 
@@ -112,7 +112,7 @@ impl Xtension for BinTable {
     fn parse<R: Read>(reader: &mut R, num_bytes_read: &mut usize, card_80_bytes_buf: &mut [u8; 80]) -> Result<Self, Error> {
         // BITPIX
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let bitpix = dbg!(parse_bitpix_card(&card_80_bytes_buf)?);
+        let bitpix = parse_bitpix_card(&card_80_bytes_buf)?;
         if bitpix != BitpixValue::U8 {
             return Err(Error::StaticError("Binary Table HDU must have a BITPIX = 8"));
         }
@@ -139,7 +139,7 @@ impl Xtension for BinTable {
 
         // GCOUNT
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let gcount = dbg!(parse_gcount_card(&card_80_bytes_buf)?);
+        let gcount = parse_gcount_card(&card_80_bytes_buf)?;
         if gcount != 1 {
             return Err(Error::StaticError("Ascii Table HDU must have GCOUNT = 1"));
         }

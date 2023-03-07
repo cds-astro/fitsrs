@@ -79,7 +79,7 @@ where
     }
 }
 
-impl<'a, R> Access<'a> for DataOwnedIt<'a, R, u8>
+impl<'a, R> Access for DataOwnedIt<'a, R, u8>
 where
     R: BufRead
 {
