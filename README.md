@@ -5,12 +5,11 @@ Fits reader written in pure Rust using [nom](https://github.com/Geal/nom)
 [![](https://img.shields.io/crates/d/fitsrs.svg)](https://crates.io/crates/fitsrs)
 [![API Documentation on docs.rs](https://docs.rs/fitsrs/badge.svg)](https://docs.rs/fitsrs/)
 
-This crate is under heavy development, it was initiated for reading fits HiPS tile, i.e. generated from hipsgen.
+This crate is under development, it was initiated for reading fits HiPS tile, i.e. generated from hipsgen.
 
 This fits parser only supports image data (not tables), and does not know anything about WCS parsing.
 For WCS parsing, see [wcsrs](https://github.com/cds-astro/wcs-rs).
-This parser also does not parse multiple HDUs, extensions. If a fits file containing multiple extensions is given to fitsrs, 
-then only its first HDU will be parsed and the following ones will be ignored.
+This parser is able to parse extension HDUs. Ascii tables and binary tables are still not properly parsed, only the list bytes of their data block can be retrieved but no interpretation/parsing is done on it.
 
 To Do list
 ----------
@@ -21,7 +20,7 @@ To Do list
 * [X] Async reading (experimental and not tested)
 * [ ] Keep CARD comment
 * [ ] Support data table (each column can have a specific types)
-* [ ] Support of multiple HDU, fits extensions
+* [X] Support of multiple HDU, fits extensions (in progress, only the header is parsed)
 * [ ] WCS parsing, see [wcsrs](https://github.com/cds-astro/wcs-rs)
 
 Example
