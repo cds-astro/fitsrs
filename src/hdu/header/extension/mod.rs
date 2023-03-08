@@ -1,6 +1,6 @@
-pub mod image;
-pub mod bintable;
 pub mod asciitable;
+pub mod bintable;
+pub mod image;
 
 use std::io::Read;
 
@@ -26,7 +26,7 @@ pub fn parse_xtension_card(card: &[u8; 80]) -> Result<XtensionType, Error> {
         b"IMAGE   " | b"IUEIMAGE" => Ok(XtensionType::Image),
         b"TABLE   " => Ok(XtensionType::AsciiTable),
         b"BINTABLE" => Ok(XtensionType::BinTable),
-        _ => Err(Error::NotSupportedXtensionType(xtension))
+        _ => Err(Error::NotSupportedXtensionType(xtension)),
     }
 }
 
@@ -38,12 +38,21 @@ pub trait Xtension {
 
     // Parse the Xtension keywords
     // During the parsing, some checks will be made
-    fn parse<R: Read>(reader: &mut R, num_bytes_read: &mut usize, card_80_bytes_buf: &mut [u8; 80]) -> Result<Self, Error>
-        where Self: Sized;
+    fn parse<R: Read>(
+        reader: &mut R,
+        num_bytes_read: &mut usize,
+        card_80_bytes_buf: &mut [u8; 80],
+    ) -> Result<Self, Error>
+    where
+        Self: Sized;
 
     // Async equivalent method
-    async fn parse_async<R>(reader: &mut R, num_bytes_read: &mut usize, card_80_bytes_buf: &mut [u8; 80]) -> Result<Self, Error>
-        where
-            Self: Sized,
-            R: AsyncRead + std::marker::Unpin + std::marker::Send;
+    async fn parse_async<R>(
+        reader: &mut R,
+        num_bytes_read: &mut usize,
+        card_80_bytes_buf: &mut [u8; 80],
+    ) -> Result<Self, Error>
+    where
+        Self: Sized,
+        R: AsyncRead + std::marker::Unpin + std::marker::Send;
 }

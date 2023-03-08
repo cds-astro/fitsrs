@@ -1,18 +1,16 @@
-use crate::hdu::extension::{XtensionHDU, AsyncXtensionHDU};
-use crate::hdu::primary::{PrimaryHDU, AsyncPrimaryHDU};
+use crate::hdu::extension::{AsyncXtensionHDU, XtensionHDU};
+use crate::hdu::primary::{AsyncPrimaryHDU, PrimaryHDU};
 
-use crate::hdu::header::extension::image::Image;
 use crate::hdu::header::extension::asciitable::AsciiTable;
 use crate::hdu::header::extension::bintable::BinTable;
+use crate::hdu::header::extension::image::Image;
 
-use crate::hdu::data::{DataBufRead, DataAsyncBufRead};
+use crate::hdu::data::{DataAsyncBufRead, DataBufRead};
 
 #[derive(Debug)]
 pub struct Fits<'a, R>
 where
-    R: DataBufRead<'a, Image> +
-       DataBufRead<'a, BinTable> +
-       DataBufRead<'a, AsciiTable>
+    R: DataBufRead<'a, Image> + DataBufRead<'a, BinTable> + DataBufRead<'a, AsciiTable>,
 {
     pub hdu: PrimaryHDU<'a, R>,
 }
@@ -20,9 +18,7 @@ where
 use crate::error::Error;
 impl<'a, R> Fits<'a, R>
 where
-    R: DataBufRead<'a, Image> +
-       DataBufRead<'a, BinTable> +
-       DataBufRead<'a, AsciiTable>
+    R: DataBufRead<'a, Image> + DataBufRead<'a, BinTable> + DataBufRead<'a, AsciiTable>,
 {
     /// Parse a FITS file
     /// # Params
@@ -67,19 +63,19 @@ where
 #[derive(Debug)]
 pub struct AsyncFits<'a, R>
 where
-    R: DataAsyncBufRead<'a, Image> +
-    DataAsyncBufRead<'a, BinTable> +
-    DataAsyncBufRead<'a, AsciiTable>
+    R: DataAsyncBufRead<'a, Image>
+        + DataAsyncBufRead<'a, BinTable>
+        + DataAsyncBufRead<'a, AsciiTable>,
 {
     pub hdu: AsyncPrimaryHDU<'a, R>,
 }
 
 impl<'a, R> AsyncFits<'a, R>
 where
-    R: DataAsyncBufRead<'a, Image> +
-    DataAsyncBufRead<'a, BinTable> +
-    DataAsyncBufRead<'a, AsciiTable> +
-    std::marker::Send
+    R: DataAsyncBufRead<'a, Image>
+        + DataAsyncBufRead<'a, BinTable>
+        + DataAsyncBufRead<'a, AsciiTable>
+        + std::marker::Send,
 {
     /// Parse a FITS file
     /// # Params

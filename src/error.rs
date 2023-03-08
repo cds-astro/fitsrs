@@ -23,9 +23,9 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Error::CardSizeNotRespected(_) => write!(f, "card size not repected"),
-            Error::Utf8Error(e) => write!(f, "{}", e),
+            Error::Utf8Error(e) => write!(f, "{e}"),
             // TODO
-            _ => write!(f, "")
+            _ => write!(f, ""),
         }
     }
 }

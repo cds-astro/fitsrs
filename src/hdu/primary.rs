@@ -1,21 +1,21 @@
-use super::{extension::{XtensionHDU, AsyncXtensionHDU}, data::DataAsyncBufRead, header::consume_next_card_async, AsyncHDU};
+use super::{
+    data::DataAsyncBufRead,
+    extension::{AsyncXtensionHDU, XtensionHDU},
+    header::consume_next_card_async,
+    AsyncHDU,
+};
 use std::fmt::Debug;
 
-use crate::hdu::header::extension::image::Image;
 use crate::hdu::header::extension::asciitable::AsciiTable;
 use crate::hdu::header::extension::bintable::BinTable;
+use crate::hdu::header::extension::image::Image;
 
 use crate::hdu::data::DataBufRead;
 
 use crate::hdu::HDU;
 
 use crate::error::Error;
-pub use crate::hdu::{
-    header::{
-        check_card_keyword,
-        consume_next_card,
-    }
-};
+pub use crate::hdu::header::{check_card_keyword, consume_next_card};
 
 use std::ops::Deref;
 
@@ -24,17 +24,11 @@ use std::ops::Deref;
 #[derive(Debug)]
 pub struct PrimaryHDU<'a, R>(pub HDU<'a, R, Image>)
 where
-    R: DataBufRead<'a, Image> +
-       DataBufRead<'a, BinTable> +
-       DataBufRead<'a, AsciiTable> +
-       'a;
+    R: DataBufRead<'a, Image> + DataBufRead<'a, BinTable> + DataBufRead<'a, AsciiTable> + 'a;
 
 impl<'a, R> PrimaryHDU<'a, R>
 where
-    R: DataBufRead<'a, Image> +
-       DataBufRead<'a, BinTable> +
-       DataBufRead<'a, AsciiTable> +
-       'a
+    R: DataBufRead<'a, Image> + DataBufRead<'a, BinTable> + DataBufRead<'a, AsciiTable> + 'a,
 {
     pub fn new(reader: &'a mut R) -> Result<Self, Error> {
         let mut num_bytes_read = 0;
@@ -54,7 +48,7 @@ where
     }
 
     pub fn next(self) -> Result<Option<XtensionHDU<'a, R>>, Error> {
-        if let Some(reader) = self.consume()? { 
+        if let Some(reader) = self.consume()? {
             let hdu = XtensionHDU::new(reader)?;
             Ok(Some(hdu))
         } else {
@@ -65,10 +59,7 @@ where
 
 impl<'a, R> Deref for PrimaryHDU<'a, R>
 where
-    R: DataBufRead<'a, Image> +
-       DataBufRead<'a, BinTable> +
-       DataBufRead<'a, AsciiTable> +
-       'a
+    R: DataBufRead<'a, Image> + DataBufRead<'a, BinTable> + DataBufRead<'a, AsciiTable> + 'a,
 {
     type Target = HDU<'a, R, Image>;
 
@@ -80,10 +71,7 @@ where
 use std::ops::DerefMut;
 impl<'a, R> DerefMut for PrimaryHDU<'a, R>
 where
-    R: DataBufRead<'a, Image> +
-       DataBufRead<'a, BinTable> +
-       DataBufRead<'a, AsciiTable> +
-       'a
+    R: DataBufRead<'a, Image> + DataBufRead<'a, BinTable> + DataBufRead<'a, AsciiTable> + 'a,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
@@ -93,18 +81,18 @@ where
 #[derive(Debug)]
 pub struct AsyncPrimaryHDU<'a, R>(pub AsyncHDU<'a, R, Image>)
 where
-    R: DataAsyncBufRead<'a, Image> +
-    DataAsyncBufRead<'a, BinTable> +
-    DataAsyncBufRead<'a, AsciiTable> +
-       'a;
+    R: DataAsyncBufRead<'a, Image>
+        + DataAsyncBufRead<'a, BinTable>
+        + DataAsyncBufRead<'a, AsciiTable>
+        + 'a;
 
 impl<'a, R> AsyncPrimaryHDU<'a, R>
 where
-    R: DataAsyncBufRead<'a, Image> +
-       DataAsyncBufRead<'a, BinTable> +
-       DataAsyncBufRead<'a, AsciiTable> +
-       std::marker::Send +
-       'a
+    R: DataAsyncBufRead<'a, Image>
+        + DataAsyncBufRead<'a, BinTable>
+        + DataAsyncBufRead<'a, AsciiTable>
+        + std::marker::Send
+        + 'a,
 {
     pub async fn new(reader: &'a mut R) -> Result<AsyncPrimaryHDU<'a, R>, Error> {
         let mut num_bytes_read = 0;
@@ -114,7 +102,9 @@ where
         consume_next_card_async(reader, &mut card_80_bytes_buf, &mut num_bytes_read).await?;
         let _ = check_card_keyword(&card_80_bytes_buf, b"SIMPLE  ")?;
 
-        let hdu = AsyncHDU::<'a, R, Image>::new(reader, &mut num_bytes_read, &mut card_80_bytes_buf).await?;
+        let hdu =
+            AsyncHDU::<'a, R, Image>::new(reader, &mut num_bytes_read, &mut card_80_bytes_buf)
+                .await?;
 
         Ok(AsyncPrimaryHDU(hdu))
     }
@@ -124,7 +114,7 @@ where
     }
 
     pub async fn next(self) -> Result<Option<AsyncXtensionHDU<'a, R>>, Error> {
-        if let Some(reader) = self.consume().await? { 
+        if let Some(reader) = self.consume().await? {
             let hdu = AsyncXtensionHDU::new(reader).await?;
             Ok(Some(hdu))
         } else {
@@ -135,10 +125,10 @@ where
 
 impl<'a, R> Deref for AsyncPrimaryHDU<'a, R>
 where
-    R:  DataAsyncBufRead<'a, Image> +
-    DataAsyncBufRead<'a, BinTable> +
-    DataAsyncBufRead<'a, AsciiTable> +
-        'a
+    R: DataAsyncBufRead<'a, Image>
+        + DataAsyncBufRead<'a, BinTable>
+        + DataAsyncBufRead<'a, AsciiTable>
+        + 'a,
 {
     type Target = AsyncHDU<'a, R, Image>;
 
@@ -149,10 +139,10 @@ where
 
 impl<'a, R> DerefMut for AsyncPrimaryHDU<'a, R>
 where
-    R:  DataAsyncBufRead<'a, Image> +
-    DataAsyncBufRead<'a, BinTable> +
-    DataAsyncBufRead<'a, AsciiTable> +
-        'a
+    R: DataAsyncBufRead<'a, Image>
+        + DataAsyncBufRead<'a, BinTable>
+        + DataAsyncBufRead<'a, AsciiTable>
+        + 'a,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0

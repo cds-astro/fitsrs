@@ -12,8 +12,7 @@ use crate::error::Error;
 pub type Keyword = [u8; 8];
 
 use serde::Serialize;
-#[derive(Debug, PartialEq)]
-#[derive(Serialize)]
+#[derive(Debug, PartialEq, Serialize)]
 pub struct Card {
     pub kw: Keyword,
     pub v: Value,
@@ -26,7 +25,9 @@ impl Card {
 }
 
 pub trait CardValue {
-    fn parse(value: Value) -> Result<Self, Error> where Self: Sized;
+    fn parse(value: Value) -> Result<Self, Error>
+    where
+        Self: Sized;
 }
 
 impl CardValue for f64 {
@@ -52,8 +53,7 @@ impl CardValue for bool {
 
 /// Enum structure corresponding to all the possible type
 /// a card value can have that are supported by fitsrs
-#[derive(Debug, PartialEq, Clone)]
-#[derive(Serialize)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 pub enum Value {
     Integer(i64),
     Logical(bool),
@@ -65,34 +65,26 @@ pub enum Value {
 impl Value {
     pub fn check_for_integer(self) -> Result<i64, Error> {
         match self {
-            Value::Integer(num) => {
-                Ok(num)
-            }
-            _ => Err(Error::ValueBadParsing)
+            Value::Integer(num) => Ok(num),
+            _ => Err(Error::ValueBadParsing),
         }
     }
     pub fn check_for_boolean(self) -> Result<bool, Error> {
         match self {
-            Value::Logical(logical) => {
-                Ok(logical)
-            }
-            _ => Err(Error::ValueBadParsing)
+            Value::Logical(logical) => Ok(logical),
+            _ => Err(Error::ValueBadParsing),
         }
     }
     pub fn check_for_string(self) -> Result<String, Error> {
         match self {
-            Value::String(s) => {
-                Ok(s)
-            }
-            _ => Err(Error::ValueBadParsing)
+            Value::String(s) => Ok(s),
+            _ => Err(Error::ValueBadParsing),
         }
     }
     pub fn check_for_float(self) -> Result<f64, Error> {
         match self {
-            Value::Float(f) => {
-                Ok(f)
-            }
-            _ => Err(Error::ValueBadParsing)
+            Value::Float(f) => Ok(f),
+            _ => Err(Error::ValueBadParsing),
         }
     }
 }
@@ -132,18 +124,11 @@ pub(crate) fn parse_logical(buf: &[u8]) -> IResult<&[u8], Value> {
 }
 
 pub(crate) fn parse_float(buf: &[u8]) -> IResult<&[u8], Value> {
-    preceded(
-        space0,
-        map(float, |val| Value::Float(val as f64)),
-    )(buf)
+    preceded(space0, map(float, |val| Value::Float(val as f64)))(buf)
 }
 
 pub(crate) fn parse_integer(buf: &[u8]) -> IResult<&[u8], Value> {
-    preceded(
-        space0,
-        map(u32, |val| Value::Float(val as f64)),
-
-    )(buf)
+    preceded(space0, map(u32, |val| Value::Float(val as f64)))(buf)
 }
 
 #[cfg(test)]

@@ -2,34 +2,40 @@ pub mod asciitable;
 pub mod bintable;
 pub mod image;
 
+use crate::error::Error;
+use crate::hdu::Xtension;
 use std::fmt::Debug;
 use std::io::BufRead;
-use crate::hdu::Xtension;
-use crate::error::Error;
 
 pub trait DataBufRead<'a, X>: BufRead
 where
-    X: Xtension
+    X: Xtension,
 {
     type Data: Access + Debug;
 
-    fn new_data_block(&'a mut self, ctx: &X) -> Self::Data where Self: Sized;
+    fn new_data_block(&'a mut self, ctx: &X) -> Self::Data
+    where
+        Self: Sized;
 
     /// Consume the data to return back the reader at the position
     /// of the end of the data block
-    /// 
+    ///
     /// If the data has not been fully read, we skip the remaining data
     /// bytes to go to the end of the data block
-    /// 
+    ///
     /// # Params
     /// * `data` - a reader created i.e. from the opening of a file
-    fn consume_data_block(data: Self::Data, num_bytes_read: &mut usize) -> Result<&'a mut Self, Error>;
+    fn consume_data_block(
+        data: Self::Data,
+        num_bytes_read: &mut usize,
+    ) -> Result<&'a mut Self, Error>;
 
     fn read_n_bytes_exact(&mut self, num_bytes_to_read: usize) -> Result<(), Error> {
         let mut num_bytes_read = 0;
 
-        let mut buf = self.fill_buf()
-            .map_err(|_| Error::StaticError("The underlying reader was read, but returned an error."))?;
+        let mut buf = self.fill_buf().map_err(|_| {
+            Error::StaticError("The underlying reader was read, but returned an error.")
+        })?;
         let mut size_buf = buf.len();
         let mut is_eof = buf.is_empty();
 
@@ -37,8 +43,9 @@ where
             self.consume(size_buf);
             num_bytes_read += size_buf;
 
-            buf = self.fill_buf()
-                .map_err(|_| Error::StaticError("The underlying reader was read, but returned an error."))?;
+            buf = self.fill_buf().map_err(|_| {
+                Error::StaticError("The underlying reader was read, but returned an error.")
+            })?;
             size_buf = buf.len();
 
             is_eof = buf.is_empty();
@@ -61,35 +68,41 @@ where
     }
 }
 
+use async_trait::async_trait;
 use futures::io::AsyncBufRead;
 use futures::AsyncBufReadExt;
-use async_trait::async_trait;
 #[async_trait]
 pub trait DataAsyncBufRead<'a, X>: AsyncBufRead + Unpin
 where
-    X: Xtension
+    X: Xtension,
 {
     type Data: Access + Debug;
 
-    fn new_data_block(&'a mut self, ctx: &X) -> Self::Data where Self: Sized;
+    fn new_data_block(&'a mut self, ctx: &X) -> Self::Data
+    where
+        Self: Sized;
 
     /// Consume the data to return back the reader at the position
     /// of the end of the data block
-    /// 
+    ///
     /// If the data has not been fully read, we skip the remaining data
     /// bytes to go to the end of the data block
-    /// 
+    ///
     /// # Params
     /// * `data` - a reader created i.e. from the opening of a file
-    async fn consume_data_block(data: Self::Data, num_bytes_read: &mut usize) -> Result<&'a mut Self, Error>
+    async fn consume_data_block(
+        data: Self::Data,
+        num_bytes_read: &mut usize,
+    ) -> Result<&'a mut Self, Error>
     where
         'a: 'async_trait;
 
     async fn read_n_bytes_exact(&mut self, num_bytes_to_read: usize) -> Result<(), Error> {
         let mut num_bytes_read = 0;
 
-        let mut buf = self.fill_buf().await
-            .map_err(|_| Error::StaticError("The underlying reader was read, but returned an error."))?;
+        let mut buf = self.fill_buf().await.map_err(|_| {
+            Error::StaticError("The underlying reader was read, but returned an error.")
+        })?;
         let mut size_buf = buf.len();
         let mut is_eof = buf.is_empty();
 
@@ -97,8 +110,9 @@ where
             self.consume_unpin(size_buf);
             num_bytes_read += size_buf;
 
-            buf = self.fill_buf().await
-                .map_err(|_| Error::StaticError("The underlying reader was read, but returned an error."))?;
+            buf = self.fill_buf().await.map_err(|_| {
+                Error::StaticError("The underlying reader was read, but returned an error.")
+            })?;
             size_buf = buf.len();
 
             is_eof = buf.is_empty();
