@@ -2,11 +2,14 @@ use std::io::Read;
 use std::fmt::Debug;
 use std::collections::HashMap;
 
+use async_trait::async_trait;
+use futures::AsyncRead;
 use nom::AsChar;
 use serde::Serialize;
 
 use crate::card::parse_integer;
 use crate::hdu::Xtension;
+use crate::hdu::header::consume_next_card_async;
 use crate::hdu::primary::consume_next_card;
 use crate::error::Error;
 use crate::hdu::primary::check_card_keyword;
@@ -45,6 +48,7 @@ pub struct BinTable {
     gcount: usize,
 }
 
+#[async_trait]
 impl Xtension for BinTable {
     fn get_num_bytes_data_block(&self) -> usize {
         self.naxis1 * self.naxis2
@@ -146,6 +150,65 @@ impl Xtension for BinTable {
 
         // FIELDS
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
+        let tfields = check_card_keyword(&card_80_bytes_buf, b"TFIELDS ")?
+            .check_for_float()? as usize;
+
+        let tforms = vec![];
+
+        Ok(BinTable {
+            bitpix,
+            naxis,
+            naxis1,
+            naxis2,
+            tfields,
+            tforms,
+            pcount,
+            gcount,
+        })
+    }
+
+    async fn parse_async<R>(reader: &mut R, num_bytes_read: &mut usize, card_80_bytes_buf: &mut [u8; 80]) -> Result<Self, Error>
+    where
+        R: AsyncRead + std::marker::Unpin + std::marker::Send,
+        Self: Sized
+    {
+        // BITPIX
+        consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
+        let bitpix = parse_bitpix_card(&card_80_bytes_buf)?;
+        if bitpix != BitpixValue::U8 {
+            return Err(Error::StaticError("Binary Table HDU must have a BITPIX = 8"));
+        }
+
+        // NAXIS
+        consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
+        let naxis = parse_naxis_card(&card_80_bytes_buf)?;
+        if naxis != 2 {
+            return Err(Error::StaticError("Binary Table HDU must have NAXIS = 2"));
+        }
+
+        // NAXIS1
+        consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
+        let naxis1 = check_card_keyword(&card_80_bytes_buf, NAXIS_KW[0])?
+            .check_for_float()? as usize;
+
+        // NAXIS2
+        consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
+        let naxis2 = check_card_keyword(&card_80_bytes_buf, NAXIS_KW[1])?
+            .check_for_float()? as usize;
+
+        // PCOUNT
+        consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
+        let pcount = parse_pcount_card(&card_80_bytes_buf)?;
+
+        // GCOUNT
+        consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
+        let gcount = parse_gcount_card(&card_80_bytes_buf)?;
+        if gcount != 1 {
+            return Err(Error::StaticError("Ascii Table HDU must have GCOUNT = 1"));
+        }
+
+        // FIELDS
+        consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
         let tfields = check_card_keyword(&card_80_bytes_buf, b"TFIELDS ")?
             .check_for_float()? as usize;
 

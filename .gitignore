@@ -6,3 +6,5 @@ fitswasm/Cargo.lock
 fitswasm/target
 fitswasm/pkg
 .DS_Store
+
+samples/misc

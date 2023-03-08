@@ -4,6 +4,9 @@ pub mod asciitable;
 
 use std::io::Read;
 
+use async_trait::async_trait;
+use futures::AsyncRead;
+
 use crate::card::Value;
 use crate::error::Error;
 use crate::hdu::primary::check_card_keyword;
@@ -27,6 +30,7 @@ pub fn parse_xtension_card(card: &[u8; 80]) -> Result<XtensionType, Error> {
     }
 }
 
+#[async_trait]
 pub trait Xtension {
     fn get_num_bytes_data_block(&self) -> usize;
 
@@ -36,4 +40,10 @@ pub trait Xtension {
     // During the parsing, some checks will be made
     fn parse<R: Read>(reader: &mut R, num_bytes_read: &mut usize, card_80_bytes_buf: &mut [u8; 80]) -> Result<Self, Error>
         where Self: Sized;
+
+    // Async equivalent method
+    async fn parse_async<R>(reader: &mut R, num_bytes_read: &mut usize, card_80_bytes_buf: &mut [u8; 80]) -> Result<Self, Error>
+        where
+            Self: Sized,
+            R: AsyncRead + std::marker::Unpin + std::marker::Send;
 }

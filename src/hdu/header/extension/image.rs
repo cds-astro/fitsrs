@@ -1,9 +1,12 @@
 use std::io::Read;
 use std::collections::HashMap;
 
+use async_trait::async_trait;
+use futures::AsyncRead;
 use serde::Serialize;
 
 use crate::hdu::Xtension;
+use crate::hdu::header::consume_next_card_async;
 use crate::hdu::primary::consume_next_card;
 use crate::error::Error;
 use crate::hdu::primary::check_card_keyword;
@@ -43,6 +46,7 @@ impl Image {
     }
 }
 
+#[async_trait]
 impl Xtension for Image {
     fn get_num_bytes_data_block(&self) -> usize {
         let num_pixels = if self.naxisn.is_empty() {
@@ -80,6 +84,35 @@ impl Xtension for Image {
                     .map(|size| size as usize)
             })
             .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(Image {
+            bitpix,
+            naxis,
+            naxisn
+        })
+    }
+
+    async fn parse_async<R>(reader: &mut R, num_bytes_read: &mut usize, card_80_bytes_buf: &mut [u8; 80]) -> Result<Self, Error>
+    where
+        R: AsyncRead + std::marker::Unpin + std::marker::Send,
+        Self: Sized
+    {
+        // BITPIX
+        consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
+        let bitpix = parse_bitpix_card(&card_80_bytes_buf)?;
+        // NAXIS
+        consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
+        let naxis = parse_naxis_card(&card_80_bytes_buf)?;
+        // The size of each NAXIS
+        let mut naxisn = vec![];
+        for idx_axis in 0..naxis {
+            consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
+            let naxis_len = check_card_keyword(&card_80_bytes_buf, NAXIS_KW[idx_axis])?
+                .check_for_float()
+                .map(|size| size as usize)?;
+
+            naxisn.push(naxis_len);
+        }
 
         Ok(Image {
             bitpix,

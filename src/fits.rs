@@ -1,11 +1,11 @@
-use crate::hdu::extension::XtensionHDU;
-use crate::hdu::primary::PrimaryHDU;
+use crate::hdu::extension::{XtensionHDU, AsyncXtensionHDU};
+use crate::hdu::primary::{PrimaryHDU, AsyncPrimaryHDU};
 
 use crate::hdu::header::extension::image::Image;
 use crate::hdu::header::extension::asciitable::AsciiTable;
 use crate::hdu::header::extension::bintable::BinTable;
 
-use crate::hdu::data::DataBufRead;
+use crate::hdu::data::{DataBufRead, DataAsyncBufRead};
 
 #[derive(Debug)]
 pub struct Fits<'a, R>
@@ -64,38 +64,59 @@ where
     }
 }
 
-/* 
-use crate::hdu::{AsyncDataRead, AsyncHDU};
-
 #[derive(Debug)]
 pub struct AsyncFits<'a, R>
 where
-    R: AsyncDataRead<'a>
+    R: DataAsyncBufRead<'a, Image> +
+    DataAsyncBufRead<'a, BinTable> +
+    DataAsyncBufRead<'a, AsciiTable>
 {
-    pub hdu: Vec<AsyncHDU<'a, R>>,
+    pub hdu: AsyncPrimaryHDU<'a, R>,
 }
 
 impl<'a, R> AsyncFits<'a, R>
 where
-    R: AsyncDataRead<'a> + std::marker::Unpin
+    R: DataAsyncBufRead<'a, Image> +
+    DataAsyncBufRead<'a, BinTable> +
+    DataAsyncBufRead<'a, AsciiTable> +
+    std::marker::Send
 {
     /// Parse a FITS file
     /// # Params
-    /// * `reader` - a async reader created i.e. from the opening of a file
+    /// * `reader` - a reader created i.e. from the opening of a file
     pub async fn from_reader(reader: &'a mut R) -> Result<AsyncFits<'a, R>, Error> {
-        let hdu = AsyncHDU::new(reader).await?;
+        let hdu = AsyncPrimaryHDU::new(reader).await?;
 
-        Ok(Self { hdu: vec![hdu] })
+        Ok(Self { hdu })
     }
 
-    /// Returns the header of the first HDU
-    pub fn get_header(&self) -> &PrimaryHeader {
-        &self.hdu[0].header
+    pub fn get_primary_hdu(self) -> AsyncPrimaryHDU<'a, R> {
+        self.hdu
     }
 
-    /// Returns the data of the first HDU
-    pub fn get_data(&self) -> &R::Data {
-        &self.hdu[0].data
+    pub async fn get_xtension_hdu(self, mut idx: usize) -> Result<AsyncXtensionHDU<'a, R>, Error> {
+        let mut hdu_ext = self.hdu.next().await?;
+        if idx == 0 {
+            if let Some(hdu) = hdu_ext {
+                Ok(hdu)
+            } else {
+                Err(Error::StaticError("No more ext HDU found"))
+            }
+        } else {
+            while let Some(hdu) = hdu_ext {
+                hdu_ext = hdu.next().await?;
+                idx -= 1;
+
+                if idx == 0 {
+                    break;
+                }
+            }
+
+            if let Some(hdu) = hdu_ext {
+                Ok(hdu)
+            } else {
+                Err(Error::StaticError("No more ext HDU found"))
+            }
+        }
     }
 }
-*/

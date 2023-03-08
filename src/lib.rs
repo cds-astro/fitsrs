@@ -18,18 +18,17 @@
 //! let naxis1 = *xtension.get_naxisn(1).unwrap();
 //! let naxis2 = *xtension.get_naxisn(2).unwrap();
 //! 
-//! let data = match hdu.get_data_mut() {
-//!     DataOwned::F32(it) => {
-//!         it.collect::<Vec<_>>()
-//!     },
-//!    _ => unreachable!(),
-//! };
-//! 
-//! assert_eq!(data.len(), naxis1 * naxis2);
+//! if let DataOwned::F32(it) = hdu.get_data_mut() {
+//!     let data = it.collect::<Vec<_>>();
+//!     assert_eq!(data.len(), naxis1 * naxis2);
+//! } else {
+//!     panic!("expected data block containing f32");
+//! }
 //! ```
 
 extern crate nom;
 extern crate byteorder;
+extern crate async_trait;
 
 pub mod hdu;
 pub mod fits;
@@ -38,9 +37,10 @@ pub mod error;
 
 #[cfg(test)]
 mod tests {
-    use crate::fits::Fits;
+    use crate::fits::{Fits, AsyncFits};
+    use crate::hdu::extension::AsyncXtensionHDU;
     use crate::hdu::header::BitpixValue;
-    use crate::hdu::data::image::{InMemData, DataOwned, DataOwnedIt};
+    use crate::hdu::data::image::{InMemData, DataOwned, AsyncDataOwned};
     use crate::hdu::{extension::XtensionHDU};
     use crate::hdu::header::extension::Xtension;
 
@@ -48,6 +48,7 @@ mod tests {
     use std::io::Cursor;
     use std::fs::File;
 
+    use futures::StreamExt;
     use test_case::test_case;
 
     #[test]
@@ -175,6 +176,12 @@ mod tests {
     #[test_case("samples/fits.gsfc.nasa.gov/HST_WFPC_II.fits")]
     #[test_case("samples/fits.gsfc.nasa.gov/HST_WFPC_II_bis.fits")]
     #[test_case("samples/fits.gsfc.nasa.gov/IUE_LWP.fits")]
+    #[test_case("samples/misc/bonn.fits")]
+    #[test_case("samples/misc/P122_49.fits")]
+    #[test_case("samples/misc/skv1678175163788.fits")]
+    //#[test_case("samples/misc/drao.fits")] png file
+    //#[test_case("samples/misc/ji0590044.fits")] gzip compressed data
+    //#[test_case("samples/misc/AKAI013000932.fits")] gzip compressed data
     fn test_fits_opening(filename: &str) {
         use std::fs::File;
 
@@ -183,7 +190,8 @@ mod tests {
         f.read_to_end(&mut buf).unwrap();
 
         let mut reader = Cursor::new(&buf[..]);
-        assert!(Fits::from_reader(&mut reader).is_ok());
+        let fits = Fits::from_reader(&mut reader);
+        assert!(fits.is_ok());
     }
 
     #[test]
@@ -246,8 +254,8 @@ mod tests {
 
         let mut hdu_ext = hdu.next();
 
-        while let Ok(Some(hdu)) = hdu_ext {
-            match &hdu {
+        while let Ok(Some(xhdu)) = hdu_ext {
+            match &xhdu {
                 XtensionHDU::Image(xhdu) => {
                     let xtension = xhdu.get_header().get_xtension();
 
@@ -287,7 +295,7 @@ mod tests {
                 },
             }
 
-            hdu_ext = hdu.next();
+            hdu_ext = xhdu.next();
         }
     }
 
@@ -302,8 +310,8 @@ mod tests {
 
         let mut hdu_ext = hdu.next();
 
-        while let Ok(Some(mut hdu)) = hdu_ext {
-            match &mut hdu {
+        while let Ok(Some(mut xhdu)) = hdu_ext {
+            match &mut xhdu {
                 XtensionHDU::Image(xhdu) => {
                     let xtension = xhdu.get_header().get_xtension();
 
@@ -359,7 +367,7 @@ mod tests {
                 },
             }
 
-            hdu_ext = hdu.next();
+            hdu_ext = xhdu.next();
         }
     }
 
@@ -384,24 +392,81 @@ mod tests {
         assert!(Fits::from_reader(&mut reader).is_err());
     }
 
-    /*#[test]
-    fn test_fits_async() {
+    #[tokio::test]
+    async fn test_fits_images_data_block_bufreader_async() {
         use std::fs::File;
-        use std::io::BufReader;
 
-        let mut f = File::open("misc/Npix282.fits").unwrap();
+        // Put it all in memory first (this is for the exemple)
+        // It is not good to do so for performance reasons
+        // Better prefer to pipe to a ReadableStream instead
+        let mut f = File::open("samples/fits.gsfc.nasa.gov/EUVE.fits").unwrap();
         let mut buf = Vec::new();
         f.read_to_end(&mut buf).unwrap();
 
-        use futures::executor::LocalPool;
+        let mut reader = futures::io::BufReader::new(&buf[..]);
 
-        let mut pool = LocalPool::new();
+        let AsyncFits { hdu } = AsyncFits::from_reader(&mut reader).await.unwrap();
 
-        // run tasks in the pool until `my_app` completes
-        pool.run_until(async {
-            let Fits { data, .. } = Fits::from_byte_slice_async(&buf[..]).await.unwrap();
+        let mut hdu_ext = hdu.next().await;
 
-            matches!(data, super::DataType::F32(_));
-        });
-    }*/
+        while let Ok(Some(mut xhdu)) = hdu_ext {
+            match &mut xhdu {
+                AsyncXtensionHDU::Image(xhdu) => {
+                    let xtension = xhdu.get_header().get_xtension();
+
+                    let naxis1 = *xtension.get_naxisn(1).unwrap();
+                    let naxis2 = *xtension.get_naxisn(2).unwrap();
+
+                    let num_pixels = naxis2 * naxis1;
+
+                    match xhdu.get_data_mut() {
+                        AsyncDataOwned::U8(stream) => {
+                            let data = stream.collect::<Vec<_>>().await;
+                            assert_eq!(num_pixels, data.len())
+                        },
+                        AsyncDataOwned::I16(stream) => {
+                            let data = stream.collect::<Vec<_>>().await;
+                            assert_eq!(num_pixels, data.len())
+                        },
+                        AsyncDataOwned::I32(stream) => {
+                            let data = stream.collect::<Vec<_>>().await;
+                            assert_eq!(num_pixels, data.len())
+                        },
+                        AsyncDataOwned::I64(stream) => {
+                            let data = stream.collect::<Vec<_>>().await;
+                            assert_eq!(num_pixels, data.len())
+                        },
+                        AsyncDataOwned::F32(stream) => {
+                            let data = stream.collect::<Vec<_>>().await;
+                            assert_eq!(num_pixels, data.len())
+                        },
+                        AsyncDataOwned::F64(stream) => {
+                            let data = stream.collect::<Vec<_>>().await;
+                            assert_eq!(num_pixels, data.len())
+                        },
+                    }
+                },
+                AsyncXtensionHDU::BinTable(xhdu) => {
+                    let num_bytes = xhdu.get_header()
+                        .get_xtension()
+                        .get_num_bytes_data_block();
+
+                    let it_bytes = xhdu.get_data_mut();
+                    let data = it_bytes.collect::<Vec<_>>().await;
+                    assert_eq!(num_bytes, data.len());
+                },
+                AsyncXtensionHDU::AsciiTable(xhdu) => {
+                    let num_bytes = xhdu.get_header()
+                        .get_xtension()
+                        .get_num_bytes_data_block();
+
+                    let it_bytes = xhdu.get_data_mut();
+                    let data = it_bytes.collect::<Vec<_>>().await;
+                    assert_eq!(num_bytes, data.len());
+                },
+            }
+
+            hdu_ext = xhdu.next().await;
+        }
+    }
 }

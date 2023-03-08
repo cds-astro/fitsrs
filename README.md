@@ -96,8 +96,8 @@ let Fits { hdu } = Fits::from_reader(&mut reader).unwrap();
 
 let mut hdu_ext = hdu.next();
 
-while let Ok(Some(mut hdu)) = hdu_ext {
-    match &mut hdu {
+while let Ok(Some(mut xhdu)) = hdu_ext {
+    match &mut xhdu {
         XtensionHDU::Image(xhdu) => {
             let xtension = xhdu.get_header().get_xtension();
 
@@ -153,6 +153,75 @@ while let Ok(Some(mut hdu)) = hdu_ext {
         },
     }
 
-    hdu_ext = hdu.next();
+    hdu_ext = xhdu.next();
+}
+```
+
+For async input readers:
+
+```rust
+// reader needs to implement futures::io::AsyncRead
+let AsyncFits { hdu } = AsyncFits::from_reader(&mut reader).await.unwrap();
+
+let mut hdu_ext = hdu.next().await;
+
+while let Ok(Some(mut xhdu)) = hdu_ext {
+    match &mut xhdu {
+        AsyncXtensionHDU::Image(xhdu) => {
+            let xtension = xhdu.get_header().get_xtension();
+
+            let naxis1 = *xtension.get_naxisn(1).unwrap();
+            let naxis2 = *xtension.get_naxisn(2).unwrap();
+
+            let num_pixels = naxis2 * naxis1;
+
+            match xhdu.get_data_mut() {
+                AsyncDataOwned::U8(it) => {
+                    let data = it.collect::<Vec<_>>().await;
+                    assert_eq!(num_pixels, data.len())
+                },
+                AsyncDataOwned::I16(it) => {
+                    let data = it.collect::<Vec<_>>().await;
+                    assert_eq!(num_pixels, data.len())
+                },
+                AsyncDataOwned::I32(it) => {
+                    let data = it.collect::<Vec<_>>().await;
+                    assert_eq!(num_pixels, data.len())
+                },
+                AsyncDataOwned::I64(it) => {
+                    let data = it.collect::<Vec<_>>().await;
+                    assert_eq!(num_pixels, data.len())
+                },
+                AsyncDataOwned::F32(it) => {
+                    let data = it.collect::<Vec<_>>().await;
+                    assert_eq!(num_pixels, data.len())
+                },
+                AsyncDataOwned::F64(it) => {
+                    let data = it.collect::<Vec<_>>().await;
+                    assert_eq!(num_pixels, data.len())
+                },
+            }
+        },
+        AsyncXtensionHDU::BinTable(xhdu) => {
+            let num_bytes = xhdu.get_header()
+                .get_xtension()
+                .get_num_bytes_data_block();
+
+            let it_bytes = xhdu.get_data_mut();
+            let data = it_bytes.collect::<Vec<_>>().await;
+            assert_eq!(num_bytes, data.len());
+        },
+        AsyncXtensionHDU::AsciiTable(xhdu) => {
+            let num_bytes = xhdu.get_header()
+                .get_xtension()
+                .get_num_bytes_data_block();
+
+            let it_bytes = xhdu.get_data_mut();
+            let data = it_bytes.collect::<Vec<_>>().await;
+            assert_eq!(num_bytes, data.len());
+        },
+    }
+
+    hdu_ext = xhdu.next().await;
 }
 ```

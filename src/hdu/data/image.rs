@@ -1,10 +1,13 @@
 use std::io::{BufRead, Cursor, BufReader, Read};
+use async_trait::async_trait;
 use byteorder::{BigEndian, ReadBytesExt, ByteOrder};
+use futures::AsyncRead;
 use crate::error::Error;
 use serde::Serialize;
 
 use crate::hdu::header::BitpixValue;
 pub use super::Access;
+use super::DataAsyncBufRead;
 
 use std::fmt::Debug;
 
@@ -412,42 +415,51 @@ where
         }
     }
 }
-/*
-use byteorder::ByteOrder;
 
-use futures::AsyncReadExt;
-use futures::StreamExt;
-use serde::Serialize;
-
-use crate::hdu::header::BitpixValue;
-
-use std::fmt::Debug;
-use futures::AsyncBufRead;
-
-/// Abstraction for reading a data block
-pub trait AsyncDataRead<'a>: AsyncBufRead {
-    type Data: Debug;
-
-    unsafe fn read_data_block(&'a mut self, bitpix: BitpixValue, num_pixels: usize) -> Self::Data where Self: Sized;
-}
-
-impl<'a, R> AsyncDataRead<'a> for futures::io::BufReader<R>
+#[async_trait]
+impl<'a, R> DataAsyncBufRead<'a, Image> for futures::io::BufReader<R>
 where
-    R: futures::AsyncRead + std::marker::Unpin + Debug + 'a
+    R: AsyncRead + Debug + 'a + std::marker::Unpin + std::marker::Send,
 {
-    type Data = DataOwned<'a, Self>;
+    type Data = AsyncDataOwned<'a, Self>;
 
-    unsafe fn read_data_block(&'a mut self, bitpix: BitpixValue, num_pixels: usize) -> Self::Data {
+    fn new_data_block(&'a mut self, ctx: &Image) -> Self::Data {
+        let num_bytes_to_read = ctx.get_num_bytes_data_block();
+        let bitpix = ctx.get_bitpix();
         match bitpix {
-            BitpixValue::U8 => DataOwned::U8(DataOwnedSt::new(self, num_pixels)),
-            BitpixValue::I16 => DataOwned::I16(DataOwnedSt::new(self, num_pixels)),
-            BitpixValue::I32 => DataOwned::I32(DataOwnedSt::new(self, num_pixels)),
-            BitpixValue::I64 => DataOwned::I64(DataOwnedSt::new(self, num_pixels)),
-            BitpixValue::F32 => DataOwned::F32(DataOwnedSt::new(self, num_pixels)),
-            BitpixValue::F64 => DataOwned::F64(DataOwnedSt::new(self, num_pixels)),
+            BitpixValue::U8 => AsyncDataOwned::U8(DataOwnedSt::new(self, num_bytes_to_read)),
+            BitpixValue::I16 => AsyncDataOwned::I16(DataOwnedSt::new(self, num_bytes_to_read)),
+            BitpixValue::I32 => AsyncDataOwned::I32(DataOwnedSt::new(self, num_bytes_to_read)),
+            BitpixValue::I64 => AsyncDataOwned::I64(DataOwnedSt::new(self, num_bytes_to_read)),
+            BitpixValue::F32 => AsyncDataOwned::F32(DataOwnedSt::new(self, num_bytes_to_read)),
+            BitpixValue::F64 => AsyncDataOwned::F64(DataOwnedSt::new(self, num_bytes_to_read)),
         }
     }
+
+    async fn consume_data_block(data: Self::Data, num_bytes_read: &mut usize) -> Result<&'a mut Self, Error>
+    where
+        'a: 'async_trait
+    {
+        let (reader, num_bytes_to_read, num_bytes_already_read) = match data {
+            AsyncDataOwned::U8(DataOwnedSt { reader, num_bytes_to_read, num_bytes_read, .. }) => (reader, num_bytes_to_read, num_bytes_read),
+            AsyncDataOwned::I16(DataOwnedSt { reader, num_bytes_to_read, num_bytes_read, .. }) => (reader, num_bytes_to_read, num_bytes_read),
+            AsyncDataOwned::I32(DataOwnedSt { reader, num_bytes_to_read, num_bytes_read, .. }) => (reader, num_bytes_to_read, num_bytes_read),
+            AsyncDataOwned::I64(DataOwnedSt { reader, num_bytes_to_read, num_bytes_read, .. }) => (reader, num_bytes_to_read, num_bytes_read),
+            AsyncDataOwned::F32(DataOwnedSt { reader, num_bytes_to_read, num_bytes_read, .. }) => (reader, num_bytes_to_read, num_bytes_read),
+            AsyncDataOwned::F64(DataOwnedSt { reader, num_bytes_to_read, num_bytes_read, .. }) => (reader, num_bytes_to_read, num_bytes_read),
+        };
+
+        let remaining_bytes_to_read = num_bytes_to_read - num_bytes_already_read;
+        <Self as DataAsyncBufRead<'_, Image>>::read_n_bytes_exact(reader, remaining_bytes_to_read).await?;
+
+        // All the data block have been read
+        *num_bytes_read = num_bytes_to_read;
+
+        Ok(reader)
+    }
 }
+
+use futures::{AsyncReadExt, AsyncBufRead};
 
 /// An async iterator on the data array
 /// This is an enum whose content depends on the
@@ -458,9 +470,9 @@ where
 /// a file may not fit in memory
 #[derive(Serialize)]
 #[derive(Debug)]
-pub enum DataOwned<'a, R>
+pub enum AsyncDataOwned<'a, R>
 where
-    R: AsyncBufRead
+    R: AsyncBufRead + std::marker::Unpin
 {
     U8(DataOwnedSt<'a, R, u8>),
     I16(DataOwnedSt<'a, R, i16>),
@@ -470,28 +482,44 @@ where
     F64(DataOwnedSt<'a, R, f64>),
 }
 
+impl<'a, R> Access for AsyncDataOwned<'a, R>
+where
+    R: AsyncBufRead + std::marker::Unpin
+{
+    type Type = Self;
+
+    fn get_data(&self) -> &Self::Type {
+        self
+    }
+
+    fn get_data_mut(&mut self) -> &mut Self::Type {
+        self
+    }
+}
+
+
 #[derive(Serialize)]
 #[derive(Debug)]
 pub struct DataOwnedSt<'a, R, T>
 where
-    R: futures::AsyncBufRead
+    R: AsyncBufReadExt + std::marker::Unpin
 {
-    reader: &'a mut R,
-    num_pixels: usize,
-    counter: usize,
+    pub reader: &'a mut R,
+    pub num_bytes_to_read: usize,
+    pub num_bytes_read: usize,
     phantom: std::marker::PhantomData<T>,
 }
 
 impl<'a, R, T> DataOwnedSt<'a, R, T>
 where
-    R: futures::AsyncBufRead
+    R: AsyncBufReadExt + std::marker::Unpin
 {
-    fn new(reader: &'a mut R, num_pixels: usize) -> Self {
-        let counter = 0;
+    pub fn new(reader: &'a mut R, num_bytes_to_read: usize) -> Self {
+        let num_bytes_read = 0;
         Self {
             reader,
-            counter,
-            num_pixels,
+            num_bytes_read,
+            num_bytes_to_read,
             phantom: std::marker::PhantomData
         }
     }
@@ -501,19 +529,21 @@ use std::pin::Pin;
 use futures::task::Context;
 use futures::task::Poll;
 use futures::Future;
+use futures::Stream;
+use futures::AsyncBufReadExt;
 
-impl<'a, R> futures::Stream for DataOwnedSt<'a, R, u8>
+impl<'a, R> Stream for DataOwnedSt<'a, R, u8>
 where
-    R: futures::AsyncBufReadExt + std::marker::Unpin
+    R: AsyncBufReadExt + std::marker::Unpin
 {
     /// The type of the value yielded by the stream.
-    type Item = Result<u8, futures::io::Error>;
+    type Item = Result<[u8; 1], futures::io::Error>;
 
     /// Attempt to resolve the next item in the stream.
     /// Returns `Poll::Pending` if not ready, `Poll::Ready(Some(x))` if a value
     /// is ready, and `Poll::Ready(None)` if the stream has completed.
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if self.num_pixels == self.counter {
+        if self.num_bytes_read == self.num_bytes_to_read {
             // The stream has finished
             Poll::Ready(None)
         } else {
@@ -524,26 +554,26 @@ where
                 Poll::Pending => Poll::Pending,
                 Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
                 Poll::Ready(Ok(())) => {
-                    self.counter += 1;
-                    Poll::Ready(Some(Ok(buf[0])))
+                    self.num_bytes_read += 1;
+                    Poll::Ready(Some(Ok(buf)))
                 }
             }
         }
     }
 }
 
-impl<'a, R> futures::Stream for DataOwnedSt<'a, R, i16>
+impl<'a, R> Stream for DataOwnedSt<'a, R, i16>
 where
-    R: futures::AsyncBufReadExt + std::marker::Unpin
+    R: AsyncBufReadExt + std::marker::Unpin
 {
     /// The type of the value yielded by the stream.
-    type Item = Result<i16, futures::io::Error>;
+    type Item = Result<[i16; 1], futures::io::Error>;
 
     /// Attempt to resolve the next item in the stream.
     /// Returns `Poll::Pending` if not ready, `Poll::Ready(Some(x))` if a value
     /// is ready, and `Poll::Ready(None)` if the stream has completed.
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if self.num_pixels == self.counter {
+        if self.num_bytes_to_read == self.num_bytes_read {
             // The stream has finished
             Poll::Ready(None)
         } else {
@@ -554,8 +584,8 @@ where
                 Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
                 Poll::Ready(Ok(())) => {
                     let item = byteorder::BigEndian::read_i16(&buf);
-                    self.counter += 1;
-                    Poll::Ready(Some(Ok(item)))
+                    self.num_bytes_read += std::mem::size_of::<i16>();
+                    Poll::Ready(Some(Ok([item])))
                 }
             }
         }
@@ -564,16 +594,16 @@ where
 
 impl<'a, R> futures::Stream for DataOwnedSt<'a, R, i32>
 where
-    R: futures::AsyncBufReadExt + std::marker::Unpin
+    R: AsyncBufReadExt + std::marker::Unpin
 {
     /// The type of the value yielded by the stream.
-    type Item = Result<i32, futures::io::Error>;
+    type Item = Result<[i32; 1], futures::io::Error>;
 
     /// Attempt to resolve the next item in the stream.
     /// Returns `Poll::Pending` if not ready, `Poll::Ready(Some(x))` if a value
     /// is ready, and `Poll::Ready(None)` if the stream has completed.
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if self.num_pixels == self.counter {
+        if self.num_bytes_to_read == self.num_bytes_read {
             // The stream has finished
             Poll::Ready(None)
         } else {
@@ -584,8 +614,9 @@ where
                 Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
                 Poll::Ready(Ok(())) => {
                     let item = byteorder::BigEndian::read_i32(&buf);
-                    self.counter += 1;
-                    Poll::Ready(Some(Ok(item)))
+                    self.num_bytes_read += std::mem::size_of::<i32>();
+
+                    Poll::Ready(Some(Ok([item])))
                 }
             }
         }
@@ -594,16 +625,16 @@ where
 
 impl<'a, R> futures::Stream for DataOwnedSt<'a, R, i64>
 where
-    R: futures::AsyncBufReadExt + std::marker::Unpin
+    R: AsyncBufReadExt + std::marker::Unpin
 {
     /// The type of the value yielded by the stream.
-    type Item = Result<i64, futures::io::Error>;
+    type Item = Result<[i64; 1], futures::io::Error>;
 
     /// Attempt to resolve the next item in the stream.
     /// Returns `Poll::Pending` if not ready, `Poll::Ready(Some(x))` if a value
     /// is ready, and `Poll::Ready(None)` if the stream has completed.
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if self.num_pixels == self.counter {
+        if self.num_bytes_to_read == self.num_bytes_read {
             // The stream has finished
             Poll::Ready(None)
         } else {
@@ -614,8 +645,8 @@ where
                 Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
                 Poll::Ready(Ok(())) => {
                     let item = byteorder::BigEndian::read_i64(&buf);
-                    self.counter += 1;
-                    Poll::Ready(Some(Ok(item)))
+                    self.num_bytes_read += std::mem::size_of::<i64>();
+                    Poll::Ready(Some(Ok([item])))
                 }
             }
         }
@@ -624,16 +655,16 @@ where
 
 impl<'a, R> futures::Stream for DataOwnedSt<'a, R, f32>
 where
-    R: futures::AsyncBufReadExt + std::marker::Unpin
+    R: AsyncBufReadExt + std::marker::Unpin
 {
     /// The type of the value yielded by the stream.
-    type Item = Result<f32, futures::io::Error>;
+    type Item = Result<[f32; 1], futures::io::Error>;
 
     /// Attempt to resolve the next item in the stream.
     /// Returns `Poll::Pending` if not ready, `Poll::Ready(Some(x))` if a value
     /// is ready, and `Poll::Ready(None)` if the stream has completed.
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if self.num_pixels == self.counter {
+        if self.num_bytes_to_read == self.num_bytes_read {
             // The stream has finished
             Poll::Ready(None)
         } else {
@@ -644,8 +675,8 @@ where
                 Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
                 Poll::Ready(Ok(())) => {
                     let item = byteorder::BigEndian::read_f32(&buf);
-                    self.counter += 1;
-                    Poll::Ready(Some(Ok(item)))
+                    self.num_bytes_read += std::mem::size_of::<f32>();
+                    Poll::Ready(Some(Ok([item])))
                 }
             }
         }
@@ -654,16 +685,16 @@ where
 
 impl<'a, R> futures::Stream for DataOwnedSt<'a, R, f64>
 where
-    R: futures::AsyncBufReadExt + std::marker::Unpin
+    R: AsyncBufReadExt + std::marker::Unpin
 {
     /// The type of the value yielded by the stream.
-    type Item = Result<f64, futures::io::Error>;
+    type Item = Result<[f64; 1], futures::io::Error>;
 
     /// Attempt to resolve the next item in the stream.
     /// Returns `Poll::Pending` if not ready, `Poll::Ready(Some(x))` if a value
     /// is ready, and `Poll::Ready(None)` if the stream has completed.
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if self.num_pixels == self.counter {
+        if self.num_bytes_read == self.num_bytes_to_read {
             // The stream has finished
             Poll::Ready(None)
         } else {
@@ -674,11 +705,25 @@ where
                 Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
                 Poll::Ready(Ok(())) => {
                     let item = byteorder::BigEndian::read_f64(&buf);
-                    self.counter += 1;
-                    Poll::Ready(Some(Ok(item)))
+                    self.num_bytes_read += std::mem::size_of::<f64>();
+                    Poll::Ready(Some(Ok([item])))
                 }
             }
         }
     }
 }
-*/
+
+impl<'a, R> Access for DataOwnedSt<'a, R, u8>
+where
+    R: AsyncBufRead + std::marker::Unpin
+{
+    type Type = Self;
+
+    fn get_data(&self) -> &Self::Type {
+        self
+    }
+
+    fn get_data_mut(&mut self) -> &mut Self::Type {
+        self
+    }
+}

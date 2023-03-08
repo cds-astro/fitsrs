@@ -1,6 +1,9 @@
 use std::io::{Cursor, BufReader, Read, BufRead};
 use std::fmt::Debug;
 
+use async_trait::async_trait;
+use futures::AsyncRead;
+
 use crate::error::Error;
 use crate::hdu::header::extension::bintable::BinTable;
 use crate::hdu::DataBufRead;
@@ -10,7 +13,8 @@ use crate::hdu::data::image::DataBorrowed;
 
 use crate::hdu::header::extension::Xtension;
 
-use super::Access;
+use super::image::DataOwnedSt;
+use super::{Access, DataAsyncBufRead};
 
 impl<'a, R> DataBufRead<'a, BinTable> for Cursor<R>
 where
@@ -91,5 +95,33 @@ where
 
     fn get_data_mut(&mut self) -> &mut Self::Type {
         self
+    }
+}
+
+#[async_trait]
+impl<'a, R> DataAsyncBufRead<'a, BinTable> for futures::io::BufReader<R>
+where
+    R: AsyncRead + Debug + 'a + std::marker::Unpin + std::marker::Send,
+{
+    type Data = DataOwnedSt<'a, Self, u8>;
+
+    fn new_data_block(&'a mut self, ctx: &BinTable) -> Self::Data {
+        let num_bytes_to_read = ctx.get_num_bytes_data_block();
+        DataOwnedSt::new(self, num_bytes_to_read)
+    }
+
+    async fn consume_data_block(data: Self::Data, num_bytes_read: &mut usize) -> Result<&'a mut Self, Error>
+    where
+        'a: 'async_trait
+    {
+        let DataOwnedSt { reader, num_bytes_to_read, num_bytes_read: num_bytes_already_read, .. } = data;
+
+        let remaining_bytes_to_read = num_bytes_to_read - num_bytes_already_read;
+        <Self as DataAsyncBufRead<'_, BinTable>>::read_n_bytes_exact(reader, remaining_bytes_to_read).await?;
+
+        // All the data block have been read
+        *num_bytes_read = num_bytes_to_read;
+
+        Ok(reader)
     }
 }

@@ -2,7 +2,7 @@
 //! 
 //! A header basically consists of a list a 80 long characters CARDS
 //! Each CARD is a dictionnary tuple-like of the (key, value) form.
-use futures::{AsyncBufRead, AsyncReadExt};
+use futures::{AsyncBufRead, AsyncReadExt, AsyncRead};
 use serde::Serialize;
 
 pub mod extension;
@@ -30,7 +30,7 @@ pub fn consume_next_card<'a, R: Read>(reader: &mut R, buf: &mut [u8; 80], bytes_
     Ok(())
 }
 
-pub async fn consume_next_card_async<'a, R: AsyncBufRead + std::marker::Unpin>(reader: &mut R, buf: &mut [u8; 80], bytes_read: &mut usize) -> Result<(), Error> {
+pub async fn consume_next_card_async<'a, R: AsyncRead + std::marker::Unpin>(reader: &mut R, buf: &mut [u8; 80], bytes_read: &mut usize) -> Result<(), Error> {
     *bytes_read += 80;
     reader.read_exact(buf).await.map_err(|_| Error::FailReadingNextBytes)?;
     Ok(())
@@ -147,56 +147,31 @@ where
         })
     }
 
-    /*pub(crate) async fn parse_async<'a, R: AsyncBufRead + std::marker::Unpin>(reader: &mut R, bytes_read: &mut usize) -> Result<Self, Error> {
+    pub(crate) async fn parse_async<'a, R>(reader: &mut R, num_bytes_read: &mut usize, card_80_bytes_buf: &mut [u8; 80]) -> Result<Self, Error>
+    where
+        R: AsyncBufRead + std::marker::Unpin + std::marker::Send
+    {
         let mut cards = HashMap::new();
 
-        let mut card_80_bytes_buf: [u8; 80] = [b' '; 80];
-
         /* Consume mandatory keywords */ 
-        // XTENSION
-        consume_next_card_async(reader, &mut card_80_bytes_buf, bytes_read).await?;
-        let xtension = parse_xtension_card(&card_80_bytes_buf)?;
-        // BITPIX
-        consume_next_card_async(reader, &mut card_80_bytes_buf, bytes_read).await?;
-        let bitpix = parse_bitpix_card(&card_80_bytes_buf)?;
-        // NAXIS
-        consume_next_card_async(reader, &mut card_80_bytes_buf, bytes_read).await?;
-        let naxis = parse_naxis_card(&card_80_bytes_buf)?;
-        // The size of each NAXIS
-        let mut naxis_size = vec![0; naxis];
-        for idx_axis in 0..naxis {
-            consume_next_card_async(reader, &mut card_80_bytes_buf, bytes_read).await?;
-            let naxis_len = check_card_keyword(&card_80_bytes_buf, NAXIS_KW[idx_axis])?
-                .check_for_float()
-                .map(|size| size as usize)?;
-            naxis_size[idx_axis] = naxis_len;
-        }
-        // GCOUNT
-        consume_next_card_async(reader, &mut card_80_bytes_buf, bytes_read).await?;
-        let gcount = parse_gcount_card(&card_80_bytes_buf)?;
-        // PCOUNT
-        consume_next_card_async(reader, &mut card_80_bytes_buf, bytes_read).await?;
-        let pcount = parse_pcount_card(&card_80_bytes_buf)?;
+        let mut xtension: X = Xtension::parse_async(reader, num_bytes_read, card_80_bytes_buf).await?;
 
         /* Consume next non mandatory keywords until `END` is reached */
-        consume_next_card_async(reader, &mut card_80_bytes_buf, bytes_read).await?;
+        consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
         while let Some(Card { kw, v }) = parse_generic_card(&card_80_bytes_buf)? {
             cards.insert(kw, v);
-            consume_next_card_async(reader, &mut card_80_bytes_buf, bytes_read).await?;
+            consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
         }
+
+        xtension.update_with_parsed_header(&cards)?;
 
         /* The last card was a END one */
         Ok(Self {
             cards,
 
             xtension,
-            bitpix,
-            naxis,
-            naxis_size,
-            gcount,
-            pcount
         })
-    }*/
+    }
 
     /// Get the gcount value given by the "PCOUNT" card
     pub fn get_xtension(&self) -> &X {
