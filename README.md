@@ -4,6 +4,7 @@ Fits reader written in pure Rust using [nom](https://github.com/Geal/nom)
 [![](https://img.shields.io/crates/v/fitsrs.svg)](https://crates.io/crates/fitsrs)
 [![](https://img.shields.io/crates/d/fitsrs.svg)](https://crates.io/crates/fitsrs)
 [![API Documentation on docs.rs](https://docs.rs/fitsrs/badge.svg)](https://docs.rs/fitsrs/)
+![testing CI](https://github.com/github/docs/actions/workflows/rust.yml/badge.svg)
 
 This crate is under development, it was initiated for reading fits HiPS tile, i.e. generated from hipsgen.
 
