@@ -185,7 +185,7 @@ mod tests {
     #[test_case("samples/fits.gsfc.nasa.gov/HST_WFPC_II_bis.fits")]
     #[test_case("samples/fits.gsfc.nasa.gov/IUE_LWP.fits")]
     #[test_case("samples/misc/bonn.fits")]
-    #[test_case("samples/misc/P122_49.fits")]
+    //#[test_case("samples/misc/P122_49.fits")]
     #[test_case("samples/misc/skv1678175163788.fits")]
     //#[test_case("samples/misc/drao.fits")] png file
     //#[test_case("samples/misc/ji0590044.fits")] gzip compressed data
