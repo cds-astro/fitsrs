@@ -1,111 +1,122 @@
-use crate::hdu::HDU;
-use crate::hdu::{Header, DataRead};
-use serde::Serialize;
+use crate::hdu::extension::{XtensionHDU, AsyncXtensionHDU};
+use crate::hdu::primary::{PrimaryHDU, AsyncPrimaryHDU};
+
+use crate::hdu::header::extension::image::Image;
+use crate::hdu::header::extension::asciitable::AsciiTable;
+use crate::hdu::header::extension::bintable::BinTable;
+
+use crate::hdu::data::{DataBufRead, DataAsyncBufRead};
+
 #[derive(Debug)]
 pub struct Fits<'a, R>
 where
-    R: DataRead<'a>
+    R: DataBufRead<'a, Image> +
+       DataBufRead<'a, BinTable> +
+       DataBufRead<'a, AsciiTable>
 {
-    pub hdu: HDU<'a, R>,
+    pub hdu: PrimaryHDU<'a, R>,
 }
 
 use crate::error::Error;
 impl<'a, R> Fits<'a, R>
 where
-    R: DataRead<'a> + 'a
+    R: DataBufRead<'a, Image> +
+       DataBufRead<'a, BinTable> +
+       DataBufRead<'a, AsciiTable>
 {
     /// Parse a FITS file
     /// # Params
     /// * `reader` - a reader created i.e. from the opening of a file
-    pub fn from_reader(reader: R) -> Result<Self, Error> {
-        let hdu = HDU::new(reader)?;
+    pub fn from_reader(reader: &'a mut R) -> Result<Self, Error> {
+        let hdu = PrimaryHDU::new(reader)?;
 
         Ok(Self { hdu })
     }
 
-    /// Returns the header of the first HDU
-    pub fn get_header(&self) -> &Header {
-        &self.hdu.header
+    pub fn get_primary_hdu(self) -> PrimaryHDU<'a, R> {
+        self.hdu
     }
 
-    /// Returns the data of the first HDU
-    pub fn get_data(&self) -> &R::Data {
-        &self.hdu.data
+    pub fn get_xtension_hdu(self, mut idx: usize) -> Result<XtensionHDU<'a, R>, Error> {
+        let mut hdu_ext = self.hdu.next()?;
+        if idx == 0 {
+            if let Some(hdu) = hdu_ext {
+                Ok(hdu)
+            } else {
+                Err(Error::StaticError("No more ext HDU found"))
+            }
+        } else {
+            while let Some(hdu) = hdu_ext {
+                hdu_ext = hdu.next()?;
+                idx -= 1;
+
+                if idx == 0 {
+                    break;
+                }
+            }
+
+            if let Some(hdu) = hdu_ext {
+                Ok(hdu)
+            } else {
+                Err(Error::StaticError("No more ext HDU found"))
+            }
+        }
     }
 }
 
-use crate::hdu::{AsyncDataRead, AsyncHDU};
 #[derive(Debug)]
-pub struct AsyncFits<R>
+pub struct AsyncFits<'a, R>
 where
-    R: AsyncDataRead
+    R: DataAsyncBufRead<'a, Image> +
+    DataAsyncBufRead<'a, BinTable> +
+    DataAsyncBufRead<'a, AsciiTable>
 {
-    pub hdu: AsyncHDU<R>,
+    pub hdu: AsyncPrimaryHDU<'a, R>,
 }
 
-impl<R> AsyncFits<R>
+impl<'a, R> AsyncFits<'a, R>
 where
-    R: AsyncDataRead + std::marker::Unpin
+    R: DataAsyncBufRead<'a, Image> +
+    DataAsyncBufRead<'a, BinTable> +
+    DataAsyncBufRead<'a, AsciiTable> +
+    std::marker::Send
 {
     /// Parse a FITS file
     /// # Params
-    /// * `reader` - a async reader created i.e. from the opening of a file
-    pub async fn from_reader(reader: R) -> Result<Self, Error> {
-        let hdu = AsyncHDU::new(reader).await?;
+    /// * `reader` - a reader created i.e. from the opening of a file
+    pub async fn from_reader(reader: &'a mut R) -> Result<AsyncFits<'a, R>, Error> {
+        let hdu = AsyncPrimaryHDU::new(reader).await?;
 
         Ok(Self { hdu })
     }
 
-    /// Returns the header of the first HDU
-    pub fn get_header(&self) -> &Header {
-        &self.hdu.header
+    pub fn get_primary_hdu(self) -> AsyncPrimaryHDU<'a, R> {
+        self.hdu
     }
 
-    /// Returns the data of the first HDU
-    pub fn get_data(&self) -> &R::Data {
-        &self.hdu.data
-    }
-}
+    pub async fn get_xtension_hdu(self, mut idx: usize) -> Result<AsyncXtensionHDU<'a, R>, Error> {
+        let mut hdu_ext = self.hdu.next().await?;
+        if idx == 0 {
+            if let Some(hdu) = hdu_ext {
+                Ok(hdu)
+            } else {
+                Err(Error::StaticError("No more ext HDU found"))
+            }
+        } else {
+            while let Some(hdu) = hdu_ext {
+                hdu_ext = hdu.next().await?;
+                idx -= 1;
 
-#[cfg(test)]
-mod tests {
-    use super::Fits;
-    use std::io::Read;
-    use crate::hdu::data::DataBorrowed;
-    use std::io::Cursor;
-    use std::fs::File;
+                if idx == 0 {
+                    break;
+                }
+            }
 
-    #[test]
-    fn test_fits_f32() {
-        let mut f = File::open("misc/Npix208.fits").unwrap();
-        let mut raw_bytes = Vec::<u8>::new();
-        f.read_to_end(&mut raw_bytes).unwrap();
-
-        let mut reader = Cursor::new(&raw_bytes[..]);
-        let fits = Fits::from_reader(&mut reader).unwrap();
-        let header = fits.get_header();
-        match fits.get_data() {
-            DataBorrowed::F32(data) => {
-                assert!(data.len() == header.get_axis_size(1).unwrap() * header.get_axis_size(2).unwrap())
-            },
-            _ => unreachable!(),
-        }
-    }
-
-    #[test]
-    fn test_fits_i16() {
-        let mut f = File::open("misc/Npix4906.fits").unwrap();
-        let mut raw_bytes = Vec::<u8>::new();
-        f.read_to_end(&mut raw_bytes).unwrap();
-
-        let mut reader = Cursor::new(&raw_bytes[..]);
-        let fits = Fits::from_reader(&mut reader).unwrap();
-        let header = fits.get_header();
-        match fits.get_data() {
-            DataBorrowed::I16(data) => {
-                assert!(data.len() == header.get_axis_size(1).unwrap() * header.get_axis_size(2).unwrap())
-            },
-            _ => unreachable!(),
+            if let Some(hdu) = hdu_ext {
+                Ok(hdu)
+            } else {
+                Err(Error::StaticError("No more ext HDU found"))
+            }
         }
     }
 }

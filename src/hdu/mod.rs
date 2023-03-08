@@ -1,127 +1,190 @@
 pub mod header;
+
 pub mod data;
-pub mod data_async;
-pub use header::Header;
+pub mod extension;
+pub mod primary;
 
-pub use data::DataRead;
-pub use data_async::AsyncDataRead;
-
-use std::fmt::Debug;
-
-/// Structure storing the content of one HDU (i.e. Header Data Unit)
-/// of a fits file
-#[derive(Debug)]
-pub struct HDU<'a, R>
-where
-    R: DataRead<'a>
-{
-    /// The header part that stores all the cards
-    pub header: Header,
-    /// The data part
-    pub data: R::Data,
-}
+use futures::{AsyncReadExt, AsyncBufReadExt};
+use header::Header;
+use crate::hdu::data::DataBufRead;
+use crate::hdu::header::extension::Xtension;
 
 use crate::error::Error;
-impl<'a, R> HDU<'a, R>
-where
-    R: DataRead<'a>
-{
-    pub fn new(mut reader: R) -> Result<Self, Error> {
-        let mut bytes_read = 0;
-        /* 1. Parse the header first */
-        let header = Header::parse(&mut reader, &mut bytes_read)?;
-        // At this point the header is valid
-        let num_pixels = (0..header.get_naxis())
-            .map(|idx| header.get_axis_size(idx + 1).unwrap())
-            .fold(1, |mut total, val| {
-                total *= val;
-                total
-            });
-        let bitpix = header.get_bitpix();
+use self::data::{Access, DataAsyncBufRead};
 
-        /* 2. Skip the next bytes to a new 2880 multiple of bytes
-        This is where the data block should start */
-        let off_data_block = 2880 - bytes_read % 2880;
-        reader.consume(off_data_block);
-
-        let data = unsafe { reader.read_data_block(bitpix, num_pixels) };
-
-        Ok(Self {
-            header,
-            data
-        })
-    }
-}
-
-use std::pin::Pin;
-/// Structure storing the content of one HDU (i.e. Header Data Unit)
-/// of a fits file that is opened in an async way
 #[derive(Debug)]
-pub struct AsyncHDU<R>
+pub struct HDU<'a, R, X>
 where
-    R: AsyncDataRead
+    X: Xtension,
+    R: DataBufRead<'a, X>
 {
     /// The header part that stores all the cards
-    pub header: Header,
+    header: Header<X>,
     /// The data part
-    pub data: R::Data,
+    data: <R as DataBufRead<'a, X>>::Data,
 }
-impl<R> AsyncHDU<R>
-where
-    R: AsyncDataRead + std::marker::Unpin
-{
-    pub async fn new(mut reader: R) -> Result<Self, Error> {
-        let mut bytes_read = 0;
-        /* 1. Parse the header first */
-        let header = Header::parse_async(&mut reader, &mut bytes_read).await?;
-        // At this point the header is valid
-        let num_pixels = (0..header.get_naxis())
-            .map(|idx| header.get_axis_size(idx + 1).unwrap())
-            .fold(1, |mut total, val| {
-                total *= val;
-                total
-            });
-        let bitpix = header.get_bitpix();
 
+impl<'a, R, X> HDU<'a, R, X>
+where
+    X: Xtension + std::fmt::Debug,
+    R: DataBufRead<'a, X> + 'a
+{
+    pub fn new(reader: &'a mut R, num_bytes_read: &mut usize, card_80_bytes_buf: &mut [u8; 80]) -> Result<Self, Error> {
+        /* 1. Parse the header first */
+        let header = Header::parse(reader, num_bytes_read, card_80_bytes_buf)?;
         /* 2. Skip the next bytes to a new 2880 multiple of bytes
         This is where the data block should start */
-        let off_data_block = 2880 - bytes_read % 2880;
-        Pin::new(&mut reader).consume(off_data_block);
+        let is_remaining_bytes = ((*num_bytes_read) % 2880) > 0;
 
-        let data = unsafe { reader.read_data_block(bitpix, num_pixels) };
+        // Skip the remaining bytes to set the reader where a new HDU begins
+        if is_remaining_bytes {
+            let mut block_mem_buf: [u8; 2880] = [0; 2880];
+
+            let num_off_bytes = 2880 - ((*num_bytes_read) % 2880);
+            reader.read_exact(&mut block_mem_buf[..num_off_bytes])
+                .map_err(|_| Error::StaticError("EOF reached"))?;
+        }
+
+        // Data block
+        let xtension = header.get_xtension();
+        let data = reader.new_data_block(xtension);
 
         Ok(Self {
             header,
             data
         })
     }
-}
 
+    fn consume(self) -> Result<Option<&'a mut R>, Error> {
+        let mut num_bytes_read = 0;
+        let reader = <R as DataBufRead<'a, X>>::consume_data_block(self.data, &mut num_bytes_read)?;
 
-mod tests {
-    use super::HDU;
-    use super::header::BitpixValue;
-    use std::io::{Cursor, Read, BufReader};
-    use std::fs::File;
+        let is_remaining_bytes = (num_bytes_read % 2880) > 0;
+        // Skip the remaining bytes to set the reader where a new HDU begins
+        let reader = if is_remaining_bytes {
+            let mut block_mem_buf: [u8; 2880] = [0; 2880];
 
-    #[test]
-    fn test_cursor_lifetime() {
-        let mut f = File::open("misc/Npix208.fits").unwrap();
-        let mut raw_bytes = Vec::<u8>::new();
-        f.read_to_end(&mut raw_bytes).unwrap();
-        // Here all the file content is in memory
-        let hdu = HDU::new(&raw_bytes[..]).unwrap();
-
-        assert_eq!(hdu.header.get_bitpix(), BitpixValue::F32);
+            let num_off_bytes = 2880 - (num_bytes_read % 2880);
+            reader.read_exact(&mut block_mem_buf[..num_off_bytes])
+                .ok() // An error like unexpected EOF is not standard frendly but we make it pass
+                // interpreting it as the last HDU in the file
+                .map(|_| reader)
+        } else {
+            // We are at a multiple of 2880 byte
+            Some(reader)
+        };
+        
+        if let Some(reader) = reader {
+            let is_eof = reader.fill_buf().map_err(|_| Error::StaticError("Unable to fill the buffer to check if data is remaining"))?.is_empty();
+            if !is_eof {
+                Ok(Some(reader))
+            } else {
+                Ok(None)
+            }
+        } else {
+            Ok(None)
+        }
     }
 
-    #[test]
-    fn test_file_lifetime() {
-        let hdu = {
-            let f = File::open("misc/Npix208.fits").unwrap();
-            HDU::new(BufReader::new(f)).unwrap()
-        };
+    pub fn get_header(&self) -> &Header<X> {
+        &self.header
+    }
 
-        assert_eq!(hdu.header.get_bitpix(), BitpixValue::F32);
+    pub fn get_data(&self) -> &<<R as DataBufRead<'a, X>>::Data as Access>::Type {
+        self.data.get_data()
+    }
+
+    pub fn get_data_mut(&mut self) -> &mut <<R as DataBufRead<'a, X>>::Data as Access>::Type {
+        self.data.get_data_mut()
+    }
+}
+
+// Async variant
+#[derive(Debug)]
+pub struct AsyncHDU<'a, R, X>
+where
+    X: Xtension,
+    R: DataAsyncBufRead<'a, X>
+{
+    /// The header part that stores all the cards
+    header: Header<X>,
+    /// The data part
+    data: <R as DataAsyncBufRead<'a, X>>::Data,
+}
+
+impl<'a, R, X> AsyncHDU<'a, R, X>
+where
+    X: Xtension + std::fmt::Debug,
+    R: DataAsyncBufRead<'a, X> + std::marker::Send + 'a
+{
+    pub async fn new(reader: &'a mut R, num_bytes_read: &mut usize, card_80_bytes_buf: &mut [u8; 80]) -> Result<AsyncHDU<'a, R, X>, Error> {
+        /* 1. Parse the header first */
+        let header = Header::parse_async(reader, num_bytes_read, card_80_bytes_buf).await?;
+        /* 2. Skip the next bytes to a new 2880 multiple of bytes
+        This is where the data block should start */
+        let is_remaining_bytes = ((*num_bytes_read) % 2880) > 0;
+
+        // Skip the remaining bytes to set the reader where a new HDU begins
+        if is_remaining_bytes {
+            let mut block_mem_buf: [u8; 2880] = [0; 2880];
+
+            let num_off_bytes = 2880 - ((*num_bytes_read) % 2880);
+            reader.read_exact(&mut block_mem_buf[..num_off_bytes])
+                .await
+                .map_err(|_| Error::StaticError("EOF reached"))?;
+        }
+
+        // Data block
+        let xtension = header.get_xtension();
+        let data = reader.new_data_block(xtension);
+
+        Ok(Self {
+            header,
+            data
+        })
+    }
+
+    async fn consume(self) -> Result<Option<&'a mut R>, Error> {
+        let mut num_bytes_read = 0;
+        let reader = <R as DataAsyncBufRead<'a, X>>::consume_data_block(self.data, &mut num_bytes_read).await?;
+
+        let is_remaining_bytes = (num_bytes_read % 2880) > 0;
+        // Skip the remaining bytes to set the reader where a new HDU begins
+        let reader = if is_remaining_bytes {
+            let mut block_mem_buf: [u8; 2880] = [0; 2880];
+
+            let num_off_bytes = 2880 - (num_bytes_read % 2880);
+            reader.read_exact(&mut block_mem_buf[..num_off_bytes])
+                .await
+                .ok() // An error like unexpected EOF is not standard frendly but we make it pass
+                // interpreting it as the last HDU in the file
+                .map(|_| reader)
+        } else {
+            // We are at a multiple of 2880 byte
+            Some(reader)
+        };
+        
+        if let Some(reader) = reader {
+            let is_eof = reader.fill_buf().await.map_err(|_| Error::StaticError("Unable to fill the buffer to check if data is remaining"))?.is_empty();
+            if !is_eof {
+                Ok(Some(reader))
+            } else {
+                Ok(None)
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn get_header(&self) -> &Header<X> {
+        &self.header
+    }
+
+    pub fn get_data(&self) -> &<<R as DataAsyncBufRead<'a, X>>::Data as Access>::Type {
+        self.data.get_data()
+    }
+
+    pub fn get_data_mut(&mut self) -> &mut <<R as DataAsyncBufRead<'a, X>>::Data as Access>::Type {
+        self.data.get_data_mut()
     }
 }

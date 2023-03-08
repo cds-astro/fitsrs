@@ -1,7 +1,7 @@
 use nom::{
     branch::alt,
     bytes::complete::{take_till, take_while},
-    character::complete::{char, space0},
+    character::complete::{char, space0, u32},
     combinator::{map, value},
     number::complete::float,
     sequence::{delimited, preceded},
@@ -138,6 +138,14 @@ pub(crate) fn parse_float(buf: &[u8]) -> IResult<&[u8], Value> {
     )(buf)
 }
 
+pub(crate) fn parse_integer(buf: &[u8]) -> IResult<&[u8], Value> {
+    preceded(
+        space0,
+        map(u32, |val| Value::Float(val as f64)),
+
+    )(buf)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{parse_character_string, parse_float, Value};
@@ -151,6 +159,10 @@ mod tests {
         assert_eq!(
             parse_float(b"      -32767"),
             Ok((b"" as &[u8], Value::Float(-32767.0)))
+        );
+        assert_eq!(
+            parse_float(b"      -32767A"),
+            Ok((b"A" as &[u8], Value::Float(-32767.0)))
         );
     }
     #[test]

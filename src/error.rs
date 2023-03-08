@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 #[derive(Debug, PartialEq)]
 pub enum Error {
     CardSizeNotRespected(usize),
@@ -13,8 +12,10 @@ pub enum Error {
     FailFindingKeyword,
     NegativeOrNullNaxis,
     ValueBadParsing,
+    NotSupportedXtensionType(String),
     NegativeOrNullNaxisSize(usize),
-    Utf8Error(std::str::Utf8Error)
+    Utf8Error(std::str::Utf8Error),
+    StaticError(&'static str),
 }
 
 use std::fmt;
@@ -32,7 +33,7 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {}
 
 impl<'a> From<nom::Err<nom::error::Error<&'a [u8]>>> for Error {
-    fn from(nom_err: nom::Err<nom::error::Error<&'a [u8]>>) -> Self {
+    fn from(_: nom::Err<nom::error::Error<&'a [u8]>>) -> Self {
         Error::NomError
     }
 }
@@ -40,5 +41,11 @@ impl<'a> From<nom::Err<nom::error::Error<&'a [u8]>>> for Error {
 impl From<std::str::Utf8Error> for Error {
     fn from(err: std::str::Utf8Error) -> Self {
         Error::Utf8Error(err)
+    }
+}
+
+impl From<&'static str> for Error {
+    fn from(err: &'static str) -> Self {
+        Error::StaticError(err)
     }
 }
