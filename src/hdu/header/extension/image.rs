@@ -23,7 +23,7 @@ pub struct Image {
     // The number of axis
     naxis: usize,
     // The size of each axis
-    naxisn: Vec<usize>,
+    naxisn: Vec<u64>,
 }
 
 impl Image {
@@ -33,7 +33,7 @@ impl Image {
     }
 
     /// Get the size of an axis given by the "NAXISX" card
-    pub fn get_naxisn(&self, idx: usize) -> Option<&usize> {
+    pub fn get_naxisn(&self, idx: usize) -> Option<&u64> {
         // NAXIS indexes begins at 1 instead of 0
         self.naxisn.get(idx - 1)
     }
@@ -46,7 +46,7 @@ impl Image {
 
 #[async_trait(?Send)]
 impl Xtension for Image {
-    fn get_num_bytes_data_block(&self) -> usize {
+    fn get_num_bytes_data_block(&self) -> u64 {
         let num_pixels = if self.naxisn.is_empty() {
             0
         } else {
@@ -56,7 +56,7 @@ impl Xtension for Image {
             })
         };
 
-        let num_bits = ((self.bitpix as i32).unsigned_abs() as usize) * num_pixels;
+        let num_bits = ((self.bitpix as i32).unsigned_abs() as u64) * num_pixels;
         num_bits >> 3
     }
 
@@ -66,7 +66,7 @@ impl Xtension for Image {
 
     fn parse<R: Read>(
         reader: &mut R,
-        num_bytes_read: &mut usize,
+        num_bytes_read: &mut u64,
         card_80_bytes_buf: &mut [u8; 80],
     ) -> Result<Self, Error> {
         // BITPIX
@@ -81,7 +81,7 @@ impl Xtension for Image {
                 consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
                 check_card_keyword(card_80_bytes_buf, NAXIS_KW[idx_axis])?
                     .check_for_float()
-                    .map(|size| size as usize)
+                    .map(|size| size as u64)
             })
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -94,7 +94,7 @@ impl Xtension for Image {
 
     async fn parse_async<R>(
         reader: &mut R,
-        num_bytes_read: &mut usize,
+        num_bytes_read: &mut u64,
         card_80_bytes_buf: &mut [u8; 80],
     ) -> Result<Self, Error>
     where
@@ -113,7 +113,7 @@ impl Xtension for Image {
             consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
             let naxis_len = check_card_keyword(card_80_bytes_buf, naxis_kw)?
                 .check_for_float()
-                .map(|size| size as usize)?;
+                .map(|size| size as u64)?;
 
             naxisn.push(naxis_len);
         }

@@ -32,7 +32,7 @@ pub fn parse_xtension_card(card: &[u8; 80]) -> Result<XtensionType, Error> {
 
 #[async_trait(?Send)]
 pub trait Xtension {
-    fn get_num_bytes_data_block(&self) -> usize;
+    fn get_num_bytes_data_block(&self) -> u64;
 
     fn update_with_parsed_header(&mut self, cards: &HashMap<[u8; 8], Value>) -> Result<(), Error>;
 
@@ -40,7 +40,7 @@ pub trait Xtension {
     // During the parsing, some checks will be made
     fn parse<R: Read>(
         reader: &mut R,
-        num_bytes_read: &mut usize,
+        num_bytes_read: &mut u64,
         card_80_bytes_buf: &mut [u8; 80],
     ) -> Result<Self, Error>
     where
@@ -49,7 +49,7 @@ pub trait Xtension {
     // Async equivalent method
     async fn parse_async<R>(
         reader: &mut R,
-        num_bytes_read: &mut usize,
+        num_bytes_read: &mut u64,
         card_80_bytes_buf: &mut [u8; 80],
     ) -> Result<Self, Error>
     where

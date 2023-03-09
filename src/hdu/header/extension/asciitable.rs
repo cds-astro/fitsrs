@@ -27,15 +27,15 @@ pub struct AsciiTable {
     // A non-negative integer, giving the number of ASCII characters in each row of
     // the table. This includes all the characters in the defined fields
     // plus any characters that are not included in any field.
-    naxis1: usize,
+    naxis1: u64,
     // A non-negative integer, giving the number of rows in the table
-    naxis2: usize,
+    naxis2: u64,
     // A non-negative integer representing the number of fields in each row.
     // The maximum permissible value is 999.
     tfields: usize,
     // Integers specifying the column in which Field n starts.
     // The first column of a row is numbered 1.
-    tbcols: Vec<usize>,
+    tbcols: Vec<u64>,
     // Contain a character string describing the format in which Field n is encoded.
     // Only the formats in Table 15, interpreted as Fortran (ISO 2004)
     // input formats and discussed in more detail in Sect. 7.2.5, are
@@ -62,12 +62,12 @@ impl AsciiTable {
 
     /// Get the size of an axis given by the "NAXISX" card
     #[inline]
-    pub fn get_naxis1(&self) -> usize {
+    pub fn get_naxis1(&self) -> u64 {
         self.naxis1
     }
 
     #[inline]
-    pub fn get_naxis2(&self) -> usize {
+    pub fn get_naxis2(&self) -> u64 {
         self.naxis1
     }
 
@@ -77,7 +77,7 @@ impl AsciiTable {
     }
 
     #[inline]
-    pub fn get_tbcols(&self) -> &[usize] {
+    pub fn get_tbcols(&self) -> &[u64] {
         &self.tbcols
     }
 
@@ -101,7 +101,7 @@ impl AsciiTable {
 
 #[async_trait(?Send)]
 impl Xtension for AsciiTable {
-    fn get_num_bytes_data_block(&self) -> usize {
+    fn get_num_bytes_data_block(&self) -> u64 {
         self.naxis1 * self.naxis2
     }
 
@@ -123,7 +123,7 @@ impl Xtension for AsciiTable {
                     .ok_or(Error::StaticError("TBCOLX card not found"))?
                     .clone()
                     .check_for_float()
-                    .map(|tbcol| tbcol as usize)
+                    .map(|tbcol| tbcol as u64)
             })
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -233,7 +233,7 @@ impl Xtension for AsciiTable {
 
     fn parse<R: Read>(
         reader: &mut R,
-        num_bytes_read: &mut usize,
+        num_bytes_read: &mut u64,
         card_80_bytes_buf: &mut [u8; 80],
     ) -> Result<Self, Error> {
         // BITPIX
@@ -253,10 +253,10 @@ impl Xtension for AsciiTable {
         // NAXIS1
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
         let naxis1 =
-            check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_float()? as usize;
+            check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_float()? as u64;
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
         let naxis2 =
-            check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_float()? as usize;
+            check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_float()? as u64;
 
         // PCOUNT
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
@@ -295,7 +295,7 @@ impl Xtension for AsciiTable {
 
     async fn parse_async<R>(
         reader: &mut R,
-        num_bytes_read: &mut usize,
+        num_bytes_read: &mut u64,
         card_80_bytes_buf: &mut [u8; 80],
     ) -> Result<Self, Error>
     where
@@ -319,10 +319,10 @@ impl Xtension for AsciiTable {
         // NAXIS1
         consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
         let naxis1 =
-            check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_float()? as usize;
+            check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_float()? as u64;
         consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
         let naxis2 =
-            check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_float()? as usize;
+            check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_float()? as u64;
 
         // PCOUNT
         consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;

@@ -42,8 +42,8 @@ where
     R: AsyncBufReadExt + Unpin,
 {
     pub reader: &'a mut R,
-    pub num_bytes_to_read: usize,
-    pub num_bytes_read: usize,
+    pub num_bytes_to_read: u64,
+    pub num_bytes_read: u64,
     phantom: std::marker::PhantomData<T>,
 }
 
@@ -51,7 +51,7 @@ impl<'a, R, T> St<'a, R, T>
 where
     R: AsyncBufReadExt + Unpin,
 {
-    pub fn new(reader: &'a mut R, num_bytes_to_read: usize) -> Self {
+    pub fn new(reader: &'a mut R, num_bytes_to_read: u64) -> Self {
         let num_bytes_read = 0;
         Self {
             reader,
@@ -125,7 +125,7 @@ where
                 Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
                 Poll::Ready(Ok(())) => {
                     let item = byteorder::BigEndian::read_i16(&buf);
-                    self.num_bytes_read += std::mem::size_of::<i16>();
+                    self.num_bytes_read += std::mem::size_of::<i16>() as u64;
                     Poll::Ready(Some(Ok([item])))
                 }
             }
@@ -155,7 +155,7 @@ where
                 Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
                 Poll::Ready(Ok(())) => {
                     let item = byteorder::BigEndian::read_i32(&buf);
-                    self.num_bytes_read += std::mem::size_of::<i32>();
+                    self.num_bytes_read += std::mem::size_of::<i32>() as u64;
 
                     Poll::Ready(Some(Ok([item])))
                 }
@@ -186,7 +186,7 @@ where
                 Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
                 Poll::Ready(Ok(())) => {
                     let item = byteorder::BigEndian::read_i64(&buf);
-                    self.num_bytes_read += std::mem::size_of::<i64>();
+                    self.num_bytes_read += std::mem::size_of::<i64>() as u64;
                     Poll::Ready(Some(Ok([item])))
                 }
             }
@@ -216,7 +216,7 @@ where
                 Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
                 Poll::Ready(Ok(())) => {
                     let item = byteorder::BigEndian::read_f32(&buf);
-                    self.num_bytes_read += std::mem::size_of::<f32>();
+                    self.num_bytes_read += std::mem::size_of::<f32>() as u64;
                     Poll::Ready(Some(Ok([item])))
                 }
             }
@@ -246,7 +246,7 @@ where
                 Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
                 Poll::Ready(Ok(())) => {
                     let item = byteorder::BigEndian::read_f64(&buf);
-                    self.num_bytes_read += std::mem::size_of::<f64>();
+                    self.num_bytes_read += std::mem::size_of::<f64>() as u64;
                     Poll::Ready(Some(Ok([item])))
                 }
             }

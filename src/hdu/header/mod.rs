@@ -21,7 +21,7 @@ use nom::{branch::alt, bytes::complete::tag, sequence::preceded, IResult};
 pub fn consume_next_card<R: Read>(
     reader: &mut R,
     buf: &mut [u8; 80],
-    bytes_read: &mut usize,
+    bytes_read: &mut u64,
 ) -> Result<(), Error> {
     *bytes_read += 80;
     reader
@@ -34,7 +34,7 @@ pub fn consume_next_card<R: Read>(
 pub async fn consume_next_card_async<'a, R: AsyncRead + std::marker::Unpin>(
     reader: &mut R,
     buf: &mut [u8; 80],
-    bytes_read: &mut usize,
+    bytes_read: &mut u64,
 ) -> Result<(), Error> {
     *bytes_read += 80;
     reader
@@ -130,7 +130,7 @@ where
 {
     pub(crate) fn parse<R: Read>(
         reader: &mut R,
-        num_bytes_read: &mut usize,
+        num_bytes_read: &mut u64,
         card_80_bytes_buf: &mut [u8; 80],
     ) -> Result<Self, Error> {
         let mut cards = HashMap::new();
@@ -153,7 +153,7 @@ where
 
     pub(crate) async fn parse_async<'a, R>(
         reader: &mut R,
-        num_bytes_read: &mut usize,
+        num_bytes_read: &mut u64,
         card_80_bytes_buf: &mut [u8; 80],
     ) -> Result<Self, Error>
     where

@@ -31,7 +31,7 @@ where
 {
     pub fn new(
         reader: &'a mut R,
-        num_bytes_read: &mut usize,
+        num_bytes_read: &mut u64,
         card_80_bytes_buf: &mut [u8; 80],
     ) -> Result<Self, Error> {
         /* 1. Parse the header first */
@@ -44,7 +44,7 @@ where
         if is_remaining_bytes {
             let mut block_mem_buf: [u8; 2880] = [0; 2880];
 
-            let num_off_bytes = 2880 - ((*num_bytes_read) % 2880);
+            let num_off_bytes = (2880 - ((*num_bytes_read) % 2880)) as usize;
             reader
                 .read_exact(&mut block_mem_buf[..num_off_bytes])
                 .map_err(|_| Error::StaticError("EOF reached"))?;
@@ -66,7 +66,7 @@ where
         let reader = if is_remaining_bytes {
             let mut block_mem_buf: [u8; 2880] = [0; 2880];
 
-            let num_off_bytes = 2880 - (num_bytes_read % 2880);
+            let num_off_bytes = (2880 - (num_bytes_read % 2880)) as usize;
             reader
                 .read_exact(&mut block_mem_buf[..num_off_bytes])
                 .ok() // An error like unexpected EOF is not standard frendly but we make it pass
@@ -127,7 +127,7 @@ where
 {
     pub async fn new(
         reader: &'a mut R,
-        num_bytes_read: &mut usize,
+        num_bytes_read: &mut u64,
         card_80_bytes_buf: &mut [u8; 80],
     ) -> Result<AsyncHDU<'a, R, X>, Error> {
         /* 1. Parse the header first */
@@ -140,7 +140,7 @@ where
         if is_remaining_bytes {
             let mut block_mem_buf: [u8; 2880] = [0; 2880];
 
-            let num_off_bytes = 2880 - ((*num_bytes_read) % 2880);
+            let num_off_bytes = (2880 - ((*num_bytes_read) % 2880)) as usize;
             reader
                 .read_exact(&mut block_mem_buf[..num_off_bytes])
                 .await
@@ -165,7 +165,7 @@ where
         let reader = if is_remaining_bytes {
             let mut block_mem_buf: [u8; 2880] = [0; 2880];
 
-            let num_off_bytes = 2880 - (num_bytes_read % 2880);
+            let num_off_bytes = (2880 - (num_bytes_read % 2880)) as usize;
             reader
                 .read_exact(&mut block_mem_buf[..num_off_bytes])
                 .await

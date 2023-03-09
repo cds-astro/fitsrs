@@ -48,8 +48,8 @@ where
     R: BufRead,
 {
     pub reader: &'a mut R,
-    pub num_bytes_to_read: usize,
-    pub num_bytes_read: usize,
+    pub num_bytes_to_read: u64,
+    pub num_bytes_read: u64,
     phantom: std::marker::PhantomData<T>,
 }
 
@@ -57,7 +57,7 @@ impl<'a, R, T> Iter<'a, R, T>
 where
     R: BufRead,
 {
-    pub fn new(reader: &'a mut R, num_bytes_to_read: usize) -> Self {
+    pub fn new(reader: &'a mut R, num_bytes_to_read: u64) -> Self {
         Self {
             reader,
             num_bytes_read: 0,
@@ -78,7 +78,7 @@ where
             None
         } else {
             let item = self.reader.read_u8();
-            self.num_bytes_read += std::mem::size_of::<Self::Item>();
+            self.num_bytes_read += std::mem::size_of::<Self::Item>() as u64;
 
             item.ok()
         }
@@ -96,7 +96,7 @@ where
             None
         } else {
             let item = self.reader.read_i16::<BigEndian>();
-            self.num_bytes_read += std::mem::size_of::<Self::Item>();
+            self.num_bytes_read += std::mem::size_of::<Self::Item>() as u64;
 
             item.ok()
         }
@@ -114,7 +114,7 @@ where
             None
         } else {
             let item = self.reader.read_i32::<BigEndian>();
-            self.num_bytes_read += std::mem::size_of::<Self::Item>();
+            self.num_bytes_read += std::mem::size_of::<Self::Item>() as u64;
 
             item.ok()
         }
@@ -132,7 +132,7 @@ where
             None
         } else {
             let item = self.reader.read_i64::<BigEndian>();
-            self.num_bytes_read += std::mem::size_of::<Self::Item>();
+            self.num_bytes_read += std::mem::size_of::<Self::Item>() as u64;
 
             item.ok()
         }
@@ -150,7 +150,7 @@ where
             None
         } else {
             let item = self.reader.read_f32::<BigEndian>();
-            self.num_bytes_read += std::mem::size_of::<Self::Item>();
+            self.num_bytes_read += std::mem::size_of::<Self::Item>() as u64;
 
             item.ok()
         }
@@ -168,7 +168,7 @@ where
             None
         } else {
             let item = self.reader.read_f64::<BigEndian>();
-            self.num_bytes_read += std::mem::size_of::<Self::Item>();
+            self.num_bytes_read += std::mem::size_of::<Self::Item>() as u64;
 
             item.ok()
         }

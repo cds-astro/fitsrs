@@ -29,9 +29,9 @@ pub struct BinTable {
     naxis: usize,
     // A non-negative integer, giving the number of eight-bit bytes in each row of the
     // table.
-    naxis1: usize,
+    naxis1: u64,
     // A non-negative integer, giving the number of rows in the table
-    naxis2: usize,
+    naxis2: u64,
     // A non-negative integer representing the number of fields in each row.
     // The maximum permissible value is 999.
     tfields: usize,
@@ -48,7 +48,7 @@ pub struct BinTable {
 
 #[async_trait(?Send)]
 impl Xtension for BinTable {
-    fn get_num_bytes_data_block(&self) -> usize {
+    fn get_num_bytes_data_block(&self) -> u64 {
         self.naxis1 * self.naxis2
     }
 
@@ -79,7 +79,7 @@ impl Xtension for BinTable {
                     } else {
                         (owned_kw[0].as_char(), 1.0)
                     };
-                let repeat_count = repeat_count as usize;
+                let repeat_count = repeat_count as u64;
 
                 match field_type_char.as_char() {
                     'L' => Ok(TFormBinaryTableType::L(TFormBinaryTable::new(repeat_count))), // Logical
@@ -100,7 +100,7 @@ impl Xtension for BinTable {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        let num_bits_per_row: usize = self.tforms.iter().map(|tform| tform.num_bits_field()).sum();
+        let num_bits_per_row: u64 = self.tforms.iter().map(|tform| tform.num_bits_field()).sum();
 
         let num_bytes_per_row = num_bits_per_row >> 3;
         if num_bytes_per_row != self.naxis1 {
@@ -112,7 +112,7 @@ impl Xtension for BinTable {
 
     fn parse<R: Read>(
         reader: &mut R,
-        num_bytes_read: &mut usize,
+        num_bytes_read: &mut u64,
         card_80_bytes_buf: &mut [u8; 80],
     ) -> Result<Self, Error> {
         // BITPIX
@@ -134,11 +134,11 @@ impl Xtension for BinTable {
         // NAXIS1
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
         let naxis1 =
-            check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_float()? as usize;
+            check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_float()? as u64;
         // NAXIS2
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
         let naxis2 =
-            check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_float()? as usize;
+            check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_float()? as u64;
 
         // PCOUNT
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
@@ -172,7 +172,7 @@ impl Xtension for BinTable {
 
     async fn parse_async<R>(
         reader: &mut R,
-        num_bytes_read: &mut usize,
+        num_bytes_read: &mut u64,
         card_80_bytes_buf: &mut [u8; 80],
     ) -> Result<Self, Error>
     where
@@ -198,12 +198,12 @@ impl Xtension for BinTable {
         // NAXIS1
         consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
         let naxis1 =
-            check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_float()? as usize;
+            check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_float()? as u64;
 
         // NAXIS2
         consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
         let naxis2 =
-            check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_float()? as usize;
+            check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_float()? as u64;
 
         // PCOUNT
         consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
@@ -240,86 +240,86 @@ impl Xtension for BinTable {
 // See Appendix F
 
 pub trait TFormType {
-    const BITS_NUM: usize;
+    const BITS_NUM: u64;
 }
 
 // Logical
 #[derive(Clone, Copy, Debug, Serialize, PartialEq)]
 pub struct L;
 impl TFormType for L {
-    const BITS_NUM: usize = 8;
+    const BITS_NUM: u64 = 8;
 }
 // Bit
 #[derive(Clone, Copy, Debug, Serialize, PartialEq)]
 pub struct X;
 impl TFormType for X {
-    const BITS_NUM: usize = 1;
+    const BITS_NUM: u64 = 1;
 }
 // Unsigned byte
 #[derive(Clone, Copy, Debug, Serialize, PartialEq)]
 pub struct B;
 impl TFormType for B {
-    const BITS_NUM: usize = 8;
+    const BITS_NUM: u64 = 8;
 }
 // 16-bit integer
 #[derive(Clone, Copy, Debug, Serialize, PartialEq)]
 pub struct I;
 impl TFormType for I {
-    const BITS_NUM: usize = 16;
+    const BITS_NUM: u64 = 16;
 }
 // 32-bit integer
 #[derive(Clone, Copy, Debug, Serialize, PartialEq)]
 pub struct J;
 impl TFormType for J {
-    const BITS_NUM: usize = 32;
+    const BITS_NUM: u64 = 32;
 }
 // 64-bit integer
 #[derive(Clone, Copy, Debug, Serialize, PartialEq)]
 pub struct K;
 impl TFormType for K {
-    const BITS_NUM: usize = 64;
+    const BITS_NUM: u64 = 64;
 }
 // Character
 #[derive(Clone, Copy, Debug, Serialize, PartialEq)]
 pub struct A;
 impl TFormType for A {
-    const BITS_NUM: usize = 8;
+    const BITS_NUM: u64 = 8;
 }
 // Single-precision floating point
 #[derive(Clone, Copy, Debug, Serialize, PartialEq)]
 pub struct E;
 impl TFormType for E {
-    const BITS_NUM: usize = 32;
+    const BITS_NUM: u64 = 32;
 }
 // Double-precision floating point
 #[derive(Clone, Copy, Debug, Serialize, PartialEq)]
 pub struct D;
 impl TFormType for D {
-    const BITS_NUM: usize = 64;
+    const BITS_NUM: u64 = 64;
 }
 // Single-precision complex
 #[derive(Clone, Copy, Debug, Serialize, PartialEq)]
 pub struct C;
 impl TFormType for C {
-    const BITS_NUM: usize = 64;
+    const BITS_NUM: u64 = 64;
 }
 // Double-precision complex
 #[derive(Clone, Copy, Debug, Serialize, PartialEq)]
 pub struct M;
 impl TFormType for M {
-    const BITS_NUM: usize = 128;
+    const BITS_NUM: u64 = 128;
 }
 // Array Descriptor (32-bit)
 #[derive(Clone, Copy, Debug, Serialize, PartialEq)]
 pub struct P;
 impl TFormType for P {
-    const BITS_NUM: usize = 64;
+    const BITS_NUM: u64 = 64;
 }
 // Array Descriptor (64-bit)
 #[derive(Clone, Copy, Debug, Serialize, PartialEq)]
 pub struct Q;
 impl TFormType for Q {
-    const BITS_NUM: usize = 128;
+    const BITS_NUM: u64 = 128;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
@@ -327,7 +327,7 @@ pub struct TFormBinaryTable<T>
 where
     T: TFormType + Clone + Copy + Debug + Serialize + PartialEq,
 {
-    repeat_count: usize,
+    repeat_count: u64,
     phantom: std::marker::PhantomData<T>,
 }
 
@@ -335,18 +335,18 @@ impl<T> TFormBinaryTable<T>
 where
     T: TFormType + Clone + Copy + Debug + PartialEq + Serialize,
 {
-    pub fn new(repeat_count: usize) -> Self {
+    pub fn new(repeat_count: u64) -> Self {
         Self {
             repeat_count,
             phantom: std::marker::PhantomData,
         }
     }
 
-    pub fn get_repeat_count(&self) -> usize {
+    pub fn get_repeat_count(&self) -> u64 {
         self.repeat_count
     }
 
-    pub fn num_bits_field(&self) -> usize {
+    pub fn num_bits_field(&self) -> u64 {
         let ri = self.get_repeat_count();
         let bi = <T as TFormType>::BITS_NUM;
 
@@ -372,7 +372,7 @@ pub enum TFormBinaryTableType {
 }
 
 impl TFormBinaryTableType {
-    fn num_bits_field(&self) -> usize {
+    fn num_bits_field(&self) -> u64 {
         match self {
             TFormBinaryTableType::L(tform) => tform.num_bits_field(), // Logical
             TFormBinaryTableType::X(tform) => tform.num_bits_field(), // Bit

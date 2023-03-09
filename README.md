@@ -56,8 +56,8 @@ while let Ok(Some(hdu)) = hdu_ext {
         XtensionHDU::Image(xhdu) => {
             let xtension = xhdu.get_header().get_xtension();
 
-            let naxis1 = *xtension.get_naxisn(1).unwrap();
-            let naxis2 = *xtension.get_naxisn(2).unwrap();
+            let naxis1 = *xtension.get_naxisn(1).unwrap() as usize;
+            let naxis2 = *xtension.get_naxisn(2).unwrap() as usize;
 
             let num_pixels = naxis2 * naxis1;
 
@@ -76,7 +76,7 @@ while let Ok(Some(hdu)) = hdu_ext {
                 .get_num_bytes_data_block();
 
             match xhdu.get_data() {
-                InMemData::U8(mem) => assert_eq!(num_bytes, mem.len()),
+                InMemData::U8(mem) => assert_eq!(num_bytes as usize, mem.len()),
                 _ => unreachable!()
             }
         },
@@ -86,7 +86,7 @@ while let Ok(Some(hdu)) = hdu_ext {
                 .get_num_bytes_data_block();
 
             match xhdu.get_data() {
-                InMemData::U8(mem) => assert_eq!(num_bytes, mem.len()),
+                InMemData::U8(mem) => assert_eq!(num_bytes as usize, mem.len()),
                 _ => unreachable!()
             }
         },
@@ -124,7 +124,7 @@ while let Ok(Some(mut xhdu)) = hdu_ext {
             let naxis1 = *xtension.get_naxisn(1).unwrap();
             let naxis2 = *xtension.get_naxisn(2).unwrap();
 
-            let num_pixels = naxis2 * naxis1;
+            let num_pixels = (naxis2 * naxis1) as usize;
 
             match xhdu.get_data_mut() {
                 iter::Data::U8(it) => {
@@ -160,7 +160,7 @@ while let Ok(Some(mut xhdu)) = hdu_ext {
 
             let it_bytes = xhdu.get_data_mut();
             let data = it_bytes.collect::<Vec<_>>();
-            assert_eq!(num_bytes, data.len());
+            assert_eq!(num_bytes as usize, data.len());
         },
         XtensionHDU::AsciiTable(xhdu) => {
             let num_bytes = xhdu.get_header()
@@ -169,7 +169,7 @@ while let Ok(Some(mut xhdu)) = hdu_ext {
 
             let it_bytes = xhdu.get_data_mut();
             let data = it_bytes.collect::<Vec<_>>();
-            assert_eq!(num_bytes, data.len());
+            assert_eq!(num_bytes as usize, data.len());
         },
     }
 
@@ -198,8 +198,8 @@ while let Ok(Some(mut xhdu)) = hdu_ext {
         AsyncXtensionHDU::Image(xhdu) => {
             let xtension = xhdu.get_header().get_xtension();
 
-            let naxis1 = *xtension.get_naxisn(1).unwrap();
-            let naxis2 = *xtension.get_naxisn(2).unwrap();
+            let naxis1 = *xtension.get_naxisn(1).unwrap() as usize;
+            let naxis2 = *xtension.get_naxisn(2).unwrap() as usize;
 
             let num_pixels = naxis2 * naxis1;
 
@@ -237,7 +237,7 @@ while let Ok(Some(mut xhdu)) = hdu_ext {
 
             let it_bytes = xhdu.get_data_mut();
             let data = it_bytes.collect::<Vec<_>>().await;
-            assert_eq!(num_bytes, data.len());
+            assert_eq!(num_bytes as usize, data.len());
         },
         AsyncXtensionHDU::AsciiTable(xhdu) => {
             let num_bytes = xhdu.get_header()
@@ -246,7 +246,7 @@ while let Ok(Some(mut xhdu)) = hdu_ext {
 
             let it_bytes = xhdu.get_data_mut();
             let data = it_bytes.collect::<Vec<_>>().await;
-            assert_eq!(num_bytes, data.len());
+            assert_eq!(num_bytes as usize, data.len());
         },
     }
 

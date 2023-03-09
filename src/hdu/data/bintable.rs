@@ -26,7 +26,7 @@ where
     where
         Self: Sized,
     {
-        let num_bytes_read = ctx.get_num_bytes_data_block();
+        let num_bytes_read = ctx.get_num_bytes_data_block() as usize;
 
         let bytes = self.get_ref();
         let bytes = bytes.as_ref();
@@ -54,14 +54,14 @@ where
 
     fn consume_data_block(
         data: Self::Data,
-        num_bytes_read: &mut usize,
+        num_bytes_read: &mut u64,
     ) -> Result<&'a mut Self, Error> {
         let Data {
             reader,
             num_bytes_read: num_bytes,
             ..
         } = data;
-        *num_bytes_read = num_bytes;
+        *num_bytes_read = num_bytes as u64;
 
         reader.set_position(reader.position() + num_bytes as u64);
 
@@ -82,7 +82,7 @@ where
 
     fn consume_data_block(
         data: Self::Data,
-        num_bytes_read: &mut usize,
+        num_bytes_read: &mut u64,
     ) -> Result<&'a mut Self, Error> {
         let iter::Iter {
             reader,
@@ -115,7 +115,7 @@ where
 
     async fn consume_data_block(
         data: Self::Data,
-        num_bytes_read: &mut usize,
+        num_bytes_read: &mut u64,
     ) -> Result<&'a mut Self, Error>
     where
         'a: 'async_trait,

@@ -34,26 +34,26 @@ where
     /// * `data` - a reader created i.e. from the opening of a file
     fn consume_data_block(
         data: Self::Data,
-        num_bytes_read: &mut usize,
+        num_bytes_read: &mut u64,
     ) -> Result<&'a mut Self, Error>;
 
-    fn read_n_bytes_exact(&mut self, num_bytes_to_read: usize) -> Result<(), Error> {
+    fn read_n_bytes_exact(&mut self, num_bytes_to_read: u64) -> Result<(), Error> {
         let mut num_bytes_read = 0;
 
         let mut buf = self.fill_buf().map_err(|_| {
             Error::StaticError("The underlying reader was read, but returned an error.")
         })?;
-        let mut size_buf = buf.len();
+        let mut size_buf = buf.len() as u64;
         let mut is_eof = buf.is_empty();
 
         while !is_eof && size_buf < (num_bytes_to_read - num_bytes_read) {
-            self.consume(size_buf);
+            self.consume(size_buf as usize);
             num_bytes_read += size_buf;
 
             buf = self.fill_buf().map_err(|_| {
                 Error::StaticError("The underlying reader was read, but returned an error.")
             })?;
-            size_buf = buf.len();
+            size_buf = buf.len() as u64;
 
             is_eof = buf.is_empty();
         }
@@ -68,7 +68,8 @@ where
             }
         } else {
             // Not EOF, we consume the remainig bytes
-            self.consume(num_bytes_to_read - num_bytes_read);
+            let amt = (num_bytes_to_read - num_bytes_read) as usize;
+            self.consume(amt);
 
             Ok(())
         }
@@ -100,28 +101,28 @@ where
     /// * `data` - a reader created i.e. from the opening of a file
     async fn consume_data_block(
         data: Self::Data,
-        num_bytes_read: &mut usize,
+        num_bytes_read: &mut u64,
     ) -> Result<&'a mut Self, Error>
     where
         'a: 'async_trait;
 
-    async fn read_n_bytes_exact(&mut self, num_bytes_to_read: usize) -> Result<(), Error> {
+    async fn read_n_bytes_exact(&mut self, num_bytes_to_read: u64) -> Result<(), Error> {
         let mut num_bytes_read = 0;
 
         let mut buf = self.fill_buf().await.map_err(|_| {
             Error::StaticError("The underlying reader was read, but returned an error.")
         })?;
-        let mut size_buf = buf.len();
+        let mut size_buf = buf.len() as u64;
         let mut is_eof = buf.is_empty();
 
         while !is_eof && size_buf < (num_bytes_to_read - num_bytes_read) {
-            self.consume_unpin(size_buf);
+            self.consume_unpin(size_buf as usize);
             num_bytes_read += size_buf;
 
             buf = self.fill_buf().await.map_err(|_| {
                 Error::StaticError("The underlying reader was read, but returned an error.")
             })?;
-            size_buf = buf.len();
+            size_buf = buf.len() as u64;
 
             is_eof = buf.is_empty();
         }
@@ -136,7 +137,8 @@ where
             }
         } else {
             // Not EOF, we consume the remainig bytes
-            self.consume_unpin(num_bytes_to_read - num_bytes_read);
+            let amt = (num_bytes_to_read - num_bytes_read) as usize;
+            self.consume_unpin(amt);
 
             Ok(())
         }

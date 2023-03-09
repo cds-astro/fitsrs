@@ -26,7 +26,7 @@ where
     where
         Self: Sized,
     {
-        let num_bytes_read = ctx.get_num_bytes_data_block();
+        let num_bytes_read = ctx.get_num_bytes_data_block() as usize;
 
         let bitpix = ctx.get_bitpix();
 
@@ -46,7 +46,7 @@ where
             match bitpix {
                 BitpixValue::U8 => {
                     let (_, data, _) = x_mut_ref.align_to_mut::<u8>();
-                    let num_pixels = num_bytes_read;
+                    let num_pixels = num_bytes_read as usize;
 
                     debug_assert!(data.len() >= num_pixels);
                     let data = &data[..num_pixels];
@@ -64,7 +64,7 @@ where
                     BigEndian::from_slice_i16(data);
 
                     // 3. Keep only the pixels
-                    let num_pixels = num_bytes_read / std::mem::size_of::<i16>();
+                    let num_pixels = (num_bytes_read as usize) / std::mem::size_of::<i16>();
                     debug_assert!(data.len() >= num_pixels);
                     let data = &data[..num_pixels];
 
@@ -81,7 +81,7 @@ where
                     BigEndian::from_slice_i32(data);
 
                     // 3. Keep only the pixels
-                    let num_pixels = num_bytes_read / std::mem::size_of::<i32>();
+                    let num_pixels = (num_bytes_read as usize) / std::mem::size_of::<i32>();
                     debug_assert!(data.len() >= num_pixels);
                     let data = &data[..num_pixels];
 
@@ -145,14 +145,14 @@ where
 
     fn consume_data_block(
         data: Self::Data,
-        num_bytes_read: &mut usize,
+        num_bytes_read: &mut u64,
     ) -> Result<&'a mut Self, Error> {
         let Data {
             reader,
             num_bytes_read: num_bytes,
             ..
         } = data;
-        *num_bytes_read = num_bytes;
+        *num_bytes_read = num_bytes as u64;
 
         reader.set_position(reader.position() + num_bytes as u64);
 
@@ -181,7 +181,7 @@ where
 
     fn consume_data_block(
         data: Self::Data,
-        num_bytes_read: &mut usize,
+        num_bytes_read: &mut u64,
     ) -> Result<&'a mut Self, Error> {
         let (reader, num_bytes_already_read, num_bytes_to_read) = match data {
             iter::Data::U8(iter::Iter {
@@ -255,7 +255,7 @@ where
 
     async fn consume_data_block(
         data: Self::Data,
-        num_bytes_read: &mut usize,
+        num_bytes_read: &mut u64,
     ) -> Result<&'a mut Self, Error>
     where
         'a: 'async_trait,
