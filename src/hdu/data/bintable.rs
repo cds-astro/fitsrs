@@ -116,10 +116,10 @@ where
     }
 }
 
-#[async_trait]
+#[async_trait(?Send)]
 impl<'a, R> DataAsyncBufRead<'a, BinTable> for futures::io::BufReader<R>
 where
-    R: AsyncRead + Debug + 'a + std::marker::Unpin + std::marker::Send,
+    R: AsyncRead + Debug + 'a + std::marker::Unpin,
 {
     type Data = DataOwnedSt<'a, Self, u8>;
 

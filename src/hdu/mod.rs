@@ -123,7 +123,7 @@ where
 impl<'a, R, X> AsyncHDU<'a, R, X>
 where
     X: Xtension + std::fmt::Debug,
-    R: DataAsyncBufRead<'a, X> + std::marker::Send + 'a,
+    R: DataAsyncBufRead<'a, X> + 'a,
 {
     pub async fn new(
         reader: &'a mut R,

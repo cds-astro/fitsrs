@@ -71,7 +71,7 @@ where
 use async_trait::async_trait;
 use futures::io::AsyncBufRead;
 use futures::AsyncBufReadExt;
-#[async_trait]
+#[async_trait(?Send)]
 pub trait DataAsyncBufRead<'a, X>: AsyncBufRead + Unpin
 where
     X: Xtension,

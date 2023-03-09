@@ -93,7 +93,6 @@ where
     R: DataAsyncBufRead<'a, Image>
         + DataAsyncBufRead<'a, BinTable>
         + DataAsyncBufRead<'a, AsciiTable>
-        + std::marker::Send
         + 'a,
 {
     pub async fn new(reader: &'a mut R) -> Result<AsyncXtensionHDU<'a, R>, Error> {

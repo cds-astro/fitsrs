@@ -30,7 +30,7 @@ pub fn parse_xtension_card(card: &[u8; 80]) -> Result<XtensionType, Error> {
     }
 }
 
-#[async_trait]
+#[async_trait(?Send)]
 pub trait Xtension {
     fn get_num_bytes_data_block(&self) -> usize;
 
@@ -54,5 +54,5 @@ pub trait Xtension {
     ) -> Result<Self, Error>
     where
         Self: Sized,
-        R: AsyncRead + std::marker::Unpin + std::marker::Send;
+        R: AsyncRead + std::marker::Unpin;
 }

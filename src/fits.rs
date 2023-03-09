@@ -75,7 +75,6 @@ where
     R: DataAsyncBufRead<'a, Image>
         + DataAsyncBufRead<'a, BinTable>
         + DataAsyncBufRead<'a, AsciiTable>
-        + std::marker::Send,
 {
     /// Parse a FITS file
     /// # Params

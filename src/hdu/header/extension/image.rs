@@ -44,7 +44,7 @@ impl Image {
     }
 }
 
-#[async_trait]
+#[async_trait(?Send)]
 impl Xtension for Image {
     fn get_num_bytes_data_block(&self) -> usize {
         let num_pixels = if self.naxisn.is_empty() {
@@ -98,7 +98,7 @@ impl Xtension for Image {
         card_80_bytes_buf: &mut [u8; 80],
     ) -> Result<Self, Error>
     where
-        R: AsyncRead + std::marker::Unpin + std::marker::Send,
+        R: AsyncRead + std::marker::Unpin,
         Self: Sized,
     {
         // BITPIX

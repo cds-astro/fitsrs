@@ -157,7 +157,7 @@ where
         card_80_bytes_buf: &mut [u8; 80],
     ) -> Result<Self, Error>
     where
-        R: AsyncBufRead + std::marker::Unpin + std::marker::Send,
+        R: AsyncBufRead + std::marker::Unpin,
     {
         let mut cards = HashMap::new();
 

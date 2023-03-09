@@ -46,7 +46,7 @@ pub struct BinTable {
     gcount: usize,
 }
 
-#[async_trait]
+#[async_trait(?Send)]
 impl Xtension for BinTable {
     fn get_num_bytes_data_block(&self) -> usize {
         self.naxis1 * self.naxis2
@@ -176,7 +176,7 @@ impl Xtension for BinTable {
         card_80_bytes_buf: &mut [u8; 80],
     ) -> Result<Self, Error>
     where
-        R: AsyncRead + std::marker::Unpin + std::marker::Send,
+        R: AsyncRead + std::marker::Unpin,
         Self: Sized,
     {
         // BITPIX
