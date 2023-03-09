@@ -1,11 +1,18 @@
 pub mod asciitable;
 pub mod bintable;
 pub mod image;
+pub mod iter;
+pub mod stream;
+
+use serde::Serialize;
+
+use std::fmt::Debug;
+use std::io::{BufRead, Read};
+
+use std::marker::Unpin;
 
 use crate::error::Error;
 use crate::hdu::Xtension;
-use std::fmt::Debug;
-use std::io::BufRead;
 
 pub trait DataBufRead<'a, X>: BufRead
 where
@@ -71,6 +78,7 @@ where
 use async_trait::async_trait;
 use futures::io::AsyncBufRead;
 use futures::AsyncBufReadExt;
+
 #[async_trait(?Send)]
 pub trait DataAsyncBufRead<'a, X>: AsyncBufRead + Unpin
 where
@@ -140,4 +148,47 @@ pub trait Access {
 
     fn get_data(&self) -> &Self::Type;
     fn get_data_mut(&mut self) -> &mut Self::Type;
+}
+
+/// The full slice of data found in-memory
+/// This is an enum whose content depends on the
+/// bitpix value found in the header part of the HDU
+///
+/// The data part is expressed as a `DataBorrowed` structure
+/// for in-memory readers (typically for `&[u8]` or a `Cursor<AsRef<[u8]>>`) that ensures
+/// all the data fits in memory
+///
+#[derive(Serialize, Debug)]
+pub struct Data<'a, R>
+where
+    R: Read + Debug + 'a,
+{
+    pub reader: &'a mut R,
+    pub num_bytes_read: usize,
+    pub data: InMemData<'a>,
+}
+
+impl<'a, R> Access for Data<'a, R>
+where
+    R: Read + Debug + 'a,
+{
+    type Type = InMemData<'a>;
+
+    fn get_data(&self) -> &Self::Type {
+        &self.data
+    }
+
+    fn get_data_mut(&mut self) -> &mut Self::Type {
+        &mut self.data
+    }
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub enum InMemData<'a> {
+    U8(&'a [u8]),
+    I16(&'a [i16]),
+    I32(&'a [i32]),
+    I64(&'a [i64]),
+    F32(&'a [f32]),
+    F64(&'a [f64]),
 }

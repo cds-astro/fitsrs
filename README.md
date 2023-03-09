@@ -29,7 +29,16 @@ Example
 
 For files that can fit in memory
 ```rust
+use fitsrs::{
+    fits::Fits,
+    hdu::{
+        data::InMemData,
+        extension::XtensionHDU
+    }
+};
+
 use std::fs::File;
+use std::io::Cursor;
 
 let mut f = File::open("samples/fits.gsfc.nasa.gov/EUVE.fits").unwrap();
 
@@ -89,6 +98,17 @@ while let Ok(Some(hdu)) = hdu_ext {
 
 For files that may not be contained into the memory
 ```rust
+use fitsrs::{
+    fits::Fits,
+    hdu::{
+        data::iter,
+        extension::XtensionHDU
+    }
+};
+
+use std::fs::File;
+use std::io::{BufReader, Read};
+
 let f = File::open("samples/fits.gsfc.nasa.gov/EUVE.fits").unwrap();
 let mut reader = BufReader::new(f);
 
@@ -107,27 +127,27 @@ while let Ok(Some(mut xhdu)) = hdu_ext {
             let num_pixels = naxis2 * naxis1;
 
             match xhdu.get_data_mut() {
-                DataOwned::U8(it) => {
+                iter::Data::U8(it) => {
                     let data = it.collect::<Vec<_>>();
                     assert_eq!(num_pixels, data.len())
                 },
-                DataOwned::I16(it) => {
+                iter::Data::I16(it) => {
                     let data = it.collect::<Vec<_>>();
                     assert_eq!(num_pixels, data.len())
                 },
-                DataOwned::I32(it) => {
+                iter::Data::I32(it) => {
                     let data = it.collect::<Vec<_>>();
                     assert_eq!(num_pixels, data.len())
                 },
-                DataOwned::I64(it) => {
+                iter::Data::I64(it) => {
                     let data = it.collect::<Vec<_>>();
                     assert_eq!(num_pixels, data.len())
                 },
-                DataOwned::F32(it) => {
+                iter::Data::F32(it) => {
                     let data = it.collect::<Vec<_>>();
                     assert_eq!(num_pixels, data.len())
                 },
-                DataOwned::F64(it) => {
+                iter::Data::F64(it) => {
                     let data = it.collect::<Vec<_>>();
                     assert_eq!(num_pixels, data.len())
                 },
@@ -160,6 +180,14 @@ while let Ok(Some(mut xhdu)) = hdu_ext {
 For async input readers:
 
 ```rust
+use fitsrs::{
+    fits::AsyncFits,
+    hdu::{
+        data::stream,
+        extension::AsyncXtensionHDU
+    }
+};
+
 // reader needs to implement futures::io::AsyncRead
 let AsyncFits { hdu } = AsyncFits::from_reader(&mut reader).await.unwrap();
 
@@ -176,28 +204,28 @@ while let Ok(Some(mut xhdu)) = hdu_ext {
             let num_pixels = naxis2 * naxis1;
 
             match xhdu.get_data_mut() {
-                AsyncDataOwned::U8(it) => {
-                    let data = it.collect::<Vec<_>>().await;
+                stream::Data::U8(st) => {
+                    let data = st.collect::<Vec<_>>().await;
                     assert_eq!(num_pixels, data.len())
                 },
-                AsyncDataOwned::I16(it) => {
-                    let data = it.collect::<Vec<_>>().await;
+                stream::Data::I16(st) => {
+                    let data = st.collect::<Vec<_>>().await;
                     assert_eq!(num_pixels, data.len())
                 },
-                AsyncDataOwned::I32(it) => {
-                    let data = it.collect::<Vec<_>>().await;
+                stream::Data::I32(st) => {
+                    let data = st.collect::<Vec<_>>().await;
                     assert_eq!(num_pixels, data.len())
                 },
-                AsyncDataOwned::I64(it) => {
-                    let data = it.collect::<Vec<_>>().await;
+                stream::Data::I64(st) => {
+                    let data = st.collect::<Vec<_>>().await;
                     assert_eq!(num_pixels, data.len())
                 },
-                AsyncDataOwned::F32(it) => {
-                    let data = it.collect::<Vec<_>>().await;
+                stream::Data::F32(st) => {
+                    let data = st.collect::<Vec<_>>().await;
                     assert_eq!(num_pixels, data.len())
                 },
-                AsyncDataOwned::F64(it) => {
-                    let data = it.collect::<Vec<_>>().await;
+                stream::Data::F64(st) => {
+                    let data = st.collect::<Vec<_>>().await;
                     assert_eq!(num_pixels, data.len())
                 },
             }

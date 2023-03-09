@@ -9,7 +9,7 @@
 //! use std::io::BufReader;
 //!
 //! use fitsrs::{fits::Fits, hdu::HDU};
-//! use fitsrs::hdu::data::image::DataOwned;
+//! use fitsrs::hdu::data::iter;
 //!
 //! let f = File::open("samples/fits.gsfc.nasa.gov/HST_FOC.fits").unwrap();
 //! let mut reader = BufReader::new(f);
@@ -18,7 +18,7 @@
 //! let naxis1 = *xtension.get_naxisn(1).unwrap();
 //! let naxis2 = *xtension.get_naxisn(2).unwrap();
 //!
-//! if let DataOwned::F32(it) = hdu.get_data_mut() {
+//! if let iter::Data::F32(it) = hdu.get_data_mut() {
 //!     let data = it.collect::<Vec<_>>();
 //!     assert_eq!(data.len(), naxis1 * naxis2);
 //! } else {
@@ -38,7 +38,9 @@ pub mod hdu;
 #[cfg(test)]
 mod tests {
     use crate::fits::{AsyncFits, Fits};
-    use crate::hdu::data::image::{AsyncDataOwned, DataOwned, InMemData};
+    use crate::hdu::data::iter;
+    use crate::hdu::data::stream;
+    use crate::hdu::data::InMemData;
     use crate::hdu::extension::AsyncXtensionHDU;
     use crate::hdu::extension::XtensionHDU;
     use crate::hdu::header::extension::Xtension;
@@ -218,7 +220,7 @@ mod tests {
 
             let data = image.get_data_mut();
             match data {
-                DataOwned::I16(it) => {
+                iter::Data::I16(it) => {
                     let data = it.collect::<Vec<_>>();
                     assert_eq!(data.len(), naxis1 * naxis2);
                 }
@@ -325,27 +327,27 @@ mod tests {
                     let num_pixels = naxis2 * naxis1;
 
                     match xhdu.get_data_mut() {
-                        DataOwned::U8(it) => {
+                        iter::Data::U8(it) => {
                             let data = it.collect::<Vec<_>>();
                             assert_eq!(num_pixels, data.len())
                         }
-                        DataOwned::I16(it) => {
+                        iter::Data::I16(it) => {
                             let data = it.collect::<Vec<_>>();
                             assert_eq!(num_pixels, data.len())
                         }
-                        DataOwned::I32(it) => {
+                        iter::Data::I32(it) => {
                             let data = it.collect::<Vec<_>>();
                             assert_eq!(num_pixels, data.len())
                         }
-                        DataOwned::I64(it) => {
+                        iter::Data::I64(it) => {
                             let data = it.collect::<Vec<_>>();
                             assert_eq!(num_pixels, data.len())
                         }
-                        DataOwned::F32(it) => {
+                        iter::Data::F32(it) => {
                             let data = it.collect::<Vec<_>>();
                             assert_eq!(num_pixels, data.len())
                         }
-                        DataOwned::F64(it) => {
+                        iter::Data::F64(it) => {
                             let data = it.collect::<Vec<_>>();
                             assert_eq!(num_pixels, data.len())
                         }
@@ -420,27 +422,27 @@ mod tests {
                     let num_pixels = naxis2 * naxis1;
 
                     match xhdu.get_data_mut() {
-                        AsyncDataOwned::U8(stream) => {
+                        stream::Data::U8(stream) => {
                             let data = stream.collect::<Vec<_>>().await;
                             assert_eq!(num_pixels, data.len())
                         }
-                        AsyncDataOwned::I16(stream) => {
+                        stream::Data::I16(stream) => {
                             let data = stream.collect::<Vec<_>>().await;
                             assert_eq!(num_pixels, data.len())
                         }
-                        AsyncDataOwned::I32(stream) => {
+                        stream::Data::I32(stream) => {
                             let data = stream.collect::<Vec<_>>().await;
                             assert_eq!(num_pixels, data.len())
                         }
-                        AsyncDataOwned::I64(stream) => {
+                        stream::Data::I64(stream) => {
                             let data = stream.collect::<Vec<_>>().await;
                             assert_eq!(num_pixels, data.len())
                         }
-                        AsyncDataOwned::F32(stream) => {
+                        stream::Data::F32(stream) => {
                             let data = stream.collect::<Vec<_>>().await;
                             assert_eq!(num_pixels, data.len())
                         }
-                        AsyncDataOwned::F64(stream) => {
+                        stream::Data::F64(stream) => {
                             let data = stream.collect::<Vec<_>>().await;
                             assert_eq!(num_pixels, data.len())
                         }

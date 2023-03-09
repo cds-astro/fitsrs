@@ -74,7 +74,7 @@ impl<'a, R> AsyncFits<'a, R>
 where
     R: DataAsyncBufRead<'a, Image>
         + DataAsyncBufRead<'a, BinTable>
-        + DataAsyncBufRead<'a, AsciiTable>
+        + DataAsyncBufRead<'a, AsciiTable>,
 {
     /// Parse a FITS file
     /// # Params

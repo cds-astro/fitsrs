@@ -6,22 +6,22 @@ use futures::AsyncRead;
 
 use crate::error::Error;
 
-use crate::hdu::data::image::DataBorrowed;
-use crate::hdu::data::image::DataOwnedIt;
-use crate::hdu::data::image::InMemData;
+use super::iter;
+use super::stream;
+use super::{Data, InMemData};
+
 use crate::hdu::header::extension::asciitable::AsciiTable;
 use crate::hdu::DataBufRead;
 
 use crate::hdu::header::extension::Xtension;
 
-use super::image::DataOwnedSt;
 use super::DataAsyncBufRead;
 
 impl<'a, R> DataBufRead<'a, AsciiTable> for Cursor<R>
 where
     R: AsRef<[u8]> + Debug + Read + 'a,
 {
-    type Data = DataBorrowed<'a, Self>;
+    type Data = Data<'a, Self>;
 
     fn new_data_block(&'a mut self, ctx: &AsciiTable) -> Self::Data
     where
@@ -45,7 +45,7 @@ where
             let (_, data, _) = x_mut_ref.align_to_mut::<u8>();
             let data = &data[..num_bytes_read];
 
-            DataBorrowed {
+            Data {
                 data: InMemData::U8(data),
                 reader: self,
                 num_bytes_read,
@@ -57,7 +57,7 @@ where
         data: Self::Data,
         num_bytes_read: &mut usize,
     ) -> Result<&'a mut Self, Error> {
-        let DataBorrowed {
+        let Data {
             reader,
             num_bytes_read: num_bytes,
             ..
@@ -74,18 +74,18 @@ impl<'a, R> DataBufRead<'a, AsciiTable> for BufReader<R>
 where
     R: Read + Debug + 'a,
 {
-    type Data = DataOwnedIt<'a, Self, u8>;
+    type Data = iter::Iter<'a, Self, u8>;
 
     fn new_data_block(&'a mut self, ctx: &AsciiTable) -> Self::Data {
         let num_bytes_to_read = ctx.get_num_bytes_data_block();
-        DataOwnedIt::new(self, num_bytes_to_read)
+        iter::Iter::new(self, num_bytes_to_read)
     }
 
     fn consume_data_block(
         data: Self::Data,
         num_bytes_read: &mut usize,
     ) -> Result<&'a mut Self, Error> {
-        let DataOwnedIt {
+        let iter::Iter {
             reader,
             num_bytes_read: num_bytes_already_read,
             num_bytes_to_read,
@@ -107,11 +107,11 @@ impl<'a, R> DataAsyncBufRead<'a, AsciiTable> for futures::io::BufReader<R>
 where
     R: AsyncRead + Debug + 'a + std::marker::Unpin,
 {
-    type Data = DataOwnedSt<'a, Self, u8>;
+    type Data = stream::St<'a, Self, u8>;
 
     fn new_data_block(&'a mut self, ctx: &AsciiTable) -> Self::Data {
         let num_bytes_to_read = ctx.get_num_bytes_data_block();
-        DataOwnedSt::new(self, num_bytes_to_read)
+        stream::St::new(self, num_bytes_to_read)
     }
 
     async fn consume_data_block(
@@ -121,7 +121,7 @@ where
     where
         'a: 'async_trait,
     {
-        let DataOwnedSt {
+        let stream::St {
             reader,
             num_bytes_to_read,
             num_bytes_read: num_bytes_already_read,
