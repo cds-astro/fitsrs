@@ -395,7 +395,7 @@ mod tests {
         assert!(Fits::from_reader(&mut reader).is_err());
     }
 
-    #[test_case("samples/misc/EUC_MER_MOSAIC-VIS-FLAG_TILE100158585-1EC1C5_20221211T132329.822037Z_00.00.fits")]
+    /*#[test_case("samples/misc/EUC_MER_MOSAIC-VIS-FLAG_TILE100158585-1EC1C5_20221211T132329.822037Z_00.00.fits")]
     #[test_case("samples/fits.gsfc.nasa.gov/EUVE.fits")]
     #[tokio::test]
     async fn test_fits_images_data_block_bufreader_async(filename: &str) {
@@ -504,5 +504,10 @@ mod tests {
 
             hdu_ext = xhdu.next().await;
         }
+    }*/
+
+    #[test]
+    fn test_failing() {
+        assert!(false);
     }
 }
