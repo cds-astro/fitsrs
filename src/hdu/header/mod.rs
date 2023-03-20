@@ -64,10 +64,10 @@ pub fn check_card_keyword(card: &[u8; 80], keyword: &[u8; 8]) -> Result<card::Va
         if &kw == keyword {
             Ok(v)
         } else {
-            Err(Error::FailFindingKeyword)
+            Err(Error::FailFindingKeyword(std::str::from_utf8(keyword)?.to_owned()))
         }
     } else {
-        Err(Error::FailFindingKeyword)
+        Err(Error::FailFindingKeyword(std::str::from_utf8(keyword)?.to_owned()))
     }
 }
 

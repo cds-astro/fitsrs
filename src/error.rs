@@ -1,51 +1,34 @@
-#[derive(Debug, PartialEq)]
-pub enum Error {
-    CardSizeNotRespected(usize),
-    Not80BytesMultipleFile,
-    SimpleKeywordBadValue,
-    NomError,
-    BitpixBadValue,
-    NaxisBadValue,
-    NaxisSizeBadValue,
-    NaxisSizeNotFound,
-    FailReadingNextBytes,
-    FailFindingKeyword,
-    NegativeOrNullNaxis,
-    ValueBadParsing,
-    NotSupportedXtensionType(String),
-    NegativeOrNullNaxisSize(usize),
-    Utf8Error(std::str::Utf8Error),
-    StaticError(&'static str),
-}
-
-use std::fmt;
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Error::CardSizeNotRespected(_) => write!(f, "card size not repected"),
-            Error::Utf8Error(e) => write!(f, "{e}"),
-            // TODO
-            _ => write!(f, ""),
+quick_error! {
+    #[derive(Debug, PartialEq)]
+    pub enum Error {
+        /// General error case
+        StaticError(message: &'static str) {
+            from()
+            display("{}", message)
         }
-    }
-}
-
-impl std::error::Error for Error {}
-
-impl<'a> From<nom::Err<nom::error::Error<&'a [u8]>>> for Error {
-    fn from(_: nom::Err<nom::error::Error<&'a [u8]>>) -> Self {
-        Error::NomError
-    }
-}
-
-impl From<std::str::Utf8Error> for Error {
-    fn from(err: std::str::Utf8Error) -> Self {
-        Error::Utf8Error(err)
-    }
-}
-
-impl From<&'static str> for Error {
-    fn from(err: &'static str) -> Self {
-        Error::StaticError(err)
+        BitpixBadValue {
+            display("Bitpix value found is not valid. Standard values are: -64, -32, 8, 16, 32 and 64.")
+        }
+        /// Fits file is not a multiple of 80 bytes long
+        FailReadingNextBytes {
+            display("A 80 bytes card could not be read. A fits file must have a multiple of 80 characters.")
+        }
+        FailFindingKeyword(keyword: String) {
+            display("{} keyword has not been found.", keyword)
+        }
+        ValueBadParsing {
+            display("A value could not be parsed correctly")
+        }
+        NotSupportedXtensionType(extension: String) {
+            display("`{}` extension is not supported. Only BINTABLE, TABLE and IMAGE are.", extension)
+        }
+        Nom {
+            from(nom::Err<nom::error::Error<&[u8]>>)
+            display("Nom could not parse header values")
+        }
+        Utf8 {
+            from(std::str::Utf8Error)
+            display("Fail to parse a keyword as a utf8 string")
+        }
     }
 }
