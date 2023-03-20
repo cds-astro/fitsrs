@@ -190,9 +190,8 @@ mod tests {
     #[test_case("samples/fits.gsfc.nasa.gov/IUE_LWP.fits")]
     #[test_case("samples/misc/bonn.fits")]
     #[test_case("samples/misc/EUC_MER_MOSAIC-VIS-FLAG_TILE100158585-1EC1C5_20221211T132329.822037Z_00.00.fits")]
-    //#[test_case("samples/misc/P122_49.fits")]
+    #[test_case("samples/misc/P122_49.fits")]
     #[test_case("samples/misc/skv1678175163788.fits")]
-    //#[test_case("samples/misc/drao.fits")] png file
     //#[test_case("samples/misc/ji0590044.fits")] gzip compressed data
     //#[test_case("samples/misc/AKAI013000932.fits")] gzip compressed data
     fn test_fits_opening(filename: &str) {
