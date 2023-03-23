@@ -187,6 +187,7 @@ mod tests {
     #[test_case("samples/fits.gsfc.nasa.gov/HST_NICMOS.fits")]
     #[test_case("samples/fits.gsfc.nasa.gov/HST_WFPC_II.fits")]
     #[test_case("samples/fits.gsfc.nasa.gov/HST_WFPC_II_bis.fits")]
+    #[test_case("samples/vizier/NVSSJ235137-362632r.fits")]
     #[test_case("samples/fits.gsfc.nasa.gov/IUE_LWP.fits")]
     #[test_case("samples/misc/bonn.fits")]
     #[test_case("samples/misc/EUC_MER_MOSAIC-VIS-FLAG_TILE100158585-1EC1C5_20221211T132329.822037Z_00.00.fits")]

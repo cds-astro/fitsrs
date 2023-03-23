@@ -90,7 +90,7 @@ fn parse_naxis_card(card: &[u8; 80]) -> Result<usize, Error> {
     Ok(naxis as usize)
 }
 
-const NAXIS_KW: [&[u8; 8]; 3] = [b"NAXIS1  ", b"NAXIS2  ", b"NAXIS3  "];
+const NAXIS_KW: [&[u8; 8]; 6] = [b"NAXIS1  ", b"NAXIS2  ", b"NAXIS3  ", b"NAXIS4  ", b"NAXIS5  ", b"NAXIS6  "];
 
 #[derive(Debug, PartialEq, Serialize, Clone, Copy)]
 pub enum BitpixValue {
