@@ -107,7 +107,7 @@ pub(crate) fn parse_card_value(buf: &[u8]) -> IResult<&[u8], Value> {
         white_space0,
         alt((
             preceded(
-                tag(b"= "),
+                tag(b"="),
                 alt((parse_character_string, parse_logical, parse_float)),
             ),
             parse_undefined,

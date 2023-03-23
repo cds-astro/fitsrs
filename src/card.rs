@@ -101,7 +101,7 @@ pub(crate) fn parse_character_string(buf: &[u8]) -> IResult<&[u8], Value> {
     map(
         preceded(
             space0,
-            delimited(char('\''), take_till(|c| c == b'\''), char('\'')),
+            delimited(char('\''), take_till(|c| c == b'\''), char('\''))
         ),
         |str: &[u8]| {
             // Copy the bytes to a new string
