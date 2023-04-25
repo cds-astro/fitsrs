@@ -46,14 +46,25 @@ pub async fn consume_next_card_async<'a, R: AsyncRead + std::marker::Unpin>(
 
 fn parse_generic_card(card: &[u8; 80]) -> Result<Option<Card>, Error> {
     let kw = &card[..8];
-    if kw != b"END     " {
-        let (_, v) = parse_card_value(&card[8..])?;
+    let value = match kw {
+        b"END     " => None,
+        b"HISTORY " => {
+            let v = Value::String(String::from_utf8_lossy(&card[8..]).to_string());
+            Some(v)
+        },
+        _ => {
+            let (_, v) = parse_card_value(&card[8..])?;
+            Some(v)
+        }
+    };
+
+    if let Some(value) = value {
         // 1. Init the fixed keyword slice
         let mut owned_kw: [u8; 8] = [0; 8];
         // 2. Copy from slice
         owned_kw.copy_from_slice(kw);
 
-        Ok(Some(Card::new(owned_kw, v)))
+        Ok(Some(Card::new(owned_kw, value)))
     } else {
         Ok(None)
     }
