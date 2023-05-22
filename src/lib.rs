@@ -194,6 +194,7 @@ mod tests {
     #[test_case("samples/misc/EUC_MER_MOSAIC-VIS-FLAG_TILE100158585-1EC1C5_20221211T132329.822037Z_00.00.fits")]
     #[test_case("samples/misc/P122_49.fits")]
     #[test_case("samples/misc/skv1678175163788.fits")]
+    #[test_case("samples/misc/SN2923fxjA.fits")]
     //#[test_case("samples/misc/ji0590044.fits")] gzip compressed data
     //#[test_case("samples/misc/AKAI013000932.fits")] gzip compressed data
     fn test_fits_opening(filename: &str) {
@@ -401,6 +402,7 @@ mod tests {
     #[test_case("samples/misc/EUC_MER_MOSAIC-VIS-FLAG_TILE100158585-1EC1C5_20221211T132329.822037Z_00.00.fits")]
     #[test_case("samples/fits.gsfc.nasa.gov/EUVE.fits")]
     #[test_case("samples/fits.gsfc.nasa.gov/HST_FOC.fits")]
+    #[test_case("samples/vizier/new_url.fits")]
     #[tokio::test]
     async fn test_fits_images_data_block_bufreader_async(filename: &str) {
         use std::fs::File;

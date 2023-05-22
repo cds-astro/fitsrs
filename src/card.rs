@@ -1,9 +1,9 @@
 use nom::{
     branch::alt,
     bytes::complete::{take_till, take_while},
-    character::complete::{char, space0, u32},
+    character::complete::{char, space0, i64, hex_digit1},
     combinator::{map, value},
-    number::complete::float,
+    number::complete::{float},
     sequence::{delimited, preceded},
     IResult,
 };
@@ -124,16 +124,23 @@ pub(crate) fn parse_logical(buf: &[u8]) -> IResult<&[u8], Value> {
 }
 
 pub(crate) fn parse_float(buf: &[u8]) -> IResult<&[u8], Value> {
-    preceded(space0, map(float, |val| Value::Float(val as f64)))(buf)
+    preceded(
+        space0,
+        map(float, |val| Value::Float(val as f64))
+    )(buf)
 }
 
 pub(crate) fn parse_integer(buf: &[u8]) -> IResult<&[u8], Value> {
-    preceded(space0, map(u32, |val| Value::Float(val as f64)))(buf)
+    preceded(
+        space0,
+        map(i64, |val| Value::Integer(val)),
+    )(buf)
 }
 
 #[cfg(test)]
 mod tests {
     use super::{parse_character_string, parse_float, Value};
+    use crate::card::parse_integer;
 
     #[test]
     fn test_float() {
