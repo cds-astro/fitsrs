@@ -75,10 +75,10 @@ fn parse_generic_card(card: &[u8; 80]) -> Result<Option<Card>, Error> {
                 
                 if str.is_empty() {
                     Value::Undefined
-                } else if let Ok(val) = str.parse::<i64>() {
-                    Value::Integer(val)
                 } else if let Ok(val) = str.parse::<f64>() {
                     Value::Float(val)
+                } else if let Ok(val) = str.parse::<i64>() {
+                    Value::Integer(val)
                 } else if str == "T" {
                     Value::Logical(true)
                 } else if str == "F" {
@@ -128,7 +128,7 @@ pub fn check_card_keyword(card: &[u8; 80], keyword: &[u8; 8]) -> Result<card::Va
 
 /* Parse mandatory keywords */
 fn parse_bitpix_card(card: &[u8; 80]) -> Result<BitpixValue, Error> {
-    let bitpix = check_card_keyword(card, b"BITPIX  ")?.check_for_integer()? as i32;
+    let bitpix = check_card_keyword(card, b"BITPIX  ")?.check_for_float()? as i32;
     match bitpix {
         8 => Ok(BitpixValue::U8),
         16 => Ok(BitpixValue::I16),
@@ -140,7 +140,7 @@ fn parse_bitpix_card(card: &[u8; 80]) -> Result<BitpixValue, Error> {
     }
 }
 fn parse_naxis_card(card: &[u8; 80]) -> Result<usize, Error> {
-    let naxis = check_card_keyword(card, b"NAXIS   ")?.check_for_integer()?;
+    let naxis = check_card_keyword(card, b"NAXIS   ")?.check_for_float()?;
 
     Ok(naxis as usize)
 }
@@ -265,13 +265,13 @@ where
 }
 
 fn parse_pcount_card(card: &[u8; 80]) -> Result<usize, Error> {
-    let pcount = check_card_keyword(card, b"PCOUNT  ")?.check_for_integer()?;
+    let pcount = check_card_keyword(card, b"PCOUNT  ")?.check_for_float()?;
 
     Ok(pcount as usize)
 }
 
 fn parse_gcount_card(card: &[u8; 80]) -> Result<usize, Error> {
-    let gcount = check_card_keyword(card, b"GCOUNT  ")?.check_for_integer()?;
+    let gcount = check_card_keyword(card, b"GCOUNT  ")?.check_for_float()?;
 
     Ok(gcount as usize)
 }
