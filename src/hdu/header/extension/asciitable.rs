@@ -122,7 +122,7 @@ impl Xtension for AsciiTable {
                     .get(&owned_kw)
                     .ok_or(Error::StaticError("TBCOLX card not found"))?
                     .clone()
-                    .check_for_float()
+                    .check_for_integer()
                     .map(|tbcol| tbcol as u64)
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -253,10 +253,10 @@ impl Xtension for AsciiTable {
         // NAXIS1
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
         let naxis1 =
-            check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_float()? as u64;
+            check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_integer()? as u64;
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
         let naxis2 =
-            check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_float()? as u64;
+            check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_integer()? as u64;
 
         // PCOUNT
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
@@ -275,7 +275,7 @@ impl Xtension for AsciiTable {
         // FIELDS
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
         let tfields =
-            check_card_keyword(card_80_bytes_buf, b"TFIELDS ")?.check_for_float()? as usize;
+            check_card_keyword(card_80_bytes_buf, b"TFIELDS ")?.check_for_integer()? as usize;
 
         let tbcols = vec![];
         let tforms = vec![];
@@ -319,10 +319,10 @@ impl Xtension for AsciiTable {
         // NAXIS1
         consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
         let naxis1 =
-            check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_float()? as u64;
+            check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_integer()? as u64;
         consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
         let naxis2 =
-            check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_float()? as u64;
+            check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_integer()? as u64;
 
         // PCOUNT
         consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
@@ -341,7 +341,7 @@ impl Xtension for AsciiTable {
         // FIELDS
         consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
         let tfields =
-            check_card_keyword(card_80_bytes_buf, b"TFIELDS ")?.check_for_float()? as usize;
+            check_card_keyword(card_80_bytes_buf, b"TFIELDS ")?.check_for_integer()? as usize;
 
         let tbcols = vec![];
         let tforms = vec![];

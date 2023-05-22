@@ -80,7 +80,7 @@ impl Xtension for Image {
             .map(|idx_axis| {
                 consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
                 check_card_keyword(card_80_bytes_buf, NAXIS_KW[idx_axis])?
-                    .check_for_float()
+                    .check_for_integer()
                     .map(|size| size as u64)
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -112,7 +112,7 @@ impl Xtension for Image {
         for naxis_kw in NAXIS_KW.iter().take(naxis) {
             consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
             let naxis_len = check_card_keyword(card_80_bytes_buf, naxis_kw)?
-                .check_for_float()
+                .check_for_integer()
                 .map(|size| size as u64)?;
 
             naxisn.push(naxis_len);

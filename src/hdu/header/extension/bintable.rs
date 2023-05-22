@@ -72,12 +72,12 @@ impl Xtension for BinTable {
                     .check_for_string()?;
 
                 let (field_type_char, repeat_count) =
-                    if let Ok((remaining_bytes, Value::Float(repeat_count))) =
+                    if let Ok((remaining_bytes, Value::Integer(repeat_count))) =
                         parse_integer(card_value.as_bytes())
                     {
                         (remaining_bytes[0].as_char(), repeat_count)
                     } else {
-                        (owned_kw[0].as_char(), 1.0)
+                        (owned_kw[0].as_char(), 1)
                     };
                 let repeat_count = repeat_count as u64;
 
@@ -134,11 +134,11 @@ impl Xtension for BinTable {
         // NAXIS1
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
         let naxis1 =
-            check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_float()? as u64;
+            check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_integer()? as u64;
         // NAXIS2
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
         let naxis2 =
-            check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_float()? as u64;
+            check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_integer()? as u64;
 
         // PCOUNT
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
@@ -154,7 +154,7 @@ impl Xtension for BinTable {
         // FIELDS
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
         let tfields =
-            check_card_keyword(card_80_bytes_buf, b"TFIELDS ")?.check_for_float()? as usize;
+            check_card_keyword(card_80_bytes_buf, b"TFIELDS ")?.check_for_integer()? as usize;
 
         let tforms = vec![];
 
@@ -198,12 +198,12 @@ impl Xtension for BinTable {
         // NAXIS1
         consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
         let naxis1 =
-            check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_float()? as u64;
+            check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_integer()? as u64;
 
         // NAXIS2
         consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
         let naxis2 =
-            check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_float()? as u64;
+            check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_integer()? as u64;
 
         // PCOUNT
         consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
@@ -219,7 +219,7 @@ impl Xtension for BinTable {
         // FIELDS
         consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
         let tfields =
-            check_card_keyword(card_80_bytes_buf, b"TFIELDS ")?.check_for_float()? as usize;
+            check_card_keyword(card_80_bytes_buf, b"TFIELDS ")?.check_for_integer()? as usize;
 
         let tforms = vec![];
 

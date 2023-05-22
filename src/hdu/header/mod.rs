@@ -3,6 +3,8 @@
 //! A header basically consists of a list a 80 long characters CARDS
 //! Each CARD is a dictionnary tuple-like of the (key, value) form.
 use futures::{AsyncBufRead, AsyncRead, AsyncReadExt};
+use nom::character::complete::space0;
+use nom::character::complete::space1;
 use serde::Serialize;
 
 pub mod extension;
@@ -53,7 +55,49 @@ fn parse_generic_card(card: &[u8; 80]) -> Result<Option<Card>, Error> {
             Some(v)
         },
         _ => {
-            let (_, v) = parse_card_value(&card[8..])?;
+            let str = String::from_utf8_lossy(&card[8..]);
+            // Take until the comment beginning with '/'
+            let str = str.split('/').next().unwrap();
+            let v = if str.is_empty() {
+                // empty value (just a comment present)
+                Value::Undefined
+            } else {
+                // not empty value, there is at least one character
+                // check if it is an =
+                let str = if str.chars().next().unwrap() == '=' {
+                    &str[1..]
+                } else {
+                    &str
+                };
+
+                // remove the ' ' before and after 
+                let str = str.trim();
+                
+                if str.is_empty() {
+                    Value::Undefined
+                } else if let Ok(val) = str.parse::<i64>() {
+                    Value::Integer(val)
+                } else if let Ok(val) = str.parse::<f64>() {
+                    Value::Float(val)
+                } else if str == "T" {
+                    Value::Logical(true)
+                } else if str == "F" {
+                    Value::Logical(false)
+                } else {
+                    // Last case check for a string
+                    let inside_str = str.split('\'').collect::<Vec<_>>();
+                    
+                    if inside_str.len() >= 2 {
+                        // This is a true string because it is nested inside simple quotes
+                        Value::String(inside_str[1].to_string())
+                    } else {
+                        // This is not a string but we did not attempt to parse it
+                        // so we store it as a string value
+                        Value::String(str.to_string())
+                    }
+                }
+            };
+
             Some(v)
         }
     };
@@ -84,7 +128,7 @@ pub fn check_card_keyword(card: &[u8; 80], keyword: &[u8; 8]) -> Result<card::Va
 
 /* Parse mandatory keywords */
 fn parse_bitpix_card(card: &[u8; 80]) -> Result<BitpixValue, Error> {
-    let bitpix = check_card_keyword(card, b"BITPIX  ")?.check_for_float()? as i32;
+    let bitpix = check_card_keyword(card, b"BITPIX  ")?.check_for_integer()? as i32;
     match bitpix {
         8 => Ok(BitpixValue::U8),
         16 => Ok(BitpixValue::I16),
@@ -96,7 +140,7 @@ fn parse_bitpix_card(card: &[u8; 80]) -> Result<BitpixValue, Error> {
     }
 }
 fn parse_naxis_card(card: &[u8; 80]) -> Result<usize, Error> {
-    let naxis = check_card_keyword(card, b"NAXIS   ")?.check_for_float()?;
+    let naxis = check_card_keyword(card, b"NAXIS   ")?.check_for_integer()?;
 
     Ok(naxis as usize)
 }
@@ -119,7 +163,12 @@ pub(crate) fn parse_card_value(buf: &[u8]) -> IResult<&[u8], Value> {
         alt((
             preceded(
                 tag(b"="),
-                alt((parse_character_string, parse_logical, parse_float)),
+                alt((
+                    parse_character_string,
+                    parse_logical,
+                    parse_float,
+                    parse_integer
+                )),
             ),
             parse_undefined,
         )),
@@ -216,13 +265,13 @@ where
 }
 
 fn parse_pcount_card(card: &[u8; 80]) -> Result<usize, Error> {
-    let pcount = check_card_keyword(card, b"PCOUNT  ")?.check_for_float()?;
+    let pcount = check_card_keyword(card, b"PCOUNT  ")?.check_for_integer()?;
 
     Ok(pcount as usize)
 }
 
 fn parse_gcount_card(card: &[u8; 80]) -> Result<usize, Error> {
-    let gcount = check_card_keyword(card, b"GCOUNT  ")?.check_for_float()?;
+    let gcount = check_card_keyword(card, b"GCOUNT  ")?.check_for_integer()?;
 
     Ok(gcount as usize)
 }
