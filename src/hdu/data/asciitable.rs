@@ -1,8 +1,8 @@
-use std::fmt::Debug;
-use std::io::{BufReader, Cursor, Read};
-
 use async_trait::async_trait;
 use futures::AsyncRead;
+use std::cell::UnsafeCell;
+use std::fmt::Debug;
+use std::io::{BufReader, Cursor, Read};
 
 use crate::error::Error;
 
@@ -38,9 +38,10 @@ where
 
         let bytes = &bytes[start_byte_pos..end_byte_pos];
 
-        let x_ptr = bytes as *const [u8] as *mut [u8];
+        let w = bytes as *const [u8] as *mut UnsafeCell<[u8]>;
         unsafe {
-            let x_mut_ref = &mut *x_ptr;
+            let word: &UnsafeCell<[u8]> = &*w;
+            let x_mut_ref = &mut *word.get();
 
             let (_, data, _) = x_mut_ref.align_to_mut::<u8>();
             let data = &data[..num_bytes_read];

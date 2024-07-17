@@ -79,13 +79,14 @@ mod tests {
     #[test_case("samples/fits.gsfc.nasa.gov/Astro_UIT.fits", 1, 0, 0)]
     #[test_case("samples/fits.gsfc.nasa.gov/EUVE.fits", 5, 0, 4)]
     #[test_case("samples/fits.gsfc.nasa.gov/HST_FGS.fits", 1, 1, 0)]
+    #[test_case("samples/fits.gsfc.nasa.gov/IUE_LWP.fits", 1, 0, 1)]
+    #[test_case("samples/misc/ngc5457K.fits", 1, 0, 0)]
     #[test_case("samples/fits.gsfc.nasa.gov/HST_FOC.fits", 1, 1, 0)]
     #[test_case("samples/fits.gsfc.nasa.gov/HST_FOS.fits", 1, 1, 0)]
     #[test_case("samples/fits.gsfc.nasa.gov/HST_HRS.fits", 1, 1, 0)]
     #[test_case("samples/fits.gsfc.nasa.gov/HST_NICMOS.fits", 6, 0, 0)]
     #[test_case("samples/fits.gsfc.nasa.gov/HST_WFPC_II.fits", 1, 1, 0)]
     #[test_case("samples/fits.gsfc.nasa.gov/HST_WFPC_II_bis.fits", 1, 0, 0)]
-    #[test_case("samples/fits.gsfc.nasa.gov/IUE_LWP.fits", 1, 0, 1)]
     fn test_count_hdu(
         filename: &str,
         num_image_ext: usize,
@@ -159,7 +160,8 @@ mod tests {
         match hdu.get_data() {
             &InMemData::I16(data) => {
                 assert!(
-                    data.len() as u64 == xtension.get_naxisn(1).unwrap() * xtension.get_naxisn(2).unwrap()
+                    data.len() as u64
+                        == xtension.get_naxisn(1).unwrap() * xtension.get_naxisn(2).unwrap()
                 )
             }
             _ => unreachable!(),
@@ -422,9 +424,9 @@ mod tests {
         if xtension.get_naxis() == 2 {
             let naxis1 = *xtension.get_naxisn(1).unwrap();
             let naxis2 = *xtension.get_naxisn(2).unwrap();
-    
+
             let num_pixels = (naxis2 * naxis1) as usize;
-    
+
             match hdu.get_data_mut() {
                 stream::Data::U8(stream) => {
                     let data = stream.try_collect::<Vec<_>>().await.unwrap();
@@ -504,7 +506,7 @@ mod tests {
 
                     let it_bytes = xhdu.get_data_mut();
                     let data = it_bytes.collect::<Vec<_>>().await;
-                    assert_eq!(num_bytes as usize , data.len());
+                    assert_eq!(num_bytes as usize, data.len());
                 }
             }
 

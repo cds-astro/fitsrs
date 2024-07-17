@@ -1,12 +1,12 @@
+pub use super::Access;
+use super::DataAsyncBufRead;
 use crate::error::Error;
+use crate::hdu::header::BitpixValue;
 use async_trait::async_trait;
 use byteorder::{BigEndian, ByteOrder};
 use futures::AsyncRead;
+use std::cell::UnsafeCell;
 use std::io::{BufReader, Cursor, Read};
-
-pub use super::Access;
-use super::DataAsyncBufRead;
-use crate::hdu::header::BitpixValue;
 
 use std::fmt::Debug;
 
@@ -39,9 +39,12 @@ where
         let end_byte_pos = pos + num_bytes_read;
 
         let bytes = &bytes[start_byte_pos..end_byte_pos];
-        let x_ptr = bytes as *const [u8] as *mut [u8];
+
+        let w = bytes as *const [u8] as *mut UnsafeCell<[u8]>;
+        //let x_ptr = UnsafeCell::new(bytes as *const [u8] as *mut [u8];
         unsafe {
-            let x_mut_ref = &mut *x_ptr;
+            let word: &UnsafeCell<[u8]> = &*w;
+            let x_mut_ref = &mut *word.get();
 
             match bitpix {
                 BitpixValue::U8 => {
