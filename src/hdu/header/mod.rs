@@ -3,8 +3,6 @@
 //! A header basically consists of a list a 80 long characters CARDS
 //! Each CARD is a dictionnary tuple-like of the (key, value) form.
 use futures::{AsyncBufRead, AsyncRead, AsyncReadExt};
-use nom::character::complete::space0;
-use nom::character::complete::space1;
 use serde::Serialize;
 
 pub mod extension;
@@ -17,8 +15,6 @@ use crate::card::{self, Card};
 use crate::error::Error;
 
 use crate::hdu::Xtension;
-
-use nom::{branch::alt, bytes::complete::tag, sequence::preceded, IResult};
 
 pub fn consume_next_card<R: Read>(
     reader: &mut R,
@@ -168,24 +164,6 @@ pub enum BitpixValue {
     F64 = -64,
 }
 
-pub(crate) fn parse_card_value(buf: &[u8]) -> IResult<&[u8], Value> {
-    preceded(
-        white_space0,
-        alt((
-            preceded(
-                tag(b"="),
-                alt((
-                    parse_character_string,
-                    parse_logical,
-                    parse_float,
-                    parse_integer,
-                )),
-            ),
-            parse_undefined,
-        )),
-    )(buf)
-}
-
 #[derive(Debug, PartialEq, Serialize)]
 pub struct Header<X> {
     /* Non mandatory keywords */
@@ -271,7 +249,7 @@ where
         T: CardValue,
     {
         self.get(key).map(|value| {
-            <T as CardValue>::parse(value.clone()).map_err(|e| {
+            <T as CardValue>::parse(value.clone()).map_err(|_| {
                 let card = String::from_utf8_lossy(key);
                 Error::FailTypeCardParsing(card.to_string(), std::any::type_name::<T>().to_string())
             })

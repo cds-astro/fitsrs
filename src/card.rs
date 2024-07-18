@@ -1,10 +1,7 @@
 use nom::{
-    branch::alt,
-    bytes::complete::{take_till, take_while},
-    character::complete::{char, space0, i64, hex_digit1},
-    combinator::{map, value},
-    number::complete::{float},
-    sequence::{delimited, preceded},
+    character::complete::{i64, space0},
+    combinator::map,
+    sequence::preceded,
     IResult,
 };
 
@@ -89,82 +86,6 @@ impl Value {
     }
 }
 
-pub(crate) fn white_space0(s: &[u8]) -> IResult<&[u8], &[u8]> {
-    take_while(|s| s == b' ')(s)
-}
-
-pub(crate) fn parse_undefined(buf: &[u8]) -> IResult<&[u8], Value> {
-    value(Value::Undefined, white_space0)(buf)
-}
-
-pub(crate) fn parse_character_string(buf: &[u8]) -> IResult<&[u8], Value> {
-    map(
-        preceded(
-            space0,
-            delimited(char('\''), take_till(|c| c == b'\''), char('\''))
-        ),
-        |str: &[u8]| {
-            // Copy the bytes to a new string
-            // This is not a big deal because it only concerns the parsing
-            // of the FITS header
-            let str = String::from_utf8_lossy(str).into_owned();
-            Value::String(str)
-        },
-    )(buf)
-}
-
-pub(crate) fn parse_logical(buf: &[u8]) -> IResult<&[u8], Value> {
-    preceded(
-        space0,
-        alt((
-            value(Value::Logical(true), char('T')),
-            value(Value::Logical(false), char('F')),
-        )),
-    )(buf)
-}
-
-pub(crate) fn parse_float(buf: &[u8]) -> IResult<&[u8], Value> {
-    preceded(
-        space0,
-        map(float, |val| Value::Float(val as f64))
-    )(buf)
-}
-
 pub(crate) fn parse_integer(buf: &[u8]) -> IResult<&[u8], Value> {
-    preceded(
-        space0,
-        map(i64, |val| Value::Integer(val)),
-    )(buf)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{parse_character_string, parse_float, Value};
-    use crate::card::parse_integer;
-
-    #[test]
-    fn test_float() {
-        assert_eq!(
-            parse_float(b"      -32768.0"),
-            Ok((b"" as &[u8], Value::Float(-32768.0)))
-        );
-        assert_eq!(
-            parse_float(b"      -32767"),
-            Ok((b"" as &[u8], Value::Float(-32767.0)))
-        );
-        assert_eq!(
-            parse_float(b"      -32767A"),
-            Ok((b"A" as &[u8], Value::Float(-32767.0)))
-        );
-    }
-    #[test]
-    fn test_string() {
-        assert_eq!(
-            parse_character_string(b"      'sdfs Zdfs MLKKLSFD sdf '"),
-            Ok((
-                b"" as &[u8],
-                Value::String(String::from("sdfs Zdfs MLKKLSFD sdf "))
-            ))
-        );
-    }
+    preceded(space0, map(i64, |val| Value::Integer(val)))(buf)
 }

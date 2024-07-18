@@ -7,11 +7,11 @@ use futures::AsyncRead;
 use nom::AsChar;
 use serde::Serialize;
 
-use crate::card::parse_integer;
 use crate::error::Error;
 use crate::hdu::header::consume_next_card_async;
 use crate::hdu::header::parse_bitpix_card;
 use crate::hdu::header::parse_gcount_card;
+use crate::hdu::header::parse_integer;
 use crate::hdu::header::parse_naxis_card;
 use crate::hdu::header::parse_pcount_card;
 use crate::hdu::header::BitpixValue;
@@ -133,12 +133,10 @@ impl Xtension for BinTable {
 
         // NAXIS1
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let naxis1 =
-            check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_float()? as u64;
+        let naxis1 = check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_float()? as u64;
         // NAXIS2
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let naxis2 =
-            check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_float()? as u64;
+        let naxis2 = check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_float()? as u64;
 
         // PCOUNT
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
@@ -197,13 +195,11 @@ impl Xtension for BinTable {
 
         // NAXIS1
         consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
-        let naxis1 =
-            check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_float()? as u64;
+        let naxis1 = check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_float()? as u64;
 
         // NAXIS2
         consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
-        let naxis2 =
-            check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_float()? as u64;
+        let naxis2 = check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_float()? as u64;
 
         // PCOUNT
         consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
