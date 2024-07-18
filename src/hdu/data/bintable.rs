@@ -38,10 +38,10 @@ where
 
         let bytes = &bytes[start_byte_pos..end_byte_pos];
 
-        let w = bytes as *const [u8] as *mut UnsafeCell<[u8]>;
+        let c = bytes as *const [u8] as *mut UnsafeCell<[u8]>;
         unsafe {
-            let word: &UnsafeCell<[u8]> = &*w;
-            let x_mut_ref = &mut *word.get();
+            let cell: &UnsafeCell<[u8]> = &*c;
+            let x_mut_ref = &mut *cell.get();
 
             let (_, data, _) = x_mut_ref.align_to_mut::<u8>();
             let data = &data[..num_bytes_read];

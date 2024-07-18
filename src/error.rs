@@ -19,6 +19,9 @@ quick_error! {
         ValueBadParsing {
             display("A value could not be parsed correctly")
         }
+        FailTypeCardParsing(card: String, t: String) {
+            display("{} card is not of type {}", card, t)
+        }
         NotSupportedXtensionType(extension: String) {
             display("`{}` extension is not supported. Only BINTABLE, TABLE and IMAGE are.", extension)
         }

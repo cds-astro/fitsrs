@@ -53,7 +53,7 @@ fn parse_generic_card(card: &[u8; 80]) -> Result<Option<Card>, Error> {
         b"HISTORY " => {
             let v = Value::String(String::from_utf8_lossy(&card[8..]).to_string());
             Some(v)
-        },
+        }
         _ => {
             let str = String::from_utf8_lossy(&card[8..]);
             // Take until the comment beginning with '/'
@@ -70,9 +70,9 @@ fn parse_generic_card(card: &[u8; 80]) -> Result<Option<Card>, Error> {
                     &str
                 };
 
-                // remove the ' ' before and after 
+                // remove the ' ' before and after
                 let str = str.trim();
-                
+
                 if str.is_empty() {
                     Value::Undefined
                 } else if let Ok(val) = str.parse::<f64>() {
@@ -86,7 +86,7 @@ fn parse_generic_card(card: &[u8; 80]) -> Result<Option<Card>, Error> {
                 } else {
                     // Last case check for a string
                     let inside_str = str.split('\'').collect::<Vec<_>>();
-                    
+
                     if inside_str.len() >= 2 {
                         // This is a true string because it is nested inside simple quotes
                         Value::String(inside_str[1].to_string())
@@ -119,10 +119,14 @@ pub fn check_card_keyword(card: &[u8; 80], keyword: &[u8; 8]) -> Result<card::Va
         if &kw == keyword {
             Ok(v)
         } else {
-            Err(Error::FailFindingKeyword(std::str::from_utf8(keyword)?.to_owned()))
+            Err(Error::FailFindingKeyword(
+                std::str::from_utf8(keyword)?.to_owned(),
+            ))
         }
     } else {
-        Err(Error::FailFindingKeyword(std::str::from_utf8(keyword)?.to_owned()))
+        Err(Error::FailFindingKeyword(
+            std::str::from_utf8(keyword)?.to_owned(),
+        ))
     }
 }
 
@@ -145,7 +149,14 @@ fn parse_naxis_card(card: &[u8; 80]) -> Result<usize, Error> {
     Ok(naxis as usize)
 }
 
-const NAXIS_KW: [&[u8; 8]; 6] = [b"NAXIS1  ", b"NAXIS2  ", b"NAXIS3  ", b"NAXIS4  ", b"NAXIS5  ", b"NAXIS6  "];
+const NAXIS_KW: [&[u8; 8]; 6] = [
+    b"NAXIS1  ",
+    b"NAXIS2  ",
+    b"NAXIS3  ",
+    b"NAXIS4  ",
+    b"NAXIS5  ",
+    b"NAXIS6  ",
+];
 
 #[derive(Debug, PartialEq, Serialize, Clone, Copy)]
 pub enum BitpixValue {
@@ -167,7 +178,7 @@ pub(crate) fn parse_card_value(buf: &[u8]) -> IResult<&[u8], Value> {
                     parse_character_string,
                     parse_logical,
                     parse_float,
-                    parse_integer
+                    parse_integer,
                 )),
             ),
             parse_undefined,
@@ -259,8 +270,12 @@ where
     where
         T: CardValue,
     {
-        self.get(key)
-            .map(|value| <T as CardValue>::parse(value.clone()))
+        self.get(key).map(|value| {
+            <T as CardValue>::parse(value.clone()).map_err(|e| {
+                let card = String::from_utf8_lossy(key);
+                Error::FailTypeCardParsing(card.to_string(), std::any::type_name::<T>().to_string())
+            })
+        })
     }
 }
 
