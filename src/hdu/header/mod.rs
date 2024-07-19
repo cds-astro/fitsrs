@@ -166,7 +166,7 @@ pub enum BitpixValue {
 
 #[derive(Debug, PartialEq, Serialize)]
 pub struct Header<X> {
-    /* Non mandatory keywords */
+    /* Keywords */
     cards: HashMap<Keyword, Value>,
 
     /* Mandatory keywords for fits ext parsing */
@@ -185,7 +185,8 @@ where
         let mut cards = HashMap::new();
 
         /* Consume mandatory keywords */
-        let mut xtension: X = Xtension::parse(reader, num_bytes_read, card_80_bytes_buf)?;
+        let mut xtension: X =
+            Xtension::parse(reader, num_bytes_read, card_80_bytes_buf, &mut cards)?;
 
         /* Consume next non mandatory keywords until `END` is reached */
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
@@ -212,7 +213,7 @@ where
 
         /* Consume mandatory keywords */
         let mut xtension: X =
-            Xtension::parse_async(reader, num_bytes_read, card_80_bytes_buf).await?;
+            Xtension::parse_async(reader, num_bytes_read, card_80_bytes_buf, &mut cards).await?;
 
         /* Consume next non mandatory keywords until `END` is reached */
         consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;

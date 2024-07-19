@@ -235,6 +235,7 @@ impl Xtension for AsciiTable {
         reader: &mut R,
         num_bytes_read: &mut u64,
         card_80_bytes_buf: &mut [u8; 80],
+        _cards: &mut HashMap<[u8; 8], Value>,
     ) -> Result<Self, Error> {
         // BITPIX
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
@@ -252,11 +253,9 @@ impl Xtension for AsciiTable {
         }
         // NAXIS1
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let naxis1 =
-            check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_float()? as u64;
+        let naxis1 = check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_float()? as u64;
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let naxis2 =
-            check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_float()? as u64;
+        let naxis2 = check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_float()? as u64;
 
         // PCOUNT
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
@@ -297,6 +296,7 @@ impl Xtension for AsciiTable {
         reader: &mut R,
         num_bytes_read: &mut u64,
         card_80_bytes_buf: &mut [u8; 80],
+        _cards: &mut HashMap<[u8; 8], Value>,
     ) -> Result<Self, Error>
     where
         R: AsyncRead + std::marker::Unpin,
@@ -318,11 +318,9 @@ impl Xtension for AsciiTable {
         }
         // NAXIS1
         consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
-        let naxis1 =
-            check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_float()? as u64;
+        let naxis1 = check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_float()? as u64;
         consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
-        let naxis2 =
-            check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_float()? as u64;
+        let naxis2 = check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_float()? as u64;
 
         // PCOUNT
         consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;

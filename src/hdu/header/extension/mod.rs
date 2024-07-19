@@ -7,7 +7,7 @@ use std::io::Read;
 use async_trait::async_trait;
 use futures::AsyncRead;
 
-use crate::card::Value;
+use crate::card::{Keyword, Value};
 use crate::error::Error;
 use crate::hdu::primary::check_card_keyword;
 
@@ -42,6 +42,7 @@ pub trait Xtension {
         reader: &mut R,
         num_bytes_read: &mut u64,
         card_80_bytes_buf: &mut [u8; 80],
+        cards: &mut HashMap<Keyword, Value>,
     ) -> Result<Self, Error>
     where
         Self: Sized;
@@ -51,6 +52,7 @@ pub trait Xtension {
         reader: &mut R,
         num_bytes_read: &mut u64,
         card_80_bytes_buf: &mut [u8; 80],
+        cards: &mut HashMap<Keyword, Value>,
     ) -> Result<Self, Error>
     where
         Self: Sized,

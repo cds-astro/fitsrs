@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use futures::AsyncRead;
 use serde::Serialize;
 
+use crate::card::Keyword;
 use crate::card::Value;
 use crate::error::Error;
 use crate::hdu::header::consume_next_card_async;
@@ -68,6 +69,7 @@ impl Xtension for Image {
         reader: &mut R,
         num_bytes_read: &mut u64,
         card_80_bytes_buf: &mut [u8; 80],
+        cards: &mut HashMap<Keyword, Value>,
     ) -> Result<Self, Error> {
         // BITPIX
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
@@ -85,6 +87,12 @@ impl Xtension for Image {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
+        for (i, &naxisi) in naxisn.iter().enumerate() {
+            cards.insert(*NAXIS_KW[i], Value::Integer(naxisi as i64));
+        }
+
+        cards.insert(*b"NAXIS   ", Value::Integer(naxis as i64));
+
         Ok(Image {
             bitpix,
             naxis,
@@ -96,6 +104,7 @@ impl Xtension for Image {
         reader: &mut R,
         num_bytes_read: &mut u64,
         card_80_bytes_buf: &mut [u8; 80],
+        cards: &mut HashMap<Keyword, Value>,
     ) -> Result<Self, Error>
     where
         R: AsyncRead + std::marker::Unpin,
@@ -117,6 +126,12 @@ impl Xtension for Image {
 
             naxisn.push(naxis_len);
         }
+
+        for (i, &naxisi) in naxisn.iter().enumerate() {
+            cards.insert(*NAXIS_KW[i], Value::Integer(naxisi as i64));
+        }
+
+        cards.insert(*b"NAXIS   ", Value::Integer(naxis as i64));
 
         Ok(Image {
             bitpix,

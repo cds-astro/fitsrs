@@ -114,6 +114,7 @@ impl Xtension for BinTable {
         reader: &mut R,
         num_bytes_read: &mut u64,
         card_80_bytes_buf: &mut [u8; 80],
+        _cards: &mut HashMap<[u8; 8], Value>,
     ) -> Result<Self, Error> {
         // BITPIX
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
@@ -172,6 +173,7 @@ impl Xtension for BinTable {
         reader: &mut R,
         num_bytes_read: &mut u64,
         card_80_bytes_buf: &mut [u8; 80],
+        _cards: &mut HashMap<[u8; 8], Value>,
     ) -> Result<Self, Error>
     where
         R: AsyncRead + std::marker::Unpin,
