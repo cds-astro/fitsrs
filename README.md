@@ -12,6 +12,21 @@ This fits parser only supports image data (not tables), and does not know anythi
 For WCS parsing, see [wcsrs](https://github.com/cds-astro/wcs-rs).
 This parser is able to parse extension HDUs. Ascii tables and binary tables are still not properly parsed, only the list bytes of their data block can be retrieved but no interpretation/parsing is done on it.
 
+Cloning the Repositiory
+-----------------------
+Make sure that you have `git-lfs` installed. If you an error along the following lines:
+> Downloading samples/fits.gsfc.nasa.gov/Astro_UIT.fits (865 KB)
+Error downloading object: samples/fits.gsfc.nasa.gov/Astro_UIT.fits (3110c73): Smudge error: Error downloading samples/fits.gsfc.nasa.gov/Astro_UIT.fits (3110c73eebbdd479b9a51cb275f18650f17d22b818713562b6e27d873e128530): batch response: This repository is over its data quota. Account responsible for LFS bandwidth should purchase more data packs to restore access.
+
+(cf. Issue #10)
+
+... try the following:
+
+```
+GIT_LFS_SKIP_SMUDGE=1 git clone git@github.com:cds-astro/fitsrs.git
+```
+This clones the repository without the large binary files and still allows you to build locally.
+
 To Do list
 ----------
 
