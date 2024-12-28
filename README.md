@@ -25,7 +25,7 @@ Error downloading object: samples/fits.gsfc.nasa.gov/Astro_UIT.fits (3110c73): S
 ```
 GIT_LFS_SKIP_SMUDGE=1 git clone git@github.com:cds-astro/fitsrs.git
 ```
-This clones the repository without the large binary files and still allows you to build locally.
+This clones the repository without the large binary files and still allows you to build locally but not to run the tests.
 
 To Do list
 ----------
