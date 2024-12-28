@@ -7,7 +7,10 @@ use serde::Serialize;
 
 pub mod extension;
 
-use std::collections::HashMap;
+use std::collections::hash_map::Keys;
+use std::collections::{
+    hash_map::Iter, HashMap
+};
 use std::io::Read;
 
 use crate::card::*;
@@ -256,6 +259,18 @@ where
             })
         })
     }
+
+    pub fn keywords(&self) -> Keys<Keyword,Value> {
+        self.cards.keys()
+    }
+
+    pub fn cards(&self) -> impl Iterator<Item = Card> + use<'_, X> {
+        self.cards.iter()
+            .map(|(kw,v)| {
+                Card { kw: kw.to_owned(), v: v.to_owned() }
+            })
+    }
+
 }
 
 fn parse_pcount_card(card: &[u8; 80]) -> Result<usize, Error> {
