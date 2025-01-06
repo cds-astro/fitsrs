@@ -197,8 +197,6 @@ mod tests {
     #[test_case("samples/misc/P122_49.fits")]
     #[test_case("samples/misc/skv1678175163788.fits")]
     #[test_case("samples/misc/SN2923fxjA.fits")]
-    //#[test_case("samples/misc/ji0590044.fits")] gzip compressed data
-    //#[test_case("samples/misc/AKAI013000932.fits")] gzip compressed data
     fn test_fits_opening(filename: &str) {
         use std::fs::File;
 

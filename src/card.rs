@@ -1,4 +1,4 @@
-use std::{str, string::FromUtf8Error};
+use std::string::FromUtf8Error;
 
 use nom::{
     character::complete::{i64, space0},
