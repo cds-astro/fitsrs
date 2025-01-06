@@ -28,7 +28,6 @@
 
 extern crate async_trait;
 extern crate byteorder;
-extern crate nom;
 #[macro_use]
 extern crate quick_error;
 

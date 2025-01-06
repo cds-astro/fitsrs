@@ -1,4 +1,4 @@
-# FITS reader written in pure Rust using [nom](https://github.com/Geal/nom)
+# FITS reader written in pure Rust
 
 ## Install with npm
 

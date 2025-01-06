@@ -4,14 +4,12 @@ use std::io::Read;
 
 use async_trait::async_trait;
 use futures::AsyncRead;
-use nom::AsChar;
 use serde::Serialize;
 
 use crate::error::Error;
 use crate::hdu::header::consume_next_card_async;
 use crate::hdu::header::parse_bitpix_card;
 use crate::hdu::header::parse_gcount_card;
-use crate::hdu::header::parse_integer;
 use crate::hdu::header::parse_naxis_card;
 use crate::hdu::header::parse_pcount_card;
 use crate::hdu::header::BitpixValue;
@@ -71,30 +69,29 @@ impl Xtension for BinTable {
                     .clone()
                     .check_for_string()?;
 
-                let (field_type_char, repeat_count) =
-                    if let Ok((remaining_bytes, Value::Integer(repeat_count))) =
-                        parse_integer(card_value.as_bytes())
-                    {
-                        (remaining_bytes[0].as_char(), repeat_count)
-                    } else {
-                        (owned_kw[0].as_char(), 1)
-                    };
-                let repeat_count = repeat_count as u64;
+                let count = card_value
+                    .chars()
+                    .take_while(|c| c.is_digit(10))
+                    .collect::<String>();
 
-                match field_type_char.as_char() {
-                    'L' => Ok(TFormBinaryTableType::L(TFormBinaryTable::new(repeat_count))), // Logical
-                    'X' => Ok(TFormBinaryTableType::X(TFormBinaryTable::new(repeat_count))), // Bit
-                    'B' => Ok(TFormBinaryTableType::B(TFormBinaryTable::new(repeat_count))), // Unsigned Byte
-                    'I' => Ok(TFormBinaryTableType::I(TFormBinaryTable::new(repeat_count))), // 16-bit integer
-                    'J' => Ok(TFormBinaryTableType::J(TFormBinaryTable::new(repeat_count))), // 32-bit integer
-                    'K' => Ok(TFormBinaryTableType::K(TFormBinaryTable::new(repeat_count))), // 64-bit integer
-                    'A' => Ok(TFormBinaryTableType::A(TFormBinaryTable::new(repeat_count))), // Character
-                    'E' => Ok(TFormBinaryTableType::E(TFormBinaryTable::new(repeat_count))), // Single-precision floating point
-                    'D' => Ok(TFormBinaryTableType::D(TFormBinaryTable::new(repeat_count))), // Double-precision floating point
-                    'C' => Ok(TFormBinaryTableType::C(TFormBinaryTable::new(repeat_count))), // Single-precision complex
-                    'M' => Ok(TFormBinaryTableType::M(TFormBinaryTable::new(repeat_count))), // Double-precision complex
-                    'P' => Ok(TFormBinaryTableType::P(TFormBinaryTable::new(repeat_count))), // Array Descriptor (32-bit)
-                    'Q' => Ok(TFormBinaryTableType::Q(TFormBinaryTable::new(repeat_count))), // Array Descriptor (64-bit)
+                let num_count_digits = count.len();
+                let count = count.parse::<i64>().unwrap_or(1) as u64;
+                let field_ty = card_value.chars().nth(num_count_digits).unwrap();
+
+                match field_ty as char {
+                    'L' => Ok(TFormBinaryTableType::L(TFormBinaryTable::new(count))), // Logical
+                    'X' => Ok(TFormBinaryTableType::X(TFormBinaryTable::new(count))), // Bit
+                    'B' => Ok(TFormBinaryTableType::B(TFormBinaryTable::new(count))), // Unsigned Byte
+                    'I' => Ok(TFormBinaryTableType::I(TFormBinaryTable::new(count))), // 16-bit integer
+                    'J' => Ok(TFormBinaryTableType::J(TFormBinaryTable::new(count))), // 32-bit integer
+                    'K' => Ok(TFormBinaryTableType::K(TFormBinaryTable::new(count))), // 64-bit integer
+                    'A' => Ok(TFormBinaryTableType::A(TFormBinaryTable::new(count))), // Character
+                    'E' => Ok(TFormBinaryTableType::E(TFormBinaryTable::new(count))), // Single-precision floating point
+                    'D' => Ok(TFormBinaryTableType::D(TFormBinaryTable::new(count))), // Double-precision floating point
+                    'C' => Ok(TFormBinaryTableType::C(TFormBinaryTable::new(count))), // Single-precision complex
+                    'M' => Ok(TFormBinaryTableType::M(TFormBinaryTable::new(count))), // Double-precision complex
+                    'P' => Ok(TFormBinaryTableType::P(TFormBinaryTable::new(count))), // Array Descriptor (32-bit)
+                    'Q' => Ok(TFormBinaryTableType::Q(TFormBinaryTable::new(count))), // Array Descriptor (64-bit)
                     _ => Err(Error::StaticError("Ascii Table TFORM not recognized")),
                 }
             })

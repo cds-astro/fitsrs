@@ -1,12 +1,5 @@
 use std::string::FromUtf8Error;
 
-use nom::{
-    character::complete::{i64, space0},
-    combinator::map,
-    sequence::preceded,
-    IResult,
-};
-
 use crate::error::Error;
 pub type Keyword = [u8; 8];
 
@@ -91,10 +84,6 @@ impl Value {
             _ => Err(Error::ValueBadParsing),
         }
     }
-}
-
-pub(crate) fn parse_integer(buf: &[u8]) -> IResult<&[u8], Value> {
-    preceded(space0, map(i64, |val| Value::Integer(val)))(buf)
 }
 
 #[cfg(test)]
