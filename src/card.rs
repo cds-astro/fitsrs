@@ -1,9 +1,4 @@
-use nom::{
-    character::complete::{i64, space0},
-    combinator::map,
-    sequence::preceded,
-    IResult,
-};
+use std::string::FromUtf8Error;
 
 use crate::error::Error;
 pub type Keyword = [u8; 8];
@@ -18,6 +13,11 @@ pub struct Card {
 impl Card {
     pub fn new(kw: Keyword, v: Value) -> Self {
         Self { kw, v }
+    }
+    /// Return the ASCII trimmed keyword as an owned String.
+    pub fn keyword(&self) -> Result<String, FromUtf8Error> {
+        let kw = self.kw.trim_ascii().to_vec();
+        String::from_utf8(kw)
     }
 }
 
@@ -86,6 +86,15 @@ impl Value {
     }
 }
 
-pub(crate) fn parse_integer(buf: &[u8]) -> IResult<&[u8], Value> {
-    preceded(space0, map(i64, |val| Value::Integer(val)))(buf)
+#[cfg(test)]
+mod tests {
+    use super::{Card, Value};
+
+    #[test]
+    fn trimmed_keyword_string() {
+        let kw = b"GAIN    ".to_owned();
+        let v = Value::Float(30.00);
+        let card = Card { kw, v };
+        assert_eq!("GAIN".to_owned(), card.keyword().unwrap())
+    }
 }

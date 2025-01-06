@@ -25,10 +25,6 @@ quick_error! {
         NotSupportedXtensionType(extension: String) {
             display("`{}` extension is not supported. Only BINTABLE, TABLE and IMAGE are.", extension)
         }
-        Nom {
-            from(nom::Err<nom::error::Error<&[u8]>>)
-            display("Nom could not parse header values")
-        }
         Utf8 {
             from(std::str::Utf8Error)
             display("Fail to parse a keyword as a utf8 string")

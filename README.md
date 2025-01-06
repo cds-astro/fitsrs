@@ -1,5 +1,5 @@
-Fits reader written in pure Rust using [nom](https://github.com/Geal/nom)
--------------------------------------------------------------------------
+Fits reader written in pure Rust
+--------------------------------
 
 [![](https://img.shields.io/crates/v/fitsrs.svg)](https://crates.io/crates/fitsrs)
 [![](https://img.shields.io/crates/d/fitsrs.svg)](https://crates.io/crates/fitsrs)
@@ -12,6 +12,24 @@ This fits parser only supports image data (not tables), and does not know anythi
 For WCS parsing, see [wcsrs](https://github.com/cds-astro/wcs-rs).
 This parser is able to parse extension HDUs. Ascii tables and binary tables are still not properly parsed, only the list bytes of their data block can be retrieved but no interpretation/parsing is done on it.
 
+Contributing
+------------
+
+> [!WARNING]
+> Running the test involves test files you can download [here](https://alasky.cds.unistra.fr/Aladin-Lite-test-files/fits-rs-test-files.tar). This tar is 2.2GB.
+
+Once the tar file has been downloaded, put it into the root on your cloned repo and extract it:
+
+```bash
+tar -xvf fits-rs-test-files.tar
+```
+
+Once the files have been extracted you can run the tests locally:
+
+```bash
+cargo test --release
+```
+
 To Do list
 ----------
 
@@ -20,6 +38,7 @@ To Do list
 * [X] Support big fits file parsing that may not fit in memory (iterator usage)
 * [X] Async reading (experimental and not tested)
 * [ ] Keep CARD comment
+* [ ] Support compressed fits files (https://fits.gsfc.nasa.gov/registry/tilecompression.html)
 * [ ] Support data table (each column can have a specific types)
 * [X] Support of multiple HDU, fits extensions (in progress, only the header is parsed)
 * [ ] WCS parsing, see [wcsrs](https://github.com/cds-astro/wcs-rs)

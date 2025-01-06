@@ -7,6 +7,7 @@ use serde::Serialize;
 
 pub mod extension;
 
+use std::collections::hash_map::Keys;
 use std::collections::HashMap;
 use std::io::Read;
 
@@ -256,6 +257,17 @@ where
             })
         })
     }
+
+    pub fn keywords(&self) -> Keys<Keyword, Value> {
+        self.cards.keys()
+    }
+
+    pub fn cards(&self) -> impl Iterator<Item = Card> + use<'_, X> {
+        self.cards.iter().map(|(kw, v)| Card {
+            kw: kw.to_owned(),
+            v: v.to_owned(),
+        })
+    }
 }
 
 fn parse_pcount_card(card: &[u8; 80]) -> Result<usize, Error> {
@@ -292,6 +304,66 @@ mod tests {
                 kw: b"CDS_1   ".to_owned(),
                 v: Value::Logical(true)
             }))
+        );
+    }
+
+    use crate::fits::Fits;
+    use std::fs::File;
+    use std::io::Cursor;
+    use std::io::Read;
+    #[test]
+    fn test_keywords_iter() {
+        let f = File::open("samples/misc/SN2923fxjA.fits").unwrap();
+        let bytes: Result<Vec<_>, _> = f.bytes().collect();
+        let buf = bytes.unwrap();
+
+        let mut reader = Cursor::new(&buf[..]);
+        let Fits { hdu } = Fits::from_reader(&mut reader).unwrap();
+
+        let header = hdu.get_header();
+        let mut keywords = header
+            .cards()
+            .map(|c| c.keyword())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        keywords.sort_unstable();
+
+        assert_eq!(
+            keywords,
+            vec![
+                "BAYERIND", "BITCAMPX", "CALPHOT", "CCD-TEMP", "CD1_1", "CD1_2", "CD2_1", "CD2_2",
+                "CDELT1", "CDELT2", "CDELTM1", "CDELTM2", "COMMENT", "COMPRESS", "CRPIX1",
+                "CRPIX2", "CRVAL1", "CRVAL2", "CTYPE1", "CTYPE2", "CUNIT1", "CUNIT2", "CVF",
+                "DATAMAX", "DATAMIN", "DATE", "DATE-OBS", "DEC", "DEWPOINT", "DIAMETER", "ERRFLUX",
+                "EXPOSURE", "FILTERS", "FOCAL", "FOCUSPOS", "FOCUSTMP", "GAIN_ELE", "HISTORY",
+                "HUMIDITY", "IMGTYPE", "INSTRUME", "MAGREF", "MIRORX", "NAXIS", "NAXIS1", "NAXIS2",
+                "OBJCTDEC", "OBJCTRA", "OBSERVER", "OFFSET_E", "ORIGIN", "P3DSPHER", "PCXASTRO",
+                "PCYASTRO", "PDEC_REF", "PDIMPOL", "PIERSIDE", "PPLATESD", "PPXC", "PPYC",
+                "PRADIUSX", "PRADIUSY", "PRA_REF", "PRESSURE", "PSOLDC1", "PSOLDC10", "PSOLDC11",
+                "PSOLDC12", "PSOLDC13", "PSOLDC14", "PSOLDC15", "PSOLDC16", "PSOLDC17", "PSOLDC18",
+                "PSOLDC19", "PSOLDC2", "PSOLDC20", "PSOLDC21", "PSOLDC22", "PSOLDC23", "PSOLDC24",
+                "PSOLDC25", "PSOLDC26", "PSOLDC27", "PSOLDC28", "PSOLDC29", "PSOLDC3", "PSOLDC30",
+                "PSOLDC31", "PSOLDC32", "PSOLDC33", "PSOLDC34", "PSOLDC35", "PSOLDC36", "PSOLDC4",
+                "PSOLDC5", "PSOLDC6", "PSOLDC7", "PSOLDC8", "PSOLDC9", "PSOLRA1", "PSOLRA10",
+                "PSOLRA11", "PSOLRA12", "PSOLRA13", "PSOLRA14", "PSOLRA15", "PSOLRA16", "PSOLRA17",
+                "PSOLRA18", "PSOLRA19", "PSOLRA2", "PSOLRA20", "PSOLRA21", "PSOLRA22", "PSOLRA23",
+                "PSOLRA24", "PSOLRA25", "PSOLRA26", "PSOLRA27", "PSOLRA28", "PSOLRA29", "PSOLRA3",
+                "PSOLRA30", "PSOLRA31", "PSOLRA32", "PSOLRA33", "PSOLRA34", "PSOLRA35", "PSOLRA36",
+                "PSOLRA4", "PSOLRA5", "PSOLRA6", "PSOLRA7", "PSOLRA8", "PSOLRA9", "PSOLX1",
+                "PSOLX10", "PSOLX11", "PSOLX12", "PSOLX13", "PSOLX14", "PSOLX15", "PSOLX16",
+                "PSOLX17", "PSOLX18", "PSOLX19", "PSOLX2", "PSOLX20", "PSOLX21", "PSOLX22",
+                "PSOLX23", "PSOLX24", "PSOLX25", "PSOLX26", "PSOLX27", "PSOLX28", "PSOLX29",
+                "PSOLX3", "PSOLX30", "PSOLX31", "PSOLX32", "PSOLX33", "PSOLX34", "PSOLX35",
+                "PSOLX36", "PSOLX4", "PSOLX5", "PSOLX6", "PSOLX7", "PSOLX8", "PSOLX9", "PSOLY1",
+                "PSOLY10", "PSOLY11", "PSOLY12", "PSOLY13", "PSOLY14", "PSOLY15", "PSOLY16",
+                "PSOLY17", "PSOLY18", "PSOLY19", "PSOLY2", "PSOLY20", "PSOLY21", "PSOLY22",
+                "PSOLY23", "PSOLY24", "PSOLY25", "PSOLY26", "PSOLY27", "PSOLY28", "PSOLY29",
+                "PSOLY3", "PSOLY30", "PSOLY31", "PSOLY32", "PSOLY33", "PSOLY34", "PSOLY35",
+                "PSOLY36", "PSOLY4", "PSOLY5", "PSOLY6", "PSOLY7", "PSOLY8", "PSOLY9", "PSSX",
+                "PSSY", "RA", "READOUTT", "REFFLUX", "SITELAT", "SITELONG", "STACKNB", "STARCNT",
+                "SWCREATE", "TELESCOP", "TEMPEXT", "UT", "WINDIR", "WINSPEED", "X1", "X2",
+                "XPIXELSZ", "XPIXSZ", "Y1", "Y2", "YPIXELSZ", "YPIXSZ"
+            ]
         );
     }
 }
