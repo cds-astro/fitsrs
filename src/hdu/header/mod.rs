@@ -94,10 +94,12 @@ fn parse_generic_card(card: &[u8; 80]) -> Result<Option<Card>, Error> {
                     }
                 }
             };
-
             Some(v)
         }
     };
+
+    // TODO parse comment
+    let comment = None;
 
     if let Some(value) = value {
         // 1. Init the fixed keyword slice
@@ -105,14 +107,14 @@ fn parse_generic_card(card: &[u8; 80]) -> Result<Option<Card>, Error> {
         // 2. Copy from slice
         owned_kw.copy_from_slice(kw);
 
-        Ok(Some(Card::new(owned_kw, value)))
+        Ok(Some(Card::new(owned_kw, value, comment)))
     } else {
         Ok(None)
     }
 }
 
 pub fn check_card_keyword(card: &[u8; 80], keyword: &[u8; 8]) -> Result<card::Value, Error> {
-    if let Some(Card { kw, v }) = parse_generic_card(card)? {
+    if let Some(Card { kw, v, c: None }) = parse_generic_card(card)? {
         if &kw == keyword {
             Ok(v)
         } else {
@@ -168,7 +170,7 @@ pub enum BitpixValue {
 #[derive(Debug, PartialEq, Serialize)]
 pub struct Header<X> {
     /* Keywords */
-    cards: HashMap<Keyword, Value>,
+    cards: HashMap<Keyword, Card>,
 
     /* Mandatory keywords for fits ext parsing */
     xtension: X,
@@ -191,8 +193,9 @@ where
 
         /* Consume next non mandatory keywords until `END` is reached */
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        while let Some(Card { kw, v }) = parse_generic_card(card_80_bytes_buf)? {
-            cards.insert(kw, v);
+        while let Some(card) = parse_generic_card(card_80_bytes_buf)? {
+            let kw = card.kw.clone();
+            cards.insert(kw, card);
             consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
         }
 
@@ -218,8 +221,8 @@ where
 
         /* Consume next non mandatory keywords until `END` is reached */
         consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
-        while let Some(Card { kw, v }) = parse_generic_card(card_80_bytes_buf)? {
-            cards.insert(kw, v);
+        while let Some(card) = parse_generic_card(card_80_bytes_buf)? {
+            cards.insert(card.kw.clone(), card);
             consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
         }
 
@@ -237,7 +240,7 @@ where
     /// Get the value of a specific card
     /// # Params
     /// * `key` - The key of a card
-    pub fn get(&self, key: &[u8; 8]) -> Option<&Value> {
+    pub fn get(&self, key: &[u8; 8]) -> Option<&Card> {
         self.cards.get(key)
     }
 
@@ -250,7 +253,8 @@ where
     where
         T: CardValue,
     {
-        self.get(key).map(|value| {
+        self.get(key).map(|card| {
+            let value = card.v.clone();
             <T as CardValue>::parse(value.clone()).map_err(|_| {
                 let card = String::from_utf8_lossy(key);
                 Error::FailTypeCardParsing(card.to_string(), std::any::type_name::<T>().to_string())
@@ -258,14 +262,15 @@ where
         })
     }
 
-    pub fn keywords(&self) -> Keys<Keyword, Value> {
+    pub fn keywords(&self) -> Keys<Keyword, Card> {
         self.cards.keys()
     }
 
-    pub fn cards(&self) -> impl Iterator<Item = Card> + '_ {
-        self.cards.iter().map(|(kw, v)| Card {
+    pub fn cards(&self) -> impl Iterator<Item = Card> + use<'_, X> {
+        self.cards.iter().map(|(kw, card)| Card {
             kw: kw.to_owned(),
-            v: v.to_owned(),
+            v: card.v.to_owned(),
+            c: card.c.to_owned(),
         })
     }
 }
@@ -293,7 +298,8 @@ mod tests {
             ),
             Ok(Some(Card {
                 kw: b"AZSDFGFC".to_owned(),
-                v: Value::Logical(true)
+                v: Value::Logical(true),
+                c: None,
             }))
         );
         assert_eq!(
@@ -302,7 +308,8 @@ mod tests {
             ),
             Ok(Some(Card {
                 kw: b"CDS_1   ".to_owned(),
-                v: Value::Logical(true)
+                v: Value::Logical(true),
+                c: None,
             }))
         );
     }

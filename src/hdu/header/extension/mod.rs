@@ -7,7 +7,7 @@ use std::io::Read;
 use async_trait::async_trait;
 use futures::AsyncRead;
 
-use crate::card::{Keyword, Value};
+use crate::card::{Card, Keyword, Value};
 use crate::error::Error;
 use crate::hdu::primary::check_card_keyword;
 
@@ -34,7 +34,7 @@ pub fn parse_xtension_card(card: &[u8; 80]) -> Result<XtensionType, Error> {
 pub trait Xtension {
     fn get_num_bytes_data_block(&self) -> u64;
 
-    fn update_with_parsed_header(&mut self, cards: &HashMap<[u8; 8], Value>) -> Result<(), Error>;
+    fn update_with_parsed_header(&mut self, cards: &HashMap<[u8; 8], Card>) -> Result<(), Error>;
 
     // Parse the Xtension keywords
     // During the parsing, some checks will be made
@@ -42,7 +42,7 @@ pub trait Xtension {
         reader: &mut R,
         num_bytes_read: &mut usize,
         card_80_bytes_buf: &mut [u8; 80],
-        cards: &mut HashMap<Keyword, Value>,
+        cards: &mut HashMap<Keyword, Card>,
     ) -> Result<Self, Error>
     where
         Self: Sized;
@@ -52,7 +52,7 @@ pub trait Xtension {
         reader: &mut R,
         num_bytes_read: &mut usize,
         card_80_bytes_buf: &mut [u8; 80],
-        cards: &mut HashMap<Keyword, Value>,
+        cards: &mut HashMap<Keyword, Card>,
     ) -> Result<Self, Error>
     where
         Self: Sized,

@@ -6,13 +6,17 @@ pub type Keyword = [u8; 8];
 use serde::Serialize;
 #[derive(Debug, PartialEq, Serialize)]
 pub struct Card {
+    /// Keyword name.
     pub kw: Keyword,
+    /// Keyword value.
     pub v: Value,
+    /// Optional keyword comment.
+    pub c: Option<String>,
 }
 
 impl Card {
-    pub fn new(kw: Keyword, v: Value) -> Self {
-        Self { kw, v }
+    pub fn new(kw: Keyword, v: Value, c: Option<String>) -> Self {
+        Self { kw, v, c }
     }
     /// Return the ASCII trimmed keyword as an owned String.
     pub fn keyword(&self) -> Result<&str, Utf8Error> {
@@ -93,7 +97,7 @@ mod tests {
     fn trimmed_keyword_string() {
         let kw = b"GAIN    ".to_owned();
         let v = Value::Float(30.00);
-        let card = Card { kw, v };
+        let card = Card { kw, v, c: None };
         assert_eq!("GAIN".to_owned(), card.keyword().unwrap())
     }
 }

@@ -5,6 +5,8 @@ use async_trait::async_trait;
 use futures::AsyncRead;
 use serde::Serialize;
 
+use crate::card::Card;
+use crate::card::Keyword;
 use crate::card::Value;
 use crate::error::Error;
 use crate::hdu::header::consume_next_card_async;
@@ -105,7 +107,7 @@ impl Xtension for AsciiTable {
         self.naxis1 * self.naxis2
     }
 
-    fn update_with_parsed_header(&mut self, cards: &HashMap<[u8; 8], Value>) -> Result<(), Error> {
+    fn update_with_parsed_header(&mut self, cards: &HashMap<Keyword, Card>) -> Result<(), Error> {
         // TBCOLS
         self.tbcols = (0..self.tfields)
             .map(|idx_field| {
@@ -121,6 +123,7 @@ impl Xtension for AsciiTable {
                 cards
                     .get(&owned_kw)
                     .ok_or(Error::StaticError("TBCOLX card not found"))?
+                    .v
                     .clone()
                     .check_for_float()
                     .map(|tbcol| tbcol as u64)
@@ -142,6 +145,7 @@ impl Xtension for AsciiTable {
                 let tform = cards
                     .get(&owned_kw)
                     .ok_or(Error::StaticError("TFORMX card not found"))?
+                    .v
                     .clone()
                     .check_for_string()?;
 
@@ -235,7 +239,7 @@ impl Xtension for AsciiTable {
         reader: &mut R,
         num_bytes_read: &mut usize,
         card_80_bytes_buf: &mut [u8; 80],
-        _cards: &mut HashMap<[u8; 8], Value>,
+        _cards: &mut HashMap<[u8; 8], Card>,
     ) -> Result<Self, Error> {
         // BITPIX
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
@@ -296,7 +300,7 @@ impl Xtension for AsciiTable {
         reader: &mut R,
         num_bytes_read: &mut usize,
         card_80_bytes_buf: &mut [u8; 80],
-        _cards: &mut HashMap<[u8; 8], Value>,
+        _cards: &mut HashMap<[u8; 8], Card>,
     ) -> Result<Self, Error>
     where
         R: AsyncRead + std::marker::Unpin,
