@@ -1,8 +1,10 @@
 Cargo.lock
 target/
+samples/
 fitswasm/node_modules
 fitswasm/test
 fitswasm/Cargo.lock
 fitswasm/target
 fitswasm/pkg
+fits-rs-test-files.tar*
 .DS_Store
