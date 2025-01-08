@@ -1,6 +1,5 @@
 Cargo.lock
 target/
-samples/
 fitswasm/node_modules
 fitswasm/test
 fitswasm/Cargo.lock
