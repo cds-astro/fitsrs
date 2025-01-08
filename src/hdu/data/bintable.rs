@@ -7,7 +7,6 @@ use futures::AsyncRead;
 
 use super::iter;
 use super::stream;
-use super::{Data, InMemData};
 use crate::error::Error;
 
 use crate::hdu::header::extension::bintable::BinTable;
@@ -15,13 +14,13 @@ use crate::hdu::DataBufRead;
 
 use crate::hdu::header::extension::Xtension;
 
-use super::DataAsyncBufRead;
-
+//use super::DataAsyncBufRead;
+/*
 impl<'a, R> DataBufRead<'a, BinTable> for Cursor<R>
 where
     R: AsRef<[u8]> + Debug + Read + 'a,
 {
-    type Data = Data<'a, Self>;
+    type Data = Data<'a>;
 
     fn new_data_block(&'a mut self, ctx: &BinTable) -> Self::Data
     where
@@ -48,26 +47,26 @@ where
 
             Data {
                 data: InMemData::U8(data),
-                reader: self,
+                //reader: self,
                 num_bytes_read,
             }
         }
     }
 
     fn consume_data_block(
+        &mut self,
         data: Self::Data,
         num_bytes_read: &mut u64,
-    ) -> Result<&'a mut Self, Error> {
+    ) -> Result<&mut Self, Error> {
         let Data {
-            reader,
             num_bytes_read: num_bytes,
             ..
         } = data;
         *num_bytes_read = num_bytes as u64;
 
-        reader.set_position(reader.position() + num_bytes as u64);
+        self.set_position(self.position() + num_bytes as u64);
 
-        Ok(reader)
+        Ok(self)
     }
 }
 
@@ -83,9 +82,10 @@ where
     }
 
     fn consume_data_block(
+        &mut self,
         data: Self::Data,
         num_bytes_read: &mut u64,
-    ) -> Result<&'a mut Self, Error> {
+    ) -> Result<&mut Self, Error> {
         let iter::Iter {
             reader,
             num_bytes_read: num_bytes_already_read,
@@ -102,7 +102,8 @@ where
         Ok(reader)
     }
 }
-
+*/
+/*
 #[async_trait(?Send)]
 impl<'a, R> DataAsyncBufRead<'a, BinTable> for futures::io::BufReader<R>
 where
@@ -141,4 +142,4 @@ where
 
         Ok(reader)
     }
-}
+}*/

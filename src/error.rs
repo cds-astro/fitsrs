@@ -29,5 +29,8 @@ quick_error! {
             from(std::str::Utf8Error)
             display("Fail to parse a keyword as a utf8 string")
         }
+        Io {
+            from(std::io::Error)
+        }
     }
 }

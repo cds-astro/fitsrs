@@ -8,20 +8,19 @@ use crate::error::Error;
 
 use super::iter;
 use super::stream;
-use super::{Data, InMemData};
 
 use crate::hdu::header::extension::asciitable::AsciiTable;
 use crate::hdu::DataBufRead;
 
 use crate::hdu::header::extension::Xtension;
 
-use super::DataAsyncBufRead;
-
+//use super::DataAsyncBufRead;
+/*
 impl<'a, R> DataBufRead<'a, AsciiTable> for Cursor<R>
 where
     R: AsRef<[u8]> + Debug + Read + 'a,
 {
-    type Data = Data<'a, Self>;
+    type Data = Data<'a>;
 
     fn new_data_block(&'a mut self, ctx: &AsciiTable) -> Self::Data
     where
@@ -55,9 +54,10 @@ where
     }
 
     fn consume_data_block(
+        &mut self,
         data: Self::Data,
         num_bytes_read: &mut u64,
-    ) -> Result<&'a mut Self, Error> {
+    ) -> Result<&mut Self, Error> {
         let Data {
             reader,
             num_bytes_read: num_bytes,
@@ -83,9 +83,10 @@ where
     }
 
     fn consume_data_block(
+        &mut self,
         data: Self::Data,
         num_bytes_read: &mut u64,
-    ) -> Result<&'a mut Self, Error> {
+    ) -> Result<&mut Self, Error> {
         let iter::Iter {
             reader,
             num_bytes_read: num_bytes_already_read,
@@ -102,7 +103,8 @@ where
         Ok(reader)
     }
 }
-
+*/
+/*
 #[async_trait(?Send)]
 impl<'a, R> DataAsyncBufRead<'a, AsciiTable> for futures::io::BufReader<R>
 where
@@ -142,3 +144,4 @@ where
         Ok(reader)
     }
 }
+*/

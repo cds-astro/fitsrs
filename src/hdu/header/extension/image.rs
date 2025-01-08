@@ -67,7 +67,7 @@ impl Xtension for Image {
 
     fn parse<R: Read>(
         reader: &mut R,
-        num_bytes_read: &mut u64,
+        num_bytes_read: &mut usize,
         card_80_bytes_buf: &mut [u8; 80],
         cards: &mut HashMap<Keyword, Value>,
     ) -> Result<Self, Error> {
@@ -102,7 +102,7 @@ impl Xtension for Image {
 
     async fn parse_async<R>(
         reader: &mut R,
-        num_bytes_read: &mut u64,
+        num_bytes_read: &mut usize,
         card_80_bytes_buf: &mut [u8; 80],
         cards: &mut HashMap<Keyword, Value>,
     ) -> Result<Self, Error>

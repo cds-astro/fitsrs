@@ -8,6 +8,7 @@ use futures::AsyncReadExt;
 /// The data part is expressed as a `DataOwned` structure
 /// for non in-memory readers (typically BufReader) that ensures
 /// a file may not fit in memory
+/*
 #[derive(Serialize, Debug)]
 pub enum Data<'a, R>
 where
@@ -19,23 +20,19 @@ where
     I64(St<'a, R, i64>),
     F32(St<'a, R, f32>),
     F64(St<'a, R, f64>),
-}
-
-impl<'a, R> Access for Data<'a, R>
+}*/
+/*
+impl<'a, R> Access<'a> for Data<'a, R>
 where
     R: AsyncBufRead + Unpin,
 {
-    type Type = Self;
+    type Type = &'a mut Self;
 
-    fn get_data(&self) -> &Self::Type {
-        self
-    }
-
-    fn get_data_mut(&mut self) -> &mut Self::Type {
+    fn get_data(&'a mut self) -> Self::Type {
         self
     }
 }
-
+*/
 #[derive(Serialize, Debug)]
 pub struct St<'a, R, T>
 where
@@ -71,7 +68,7 @@ use futures::Stream;
 use serde::Serialize;
 use std::pin::Pin;
 
-use super::Access;
+//use super::Access;
 
 impl<'a, R> Stream for St<'a, R, u8>
 where
@@ -254,17 +251,15 @@ where
     }
 }
 
-impl<'a, R> Access for St<'a, R, u8>
+/*
+impl<'a, R> Access<'a> for St<'a, R, u8>
 where
     R: AsyncBufRead + Unpin,
 {
-    type Type = Self;
+    type Type = &'a mut Self;
 
-    fn get_data(&self) -> &Self::Type {
-        self
-    }
-
-    fn get_data_mut(&mut self) -> &mut Self::Type {
+    fn get_data(&'a mut self) -> Self::Type {
         self
     }
 }
+*/

@@ -2,6 +2,7 @@ pub mod asciitable;
 pub mod bintable;
 pub mod image;
 pub mod iter;
+pub mod layout;
 pub mod stream;
 
 use serde::Serialize;
@@ -12,15 +13,21 @@ use std::io::{BufRead, Read};
 use std::marker::Unpin;
 
 use crate::error::Error;
+use crate::fits::Fits;
 use crate::hdu::Xtension;
 
+// reader must impl this
 pub trait DataBufRead<'a, X>: BufRead
 where
     X: Xtension,
 {
-    type Data: Access + Debug;
+    type Data: Debug + 'a;
 
-    fn new_data_block(&'a mut self, ctx: &X) -> Self::Data
+    fn prepare_data_reading(
+        ctx: &X,
+        num_bytes_read: &'a mut usize,
+        reader: &'a mut Self,
+    ) -> Self::Data
     where
         Self: Sized;
 
@@ -32,10 +39,13 @@ where
     ///
     /// # Params
     /// * `data` - a reader created i.e. from the opening of a file
-    fn consume_data_block(
+    /*fn consume_data_block(
+        &'a mut self,
         data: Self::Data,
         num_bytes_read: &mut u64,
-    ) -> Result<&'a mut Self, Error>;
+    ) -> Result<&'a mut Self, Error>
+    where
+        Self: Sized;*/
 
     fn read_n_bytes_exact(&mut self, num_bytes_to_read: u64) -> Result<(), Error> {
         let mut num_bytes_read = 0;
@@ -80,14 +90,19 @@ use async_trait::async_trait;
 use futures::io::AsyncBufRead;
 use futures::AsyncBufReadExt;
 
+use super::header::extension::asciitable::AsciiTable;
+use super::header::extension::bintable::BinTable;
+use super::header::extension::image::Image;
+
+/*
 #[async_trait(?Send)]
-pub trait DataAsyncBufRead<'a, X>: AsyncBufRead + Unpin
+pub trait DataAsyncBufRead<X>: AsyncBufRead + Unpin
 where
     X: Xtension,
 {
-    type Data: Access + Debug;
+    type Data: Debug;
 
-    fn new_data_block(&'a mut self, ctx: &X) -> Self::Data
+    fn new_data_block(&mut self, ctx: &X) -> Self::Data
     where
         Self: Sized;
 
@@ -100,11 +115,12 @@ where
     /// # Params
     /// * `data` - a reader created i.e. from the opening of a file
     async fn consume_data_block(
+        &mut self,
         data: Self::Data,
         num_bytes_read: &mut u64,
-    ) -> Result<&'a mut Self, Error>
+    ) -> Result<&mut Self, Error>
     where
-        'a: 'async_trait;
+        Self: Sized;
 
     async fn read_n_bytes_exact(&mut self, num_bytes_to_read: u64) -> Result<(), Error> {
         let mut num_bytes_read = 0;
@@ -143,14 +159,7 @@ where
             Ok(())
         }
     }
-}
-
-pub trait Access {
-    type Type;
-
-    fn get_data(&self) -> &Self::Type;
-    fn get_data_mut(&mut self) -> &mut Self::Type;
-}
+}*/
 
 /// The full slice of data found in-memory
 /// This is an enum whose content depends on the
@@ -161,32 +170,10 @@ pub trait Access {
 /// all the data fits in memory
 ///
 #[derive(Serialize, Debug)]
-pub struct Data<'a, R>
-where
-    R: Read + Debug + 'a,
-{
-    pub reader: &'a mut R,
-    pub num_bytes_read: usize,
-    pub data: InMemData<'a>,
-}
-
-impl<'a, R> Access for Data<'a, R>
-where
-    R: Read + Debug + 'a,
-{
-    type Type = InMemData<'a>;
-
-    fn get_data(&self) -> &Self::Type {
-        &self.data
-    }
-
-    fn get_data_mut(&mut self) -> &mut Self::Type {
-        &mut self.data
-    }
-}
+pub struct InMemoryData<'a>(Slice<'a>);
 
 #[derive(Serialize, Debug, Clone)]
-pub enum InMemData<'a> {
+pub enum Slice<'a> {
     U8(&'a [u8]),
     I16(&'a [i16]),
     I32(&'a [i32]),
