@@ -16,7 +16,7 @@ impl Card {
     }
     /// Return the ASCII trimmed keyword as an owned String.
     pub fn keyword(&self) -> Result<&str, Utf8Error> {
-        std::str::from_utf8(&self.kw)
+        std::str::from_utf8(self.kw.trim_ascii())
     }
 }
 
