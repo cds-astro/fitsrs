@@ -1,4 +1,4 @@
-use std::string::FromUtf8Error;
+use std::str::Utf8Error;
 
 use crate::error::Error;
 pub type Keyword = [u8; 8];
@@ -15,9 +15,8 @@ impl Card {
         Self { kw, v }
     }
     /// Return the ASCII trimmed keyword as an owned String.
-    pub fn keyword(&self) -> Result<String, FromUtf8Error> {
-        let kw = self.kw.trim_ascii().to_vec();
-        String::from_utf8(kw)
+    pub fn keyword(&self) -> Result<&str, Utf8Error> {
+        std::str::from_utf8(&self.kw)
     }
 }
 

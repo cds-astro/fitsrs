@@ -323,9 +323,8 @@ mod tests {
         let header = hdu.get_header();
         let mut keywords = header
             .cards()
-            .map(|c| c.keyword())
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap();
+            .map(|c| c.keyword().unwrap().to_owned())
+            .collect::<Vec<_>>();
         keywords.sort_unstable();
 
         assert_eq!(
