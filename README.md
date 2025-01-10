@@ -116,7 +116,7 @@ use std::io::Cursor;
 use fitsrs::hdu::HDU;
 use fitsrs::hdu::data::DataIter;
 use fitsrs::fits::Fits;
-use fitsrs::hdu::header::extension::Xtension;
+use fitsrs::hdu::header::Xtension;
 
 use std::io::{BufReader, Read};
 
