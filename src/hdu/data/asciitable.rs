@@ -1,73 +1,43 @@
 use async_trait::async_trait;
-use futures::AsyncRead;
-use std::cell::UnsafeCell;
+use futures::AsyncReadExt;
 use std::fmt::Debug;
 use std::io::{BufReader, Cursor, Read};
 
-use crate::error::Error;
-
-use super::iter;
-use super::stream;
-use super::{Data, InMemData};
+use super::{iter, Data};
+use super::{stream, AsyncDataBufRead};
 
 use crate::hdu::header::extension::asciitable::AsciiTable;
 use crate::hdu::DataBufRead;
 
 use crate::hdu::header::extension::Xtension;
 
-use super::DataAsyncBufRead;
-
 impl<'a, R> DataBufRead<'a, AsciiTable> for Cursor<R>
 where
     R: AsRef<[u8]> + Debug + Read + 'a,
 {
-    type Data = Data<'a, Self>;
+    type Data = Data<'a>;
 
-    fn new_data_block(&'a mut self, ctx: &AsciiTable) -> Self::Data
-    where
-        Self: Sized,
-    {
-        let num_bytes_read = ctx.get_num_bytes_data_block() as usize;
+    fn prepare_data_reading(
+        ctx: &AsciiTable,
+        _num_remaining_bytes_in_cur_hdu: &'a mut usize,
+        reader: &'a mut Self,
+    ) -> Self::Data {
+        let num_bytes_of_data = ctx.get_num_bytes_data_block() as usize;
 
-        let bytes = self.get_ref();
-        let bytes = bytes.as_ref();
+        let start_byte_pos = reader.position() as usize;
 
-        let pos = self.position() as usize;
-        let start_byte_pos = pos;
-        let end_byte_pos = pos + num_bytes_read;
+        let r = reader.get_ref();
+        let bytes = r.as_ref();
+
+        let end_byte_pos = start_byte_pos + num_bytes_of_data;
 
         let bytes = &bytes[start_byte_pos..end_byte_pos];
 
-        let c = bytes as *const [u8] as *mut UnsafeCell<[u8]>;
-        unsafe {
-            let cell: &UnsafeCell<[u8]> = &*c;
-            let x_mut_ref = &mut *cell.get();
+        let num_pixels = num_bytes_of_data as usize;
 
-            let (_, data, _) = x_mut_ref.align_to_mut::<u8>();
-            let data = &data[..num_bytes_read];
+        debug_assert!(bytes.len() >= num_pixels);
 
-            Data {
-                data: InMemData::U8(data),
-                reader: self,
-                num_bytes_read,
-            }
-        }
-    }
-
-    fn consume_data_block(
-        data: Self::Data,
-        num_bytes_read: &mut u64,
-    ) -> Result<&'a mut Self, Error> {
-        let Data {
-            reader,
-            num_bytes_read: num_bytes,
-            ..
-        } = data;
-        *num_bytes_read = num_bytes as u64;
-
-        reader.set_position(reader.position() + num_bytes as u64);
-
-        Ok(reader)
+        Data::U8(bytes)
     }
 }
 
@@ -75,70 +45,29 @@ impl<'a, R> DataBufRead<'a, AsciiTable> for BufReader<R>
 where
     R: Read + Debug + 'a,
 {
-    type Data = iter::Iter<'a, Self, u8>;
+    type Data = iter::It<'a, Self, u8>;
 
-    fn new_data_block(&'a mut self, ctx: &AsciiTable) -> Self::Data {
-        let num_bytes_to_read = ctx.get_num_bytes_data_block();
-        iter::Iter::new(self, num_bytes_to_read)
-    }
-
-    fn consume_data_block(
-        data: Self::Data,
-        num_bytes_read: &mut u64,
-    ) -> Result<&'a mut Self, Error> {
-        let iter::Iter {
-            reader,
-            num_bytes_read: num_bytes_already_read,
-            num_bytes_to_read,
-            ..
-        } = data;
-
-        let remaining_bytes_to_read = num_bytes_to_read - num_bytes_already_read;
-        <Self as DataBufRead<'_, AsciiTable>>::read_n_bytes_exact(reader, remaining_bytes_to_read)?;
-
-        // All the data block have been read
-        *num_bytes_read = num_bytes_to_read;
-
-        Ok(reader)
+    fn prepare_data_reading(
+        _ctx: &AsciiTable,
+        num_remaining_bytes_in_cur_hdu: &'a mut usize,
+        reader: &'a mut Self,
+    ) -> Self::Data {
+        iter::It::new(reader, num_remaining_bytes_in_cur_hdu)
     }
 }
 
 #[async_trait(?Send)]
-impl<'a, R> DataAsyncBufRead<'a, AsciiTable> for futures::io::BufReader<R>
+impl<'a, R> AsyncDataBufRead<'a, AsciiTable> for futures::io::BufReader<R>
 where
-    R: AsyncRead + Debug + 'a + std::marker::Unpin,
+    R: AsyncReadExt + 'a + std::marker::Unpin,
 {
     type Data = stream::St<'a, Self, u8>;
 
-    fn new_data_block(&'a mut self, ctx: &AsciiTable) -> Self::Data {
-        let num_bytes_to_read = ctx.get_num_bytes_data_block();
-        stream::St::new(self, num_bytes_to_read)
-    }
-
-    async fn consume_data_block(
-        data: Self::Data,
-        num_bytes_read: &mut u64,
-    ) -> Result<&'a mut Self, Error>
-    where
-        'a: 'async_trait,
-    {
-        let stream::St {
-            reader,
-            num_bytes_to_read,
-            num_bytes_read: num_bytes_already_read,
-            ..
-        } = data;
-
-        let remaining_bytes_to_read = num_bytes_to_read - num_bytes_already_read;
-        <Self as DataAsyncBufRead<'_, AsciiTable>>::read_n_bytes_exact(
-            reader,
-            remaining_bytes_to_read,
-        )
-        .await?;
-
-        // All the data block have been read
-        *num_bytes_read = num_bytes_to_read;
-
-        Ok(reader)
+    fn prepare_data_reading(
+        _ctx: &AsciiTable,
+        num_remaining_bytes_in_cur_hdu: &'a mut usize,
+        reader: &'a mut Self,
+    ) -> Self::Data {
+        stream::St::new(reader, num_remaining_bytes_in_cur_hdu)
     }
 }

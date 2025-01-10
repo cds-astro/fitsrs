@@ -40,7 +40,7 @@ pub trait Xtension {
     // During the parsing, some checks will be made
     fn parse<R: Read>(
         reader: &mut R,
-        num_bytes_read: &mut u64,
+        num_bytes_read: &mut usize,
         card_80_bytes_buf: &mut [u8; 80],
         cards: &mut HashMap<Keyword, Value>,
     ) -> Result<Self, Error>
@@ -50,7 +50,7 @@ pub trait Xtension {
     // Async equivalent method
     async fn parse_async<R>(
         reader: &mut R,
-        num_bytes_read: &mut u64,
+        num_bytes_read: &mut usize,
         card_80_bytes_buf: &mut [u8; 80],
         cards: &mut HashMap<Keyword, Value>,
     ) -> Result<Self, Error>

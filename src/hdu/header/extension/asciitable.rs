@@ -13,10 +13,10 @@ use crate::hdu::header::parse_gcount_card;
 use crate::hdu::header::parse_naxis_card;
 use crate::hdu::header::parse_pcount_card;
 use crate::hdu::header::BitpixValue;
+use crate::hdu::header::Xtension;
 use crate::hdu::header::NAXIS_KW;
 use crate::hdu::primary::check_card_keyword;
 use crate::hdu::primary::consume_next_card;
-use crate::hdu::Xtension;
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct AsciiTable {
@@ -233,7 +233,7 @@ impl Xtension for AsciiTable {
 
     fn parse<R: Read>(
         reader: &mut R,
-        num_bytes_read: &mut u64,
+        num_bytes_read: &mut usize,
         card_80_bytes_buf: &mut [u8; 80],
         _cards: &mut HashMap<[u8; 8], Value>,
     ) -> Result<Self, Error> {
@@ -294,7 +294,7 @@ impl Xtension for AsciiTable {
 
     async fn parse_async<R>(
         reader: &mut R,
-        num_bytes_read: &mut u64,
+        num_bytes_read: &mut usize,
         card_80_bytes_buf: &mut [u8; 80],
         _cards: &mut HashMap<[u8; 8], Value>,
     ) -> Result<Self, Error>
@@ -380,24 +380,26 @@ mod tests {
     use super::{AsciiTable, TFormAsciiTable};
     use crate::{
         fits::Fits,
-        hdu::{extension::XtensionHDU, header::BitpixValue},
+        hdu::{header::BitpixValue, HDU},
     };
     use std::{fs::File, io::BufReader};
 
     fn compare_ascii_ext(filename: &str, ascii_table: AsciiTable) {
         let f = File::open(filename).unwrap();
 
-        let mut reader = BufReader::new(f);
-        let Fits { hdu } = Fits::from_reader(&mut reader).unwrap();
+        let reader = BufReader::new(f);
+        let hdu_list = Fits::from_reader(reader);
 
         // Get the first HDU extension,
         // this should be the table for these fits examples
-        let hdu = hdu
+        let hdu = hdu_list
+            // skip the primary hdu
+            .skip(1)
             .next()
             .expect("Should contain an extension HDU")
             .unwrap();
         match hdu {
-            XtensionHDU::AsciiTable(hdu) => {
+            HDU::XASCIITable(hdu) => {
                 let xtension = hdu.get_header().get_xtension();
                 assert_eq!(xtension.clone(), ascii_table);
             }

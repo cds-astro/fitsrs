@@ -12,10 +12,10 @@ use crate::hdu::header::consume_next_card_async;
 use crate::hdu::header::parse_bitpix_card;
 use crate::hdu::header::parse_naxis_card;
 use crate::hdu::header::BitpixValue;
+use crate::hdu::header::Xtension;
 use crate::hdu::header::NAXIS_KW;
 use crate::hdu::primary::check_card_keyword;
 use crate::hdu::primary::consume_next_card;
-use crate::hdu::Xtension;
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct Image {
@@ -67,7 +67,7 @@ impl Xtension for Image {
 
     fn parse<R: Read>(
         reader: &mut R,
-        num_bytes_read: &mut u64,
+        num_bytes_read: &mut usize,
         card_80_bytes_buf: &mut [u8; 80],
         cards: &mut HashMap<Keyword, Value>,
     ) -> Result<Self, Error> {
@@ -102,7 +102,7 @@ impl Xtension for Image {
 
     async fn parse_async<R>(
         reader: &mut R,
-        num_bytes_read: &mut u64,
+        num_bytes_read: &mut usize,
         card_80_bytes_buf: &mut [u8; 80],
         cards: &mut HashMap<Keyword, Value>,
     ) -> Result<Self, Error>

@@ -1,20 +1,9 @@
-use super::{
-    data::DataAsyncBufRead,
-    extension::{AsyncXtensionHDU, XtensionHDU},
-    header::consume_next_card_async,
-    AsyncHDU,
-};
 use std::fmt::Debug;
 
-use crate::hdu::header::extension::asciitable::AsciiTable;
-use crate::hdu::header::extension::bintable::BinTable;
 use crate::hdu::header::extension::image::Image;
 
-use crate::hdu::data::DataBufRead;
+use crate::fits::HDU;
 
-use crate::hdu::HDU;
-
-use crate::error::Error;
 pub use crate::hdu::header::{check_card_keyword, consume_next_card};
 
 use std::ops::Deref;
@@ -22,46 +11,10 @@ use std::ops::Deref;
 /// Structure storing the content of one HDU (i.e. Header Data Unit)
 /// of a fits file
 #[derive(Debug)]
-pub struct PrimaryHDU<'a, R>(pub HDU<'a, R, Image>)
-where
-    R: DataBufRead<'a, Image> + DataBufRead<'a, BinTable> + DataBufRead<'a, AsciiTable> + 'a;
+pub struct PrimaryHDU(pub HDU<Image>);
 
-impl<'a, R> PrimaryHDU<'a, R>
-where
-    R: DataBufRead<'a, Image> + DataBufRead<'a, BinTable> + DataBufRead<'a, AsciiTable> + 'a,
-{
-    pub fn new(reader: &'a mut R) -> Result<Self, Error> {
-        let mut num_bytes_read = 0;
-        let mut card_80_bytes_buf = [0; 80];
-
-        // SIMPLE
-        consume_next_card(reader, &mut card_80_bytes_buf, &mut num_bytes_read)?;
-        let _ = check_card_keyword(&card_80_bytes_buf, b"SIMPLE  ")?;
-
-        let hdu = HDU::<'a, R, Image>::new(reader, &mut num_bytes_read, &mut card_80_bytes_buf)?;
-
-        Ok(PrimaryHDU(hdu))
-    }
-
-    fn consume(self) -> Result<Option<&'a mut R>, Error> {
-        self.0.consume()
-    }
-
-    pub fn next(self) -> Result<Option<XtensionHDU<'a, R>>, Error> {
-        if let Some(reader) = self.consume()? {
-            let hdu = XtensionHDU::new(reader)?;
-            Ok(Some(hdu))
-        } else {
-            Ok(None)
-        }
-    }
-}
-
-impl<'a, R> Deref for PrimaryHDU<'a, R>
-where
-    R: DataBufRead<'a, Image> + DataBufRead<'a, BinTable> + DataBufRead<'a, AsciiTable> + 'a,
-{
-    type Target = HDU<'a, R, Image>;
+impl Deref for PrimaryHDU {
+    type Target = HDU<Image>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -69,15 +22,13 @@ where
 }
 
 use std::ops::DerefMut;
-impl<'a, R> DerefMut for PrimaryHDU<'a, R>
-where
-    R: DataBufRead<'a, Image> + DataBufRead<'a, BinTable> + DataBufRead<'a, AsciiTable> + 'a,
-{
+impl DerefMut for PrimaryHDU {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
+/*
 #[derive(Debug)]
 pub struct AsyncPrimaryHDU<'a, R>(pub AsyncHDU<'a, R, Image>)
 where
@@ -146,7 +97,7 @@ where
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
-}
+}*/
 
 /*
 use std::pin::Pin;

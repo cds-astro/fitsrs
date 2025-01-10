@@ -7,35 +7,30 @@ pub mod stream;
 use serde::Serialize;
 
 use std::fmt::Debug;
-use std::io::{BufRead, Read};
+use std::io::BufRead;
 
 use std::marker::Unpin;
 
 use crate::error::Error;
-use crate::hdu::Xtension;
+use crate::hdu::header::Xtension;
 
+pub use iter::DataIter;
+pub use stream::DataStream;
+
+// reader must impl this
 pub trait DataBufRead<'a, X>: BufRead
 where
     X: Xtension,
 {
-    type Data: Access + Debug;
+    type Data: Debug + 'a;
 
-    fn new_data_block(&'a mut self, ctx: &X) -> Self::Data
+    fn prepare_data_reading(
+        ctx: &X,
+        num_remaining_bytes_in_cur_hdu: &'a mut usize,
+        reader: &'a mut Self,
+    ) -> Self::Data
     where
         Self: Sized;
-
-    /// Consume the data to return back the reader at the position
-    /// of the end of the data block
-    ///
-    /// If the data has not been fully read, we skip the remaining data
-    /// bytes to go to the end of the data block
-    ///
-    /// # Params
-    /// * `data` - a reader created i.e. from the opening of a file
-    fn consume_data_block(
-        data: Self::Data,
-        num_bytes_read: &mut u64,
-    ) -> Result<&'a mut Self, Error>;
 
     fn read_n_bytes_exact(&mut self, num_bytes_to_read: u64) -> Result<(), Error> {
         let mut num_bytes_read = 0;
@@ -81,30 +76,19 @@ use futures::io::AsyncBufRead;
 use futures::AsyncBufReadExt;
 
 #[async_trait(?Send)]
-pub trait DataAsyncBufRead<'a, X>: AsyncBufRead + Unpin
+pub trait AsyncDataBufRead<'a, X>: AsyncBufRead + Unpin
 where
     X: Xtension,
 {
-    type Data: Access + Debug;
+    type Data: 'a;
 
-    fn new_data_block(&'a mut self, ctx: &X) -> Self::Data
+    fn prepare_data_reading(
+        ctx: &X,
+        num_remaining_bytes_in_cur_hdu: &'a mut usize,
+        reader: &'a mut Self,
+    ) -> Self::Data
     where
         Self: Sized;
-
-    /// Consume the data to return back the reader at the position
-    /// of the end of the data block
-    ///
-    /// If the data has not been fully read, we skip the remaining data
-    /// bytes to go to the end of the data block
-    ///
-    /// # Params
-    /// * `data` - a reader created i.e. from the opening of a file
-    async fn consume_data_block(
-        data: Self::Data,
-        num_bytes_read: &mut u64,
-    ) -> Result<&'a mut Self, Error>
-    where
-        'a: 'async_trait;
 
     async fn read_n_bytes_exact(&mut self, num_bytes_to_read: u64) -> Result<(), Error> {
         let mut num_bytes_read = 0;
@@ -145,13 +129,6 @@ where
     }
 }
 
-pub trait Access {
-    type Type;
-
-    fn get_data(&self) -> &Self::Type;
-    fn get_data_mut(&mut self) -> &mut Self::Type;
-}
-
 /// The full slice of data found in-memory
 /// This is an enum whose content depends on the
 /// bitpix value found in the header part of the HDU
@@ -160,37 +137,13 @@ pub trait Access {
 /// for in-memory readers (typically for `&[u8]` or a `Cursor<AsRef<[u8]>>`) that ensures
 /// all the data fits in memory
 ///
-#[derive(Serialize, Debug)]
-pub struct Data<'a, R>
-where
-    R: Read + Debug + 'a,
-{
-    pub reader: &'a mut R,
-    pub num_bytes_read: usize,
-    pub data: InMemData<'a>,
-}
-
-impl<'a, R> Access for Data<'a, R>
-where
-    R: Read + Debug + 'a,
-{
-    type Type = InMemData<'a>;
-
-    fn get_data(&self) -> &Self::Type {
-        &self.data
-    }
-
-    fn get_data_mut(&mut self) -> &mut Self::Type {
-        &mut self.data
-    }
-}
 
 #[derive(Serialize, Debug, Clone)]
-pub enum InMemData<'a> {
+pub enum Data<'a> {
     U8(&'a [u8]),
-    I16(&'a [i16]),
-    I32(&'a [i32]),
-    I64(&'a [i64]),
-    F32(&'a [f32]),
-    F64(&'a [f64]),
+    I16(Box<[i16]>),
+    I32(Box<[i32]>),
+    I64(Box<[i64]>),
+    F32(Box<[f32]>),
+    F64(Box<[f64]>),
 }
