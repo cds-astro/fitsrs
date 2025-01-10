@@ -1,0 +1,11 @@
+# CHANGELOG.md
+
+## 0.3.0 (unreleased)
+
+Features:
+
+- BREAKING API change. Provide an iterator over the HDU list
+
+Bugfixes:
+
+- Be more safe about UB [https://github.com/cds-astro/fitsrs/issues/5]. BITPIX > 8 needs to be read from BigEndian scheme. It is thus necessary to create a new owned vector from the reading bytes. For BITPIX = 8, data can be directly read from the memory without allocating anything.

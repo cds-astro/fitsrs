@@ -4,162 +4,156 @@ pub mod data;
 pub mod extension;
 pub mod primary;
 
-use crate::hdu::header::extension::Xtension;
-use crate::{fits::Fits, hdu::data::DataBufRead};
-use futures::{AsyncBufReadExt, AsyncReadExt};
-use header::Header;
+use crate::hdu::data::DataBufRead;
 
 //use self::data::DataAsyncBufRead;
 use crate::error::Error;
 
-use self::data::layout::MemoryLayout;
+use self::data::AsyncDataBufRead;
+use self::header::consume_next_card_async;
 use self::header::extension::asciitable::AsciiTable;
 use self::header::extension::bintable::BinTable;
 use self::header::extension::image::Image;
+use self::header::extension::XtensionType;
+use self::primary::check_card_keyword;
 
-/*
-// Async variant
+//use super::data::DataAsyncBufRead;
+//use super::AsyncHDU;
+use crate::async_fits;
+use crate::fits;
+use crate::hdu::header::extension::parse_xtension_card;
+use crate::hdu::primary::consume_next_card;
+
 #[derive(Debug)]
-pub struct AsyncHDU<'a, R, X>
-where
-    X: Xtension,
-    R: DataAsyncBufRead<'a, X>,
-{
-    /// The header part that stores all the cards
-    header: Header<X>,
-    /// The data part
-    data: <R as DataAsyncBufRead<'a, X>>::Data,
+pub enum HDU {
+    Primary(fits::HDU<Image>),
+    XImage(fits::HDU<Image>),
+    XBinaryTable(fits::HDU<BinTable>),
+    XASCIITable(fits::HDU<AsciiTable>),
 }
 
-impl<'a, R, X> AsyncHDU<'a, R, X>
-where
-    X: Xtension + std::fmt::Debug,
-    R: DataAsyncBufRead<'a, X> + 'a,
-{
-    pub async fn new(
-        reader: &'a mut R,
-        num_bytes_read: &mut u64,
-        card_80_bytes_buf: &mut [u8; 80],
-    ) -> Result<AsyncHDU<'a, R, X>, Error> {
-        /* 1. Parse the header first */
-        let header = Header::parse_async(reader, num_bytes_read, card_80_bytes_buf).await?;
-        /* 2. Skip the next bytes to a new 2880 multiple of bytes
-        This is where the data block should start */
-        let is_remaining_bytes = ((*num_bytes_read) % 2880) > 0;
+impl HDU {
+    pub(crate) fn new_xtension<'a, R>(reader: &mut R) -> Result<Self, Error>
+    where
+        R: DataBufRead<'a, Image> + DataBufRead<'a, BinTable> + DataBufRead<'a, AsciiTable> + 'a,
+    {
+        let mut num_bytes_read = 0;
 
-        // Skip the remaining bytes to set the reader where a new HDU begins
-        if is_remaining_bytes {
-            let mut block_mem_buf: [u8; 2880] = [0; 2880];
+        let mut card_80_bytes_buf = [0; 80];
 
-            let num_off_bytes = (2880 - ((*num_bytes_read) % 2880)) as usize;
-            reader
-                .read_exact(&mut block_mem_buf[..num_off_bytes])
-                .await
-                .map_err(|_| Error::StaticError("EOF reached"))?;
-        }
+        // XTENSION
+        consume_next_card(reader, &mut card_80_bytes_buf, &mut num_bytes_read)?;
+        let xtension_type = parse_xtension_card(&card_80_bytes_buf)?;
 
-        // Data block
-        let xtension = header.get_xtension();
-        let data = reader.new_data_block(xtension);
+        let hdu = match xtension_type {
+            XtensionType::Image => HDU::XImage(fits::HDU::<Image>::new(
+                reader,
+                &mut num_bytes_read,
+                &mut card_80_bytes_buf,
+            )?),
+            XtensionType::BinTable => HDU::XBinaryTable(fits::HDU::<BinTable>::new(
+                reader,
+                &mut num_bytes_read,
+                &mut card_80_bytes_buf,
+            )?),
+            XtensionType::AsciiTable => HDU::XASCIITable(fits::HDU::<AsciiTable>::new(
+                reader,
+                &mut num_bytes_read,
+                &mut card_80_bytes_buf,
+            )?),
+        };
 
-        Ok(Self { header, data })
+        Ok(hdu)
     }
 
-    async fn consume(self) -> Result<Option<&'a mut R>, Error> {
+    pub(crate) fn new_primary<'a, R>(reader: &mut R) -> Result<Self, Error>
+    where
+        //R: DataBufRead<'a, Image> + DataBufRead<'a, BinTable> + DataBufRead<'a, AsciiTable> + 'a,
+        R: DataBufRead<'a, Image> + 'a,
+    {
         let mut num_bytes_read = 0;
-        let reader =
-            <R as DataAsyncBufRead<'a, X>>::consume_data_block(self.data, &mut num_bytes_read)
+        let mut card_80_bytes_buf = [0; 80];
+
+        // SIMPLE
+        consume_next_card(reader, &mut card_80_bytes_buf, &mut num_bytes_read)?;
+        let _ = check_card_keyword(&card_80_bytes_buf, b"SIMPLE  ")?;
+
+        let hdu = fits::HDU::<Image>::new(reader, &mut num_bytes_read, &mut card_80_bytes_buf)?;
+
+        Ok(HDU::Primary(hdu))
+    }
+}
+
+#[derive(Debug)]
+pub enum AsyncHDU {
+    Primary(async_fits::AsyncHDU<Image>),
+    XImage(async_fits::AsyncHDU<Image>),
+    XBinaryTable(crate::async_fits::AsyncHDU<BinTable>),
+    XASCIITable(crate::async_fits::AsyncHDU<AsciiTable>),
+}
+
+impl AsyncHDU {
+    pub(crate) async fn new_xtension<'a, R>(reader: &mut R) -> Result<Self, Error>
+    where
+        R: AsyncDataBufRead<'a, Image>
+            + AsyncDataBufRead<'a, BinTable>
+            + AsyncDataBufRead<'a, AsciiTable>
+            + 'a,
+    {
+        let mut num_bytes_read = 0;
+
+        let mut card_80_bytes_buf = [0; 80];
+
+        // XTENSION
+        consume_next_card_async(reader, &mut card_80_bytes_buf, &mut num_bytes_read).await?;
+        let xtension_type = parse_xtension_card(&card_80_bytes_buf)?;
+
+        let hdu = match xtension_type {
+            XtensionType::Image => AsyncHDU::XImage(
+                async_fits::AsyncHDU::<Image>::new(
+                    reader,
+                    &mut num_bytes_read,
+                    &mut card_80_bytes_buf,
+                )
+                .await?,
+            ),
+            XtensionType::BinTable => AsyncHDU::XBinaryTable(
+                async_fits::AsyncHDU::<BinTable>::new(
+                    reader,
+                    &mut num_bytes_read,
+                    &mut card_80_bytes_buf,
+                )
+                .await?,
+            ),
+            XtensionType::AsciiTable => AsyncHDU::XASCIITable(
+                async_fits::AsyncHDU::<AsciiTable>::new(
+                    reader,
+                    &mut num_bytes_read,
+                    &mut card_80_bytes_buf,
+                )
+                .await?,
+            ),
+        };
+
+        Ok(hdu)
+    }
+
+    pub(crate) async fn new_primary<'a, R>(reader: &mut R) -> Result<Self, Error>
+    where
+        //R: DataBufRead<'a, Image> + DataBufRead<'a, BinTable> + DataBufRead<'a, AsciiTable> + 'a,
+        R: AsyncDataBufRead<'a, Image> + 'a,
+    {
+        let mut num_bytes_read = 0;
+        let mut card_80_bytes_buf = [0; 80];
+
+        // SIMPLE
+        consume_next_card_async(reader, &mut card_80_bytes_buf, &mut num_bytes_read).await?;
+        let _ = check_card_keyword(&card_80_bytes_buf, b"SIMPLE  ")?;
+
+        let hdu =
+            async_fits::AsyncHDU::<Image>::new(reader, &mut num_bytes_read, &mut card_80_bytes_buf)
                 .await?;
 
-        let is_remaining_bytes = (num_bytes_read % 2880) > 0;
-        // Skip the remaining bytes to set the reader where a new HDU begins
-        let reader = if is_remaining_bytes {
-            let mut block_mem_buf: [u8; 2880] = [0; 2880];
-
-            let num_off_bytes = (2880 - (num_bytes_read % 2880)) as usize;
-            reader
-                .read_exact(&mut block_mem_buf[..num_off_bytes])
-                .await
-                .ok() // An error like unexpected EOF is not standard frendly but we make it pass
-                // interpreting it as the last HDU in the file
-                .map(|_| reader)
-        } else {
-            // We are at a multiple of 2880 byte
-            Some(reader)
-        };
-
-        if let Some(reader) = reader {
-            let is_eof = reader
-                .fill_buf()
-                .await
-                .map_err(|_| {
-                    Error::StaticError("Unable to fill the buffer to check if data is remaining")
-                })?
-                .is_empty();
-            if !is_eof {
-                Ok(Some(reader))
-            } else {
-                Ok(None)
-            }
-        } else {
-            Ok(None)
-        }
+        Ok(AsyncHDU::Primary(hdu))
     }
-
-    pub fn get_header(&self) -> &Header<X> {
-        &self.header
-    }
-
-    /*pub fn get_data(&'a mut self) -> <<R as DataAsyncBufRead<'a, X>>::Data as Access<'a>>::Type {
-        self.data.get_data()
-    }*/
-
-    /*pub fn get_data_mut(&mut self) -> &mut <<R as DataAsyncBufRead<'a, X>>::Data as Access>::Type {
-        self.data.get_data_mut()
-    }*/
 }
-*/
-/*
-impl<X> Drop for HDU<X>
-where
-    X: Xtension + std::fmt::Debug,
-{
-    fn drop(&mut self) {
-        let mut num_bytes_read = 0;
-
-        let xtension = self.header.get_xtension();
-        let num_bytes_read = self.num_bytes_read;
-
-        let is_remaining_bytes = (num_bytes_read % 2880) > 0;
-        // Skip the remaining bytes to set the reader where a new HDU begins
-        let reader = if is_remaining_bytes {
-            let mut block_mem_buf: [u8; 2880] = [0; 2880];
-
-            let num_off_bytes = (2880 - (num_bytes_read % 2880)) as usize;
-            reader
-                .read_exact(&mut block_mem_buf[..num_off_bytes])
-                .ok() // An error like unexpected EOF is not standard frendly but we make it pass
-                // interpreting it as the last HDU in the file
-                .map(|_| reader)
-        } else {
-            // We are at a multiple of 2880 byte
-            Some(reader)
-        };
-
-        if let Some(reader) = reader {
-            let is_eof = reader
-                .fill_buf()
-                .map_err(|_| {
-                    Error::StaticError("Unable to fill the buffer to check if data is remaining")
-                })?
-                .is_empty();
-            if !is_eof {
-                Ok(Some(reader))
-            } else {
-                Ok(None)
-            }
-        } else {
-            Ok(None)
-        }
-    }
-}*/

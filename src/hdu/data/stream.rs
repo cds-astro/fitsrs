@@ -8,9 +8,8 @@ use futures::AsyncReadExt;
 /// The data part is expressed as a `DataOwned` structure
 /// for non in-memory readers (typically BufReader) that ensures
 /// a file may not fit in memory
-/*
 #[derive(Serialize, Debug)]
-pub enum Data<'a, R>
+pub enum DataStream<'a, R>
 where
     R: AsyncBufRead + Unpin,
 {
@@ -20,40 +19,26 @@ where
     I64(St<'a, R, i64>),
     F32(St<'a, R, f32>),
     F64(St<'a, R, f64>),
-}*/
-/*
-impl<'a, R> Access<'a> for Data<'a, R>
-where
-    R: AsyncBufRead + Unpin,
-{
-    type Type = &'a mut Self;
-
-    fn get_data(&'a mut self) -> Self::Type {
-        self
-    }
 }
-*/
+
 #[derive(Serialize, Debug)]
 pub struct St<'a, R, T>
 where
-    R: AsyncBufReadExt + Unpin,
+    R: AsyncBufRead + Unpin,
 {
     pub reader: &'a mut R,
-    pub num_bytes_to_read: u64,
-    pub num_bytes_read: u64,
+    pub num_remaining_bytes_in_cur_hdu: &'a mut usize,
     phantom: std::marker::PhantomData<T>,
 }
 
 impl<'a, R, T> St<'a, R, T>
 where
-    R: AsyncBufReadExt + Unpin,
+    R: AsyncBufRead + Unpin,
 {
-    pub fn new(reader: &'a mut R, num_bytes_to_read: u64) -> Self {
-        let num_bytes_read = 0;
+    pub fn new(reader: &'a mut R, num_remaining_bytes_in_cur_hdu: &'a mut usize) -> Self {
         Self {
             reader,
-            num_bytes_read,
-            num_bytes_to_read,
+            num_remaining_bytes_in_cur_hdu,
             phantom: std::marker::PhantomData,
         }
     }
@@ -62,17 +47,15 @@ where
 use futures::task::Context;
 use futures::task::Poll;
 use futures::AsyncBufRead;
-use futures::AsyncBufReadExt;
 use futures::Future;
-use futures::Stream;
 use serde::Serialize;
 use std::pin::Pin;
 
 //use super::Access;
 
-impl<'a, R> Stream for St<'a, R, u8>
+impl<'a, R> futures::Stream for St<'a, R, u8>
 where
-    R: AsyncBufReadExt + Unpin,
+    R: AsyncBufRead + Unpin,
 {
     /// The type of the value yielded by the stream.
     type Item = Result<[u8; 1], futures::io::Error>;
@@ -81,7 +64,7 @@ where
     /// Returns `Poll::Pending` if not ready, `Poll::Ready(Some(x))` if a value
     /// is ready, and `Poll::Ready(None)` if the stream has completed.
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if self.num_bytes_read == self.num_bytes_to_read {
+        if *self.num_remaining_bytes_in_cur_hdu == 0 {
             // The stream has finished
             Poll::Ready(None)
         } else {
@@ -92,7 +75,7 @@ where
                 Poll::Pending => Poll::Pending,
                 Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
                 Poll::Ready(Ok(())) => {
-                    self.num_bytes_read += 1;
+                    *self.num_remaining_bytes_in_cur_hdu -= 1;
                     Poll::Ready(Some(Ok(buf)))
                 }
             }
@@ -100,9 +83,9 @@ where
     }
 }
 
-impl<'a, R> Stream for St<'a, R, i16>
+impl<'a, R> futures::Stream for St<'a, R, i16>
 where
-    R: AsyncBufReadExt + Unpin,
+    R: AsyncBufRead + Unpin,
 {
     /// The type of the value yielded by the stream.
     type Item = Result<[i16; 1], futures::io::Error>;
@@ -111,7 +94,7 @@ where
     /// Returns `Poll::Pending` if not ready, `Poll::Ready(Some(x))` if a value
     /// is ready, and `Poll::Ready(None)` if the stream has completed.
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if self.num_bytes_to_read == self.num_bytes_read {
+        if *self.num_remaining_bytes_in_cur_hdu == 0 {
             // The stream has finished
             Poll::Ready(None)
         } else {
@@ -122,7 +105,7 @@ where
                 Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
                 Poll::Ready(Ok(())) => {
                     let item = byteorder::BigEndian::read_i16(&buf);
-                    self.num_bytes_read += std::mem::size_of::<i16>() as u64;
+                    *self.num_remaining_bytes_in_cur_hdu -= std::mem::size_of::<i16>();
                     Poll::Ready(Some(Ok([item])))
                 }
             }
@@ -132,7 +115,7 @@ where
 
 impl<'a, R> futures::Stream for St<'a, R, i32>
 where
-    R: AsyncBufReadExt + Unpin,
+    R: AsyncBufRead + Unpin,
 {
     /// The type of the value yielded by the stream.
     type Item = Result<[i32; 1], futures::io::Error>;
@@ -141,7 +124,7 @@ where
     /// Returns `Poll::Pending` if not ready, `Poll::Ready(Some(x))` if a value
     /// is ready, and `Poll::Ready(None)` if the stream has completed.
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if self.num_bytes_to_read == self.num_bytes_read {
+        if *self.num_remaining_bytes_in_cur_hdu == 0 {
             // The stream has finished
             Poll::Ready(None)
         } else {
@@ -152,7 +135,7 @@ where
                 Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
                 Poll::Ready(Ok(())) => {
                     let item = byteorder::BigEndian::read_i32(&buf);
-                    self.num_bytes_read += std::mem::size_of::<i32>() as u64;
+                    *self.num_remaining_bytes_in_cur_hdu -= std::mem::size_of::<i32>();
 
                     Poll::Ready(Some(Ok([item])))
                 }
@@ -163,7 +146,7 @@ where
 
 impl<'a, R> futures::Stream for St<'a, R, i64>
 where
-    R: AsyncBufReadExt + Unpin,
+    R: AsyncBufRead + Unpin,
 {
     /// The type of the value yielded by the stream.
     type Item = Result<[i64; 1], futures::io::Error>;
@@ -172,7 +155,7 @@ where
     /// Returns `Poll::Pending` if not ready, `Poll::Ready(Some(x))` if a value
     /// is ready, and `Poll::Ready(None)` if the stream has completed.
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if self.num_bytes_to_read == self.num_bytes_read {
+        if *self.num_remaining_bytes_in_cur_hdu == 0 {
             // The stream has finished
             Poll::Ready(None)
         } else {
@@ -183,7 +166,7 @@ where
                 Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
                 Poll::Ready(Ok(())) => {
                     let item = byteorder::BigEndian::read_i64(&buf);
-                    self.num_bytes_read += std::mem::size_of::<i64>() as u64;
+                    *self.num_remaining_bytes_in_cur_hdu -= std::mem::size_of::<i64>();
                     Poll::Ready(Some(Ok([item])))
                 }
             }
@@ -193,7 +176,7 @@ where
 
 impl<'a, R> futures::Stream for St<'a, R, f32>
 where
-    R: AsyncBufReadExt + Unpin,
+    R: AsyncBufRead + Unpin,
 {
     /// The type of the value yielded by the stream.
     type Item = Result<[f32; 1], futures::io::Error>;
@@ -202,7 +185,7 @@ where
     /// Returns `Poll::Pending` if not ready, `Poll::Ready(Some(x))` if a value
     /// is ready, and `Poll::Ready(None)` if the stream has completed.
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if self.num_bytes_to_read == self.num_bytes_read {
+        if *self.num_remaining_bytes_in_cur_hdu == 0 {
             // The stream has finished
             Poll::Ready(None)
         } else {
@@ -213,7 +196,7 @@ where
                 Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
                 Poll::Ready(Ok(())) => {
                     let item = byteorder::BigEndian::read_f32(&buf);
-                    self.num_bytes_read += std::mem::size_of::<f32>() as u64;
+                    *self.num_remaining_bytes_in_cur_hdu -= std::mem::size_of::<f32>();
                     Poll::Ready(Some(Ok([item])))
                 }
             }
@@ -223,7 +206,7 @@ where
 
 impl<'a, R> futures::Stream for St<'a, R, f64>
 where
-    R: AsyncBufReadExt + Unpin,
+    R: AsyncBufRead + Unpin,
 {
     /// The type of the value yielded by the stream.
     type Item = Result<[f64; 1], futures::io::Error>;
@@ -232,7 +215,7 @@ where
     /// Returns `Poll::Pending` if not ready, `Poll::Ready(Some(x))` if a value
     /// is ready, and `Poll::Ready(None)` if the stream has completed.
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if self.num_bytes_read == self.num_bytes_to_read {
+        if *self.num_remaining_bytes_in_cur_hdu == 0 {
             // The stream has finished
             Poll::Ready(None)
         } else {
@@ -243,7 +226,7 @@ where
                 Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
                 Poll::Ready(Ok(())) => {
                     let item = byteorder::BigEndian::read_f64(&buf);
-                    self.num_bytes_read += std::mem::size_of::<f64>() as u64;
+                    *self.num_remaining_bytes_in_cur_hdu -= std::mem::size_of::<f64>();
                     Poll::Ready(Some(Ok([item])))
                 }
             }

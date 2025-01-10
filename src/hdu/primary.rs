@@ -1,21 +1,9 @@
-use super::{
-    //data::DataAsyncBufRead,
-    //extension::{AsyncXtensionHDU, XtensionHDU},
-    header::consume_next_card_async,
-    //AsyncHDU,
-};
-use crate::hdu::extension::XtensionHDU;
 use std::fmt::Debug;
 
-use crate::hdu::header::extension::asciitable::AsciiTable;
-use crate::hdu::header::extension::bintable::BinTable;
 use crate::hdu::header::extension::image::Image;
-
-use crate::hdu::data::DataBufRead;
 
 use crate::fits::HDU;
 
-use crate::error::Error;
 pub use crate::hdu::header::{check_card_keyword, consume_next_card};
 
 use std::ops::Deref;
@@ -24,43 +12,6 @@ use std::ops::Deref;
 /// of a fits file
 #[derive(Debug)]
 pub struct PrimaryHDU(pub HDU<Image>);
-
-impl PrimaryHDU {
-    pub fn new<'a, R>(reader: &mut R, num_bytes_read: &mut usize) -> Result<Self, Error>
-    where
-        //R: DataBufRead<'a, Image> + DataBufRead<'a, BinTable> + DataBufRead<'a, AsciiTable> + 'a,
-        R: DataBufRead<'a, Image> + 'a,
-    {
-        let mut card_80_bytes_buf = [0; 80];
-
-        // SIMPLE
-        consume_next_card(reader, &mut card_80_bytes_buf, num_bytes_read)?;
-        let _ = check_card_keyword(&card_80_bytes_buf, b"SIMPLE  ")?;
-
-        let hdu = HDU::<Image>::new(reader, num_bytes_read, &mut card_80_bytes_buf)?;
-
-        Ok(PrimaryHDU(hdu))
-    }
-
-    /*fn consume<'a, R>(self, reader: &mut R) -> Result<Option<&mut R>, Error>
-    where
-        R: DataBufRead<'a, Image> + DataBufRead<'a, BinTable> + DataBufRead<'a, AsciiTable> + 'a,
-    {
-        self.0.consume(reader)
-    }
-
-    pub fn next<'a, R>(self, reader: &'a mut R) -> Result<Option<XtensionHDU>, Error>
-    where
-        R: DataBufRead<'a, Image> + DataBufRead<'a, BinTable> + DataBufRead<'a, AsciiTable> + 'a,
-    {
-        if let Some(reader) = self.consume(reader)? {
-            let hdu = XtensionHDU::new(reader)?;
-            Ok(Some(hdu))
-        } else {
-            Ok(None)
-        }
-    }*/
-}
 
 impl Deref for PrimaryHDU {
     type Target = HDU<Image>;

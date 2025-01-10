@@ -12,10 +12,10 @@ use crate::hdu::header::consume_next_card_async;
 use crate::hdu::header::parse_bitpix_card;
 use crate::hdu::header::parse_naxis_card;
 use crate::hdu::header::BitpixValue;
+use crate::hdu::header::Xtension;
 use crate::hdu::header::NAXIS_KW;
 use crate::hdu::primary::check_card_keyword;
 use crate::hdu::primary::consume_next_card;
-use crate::hdu::Xtension;
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct Image {

@@ -1,14 +1,20 @@
+use std::pin::Pin;
+
+use futures::{Future, Stream};
 use serde::Serialize;
 
 use crate::hdu;
+use crate::hdu::data::AsyncDataBufRead;
 use crate::hdu::header::extension::asciitable::AsciiTable;
 use crate::hdu::header::extension::bintable::BinTable;
 use crate::hdu::header::extension::image::Image;
+use crate::hdu::header::extension::Xtension;
 use crate::hdu::header::Header;
-use crate::hdu::header::Xtension;
+
+//use crate::hdu::data::{DataAsyncBufRead, DataBufRead};
 
 #[derive(Debug, Serialize)]
-pub struct Fits<R> {
+pub struct AsyncFits<R> {
     start: bool,
     // Store the number of bytes that remains to read so that the current HDU data finishes
     // When getting the next HDU, we will first consume those bytes if there are some
@@ -22,7 +28,7 @@ pub struct Fits<R> {
 }
 
 use crate::error::Error;
-impl<'a, R> Fits<R> {
+impl<'a, R> AsyncFits<R> {
     /// Parse a FITS file
     /// # Params
     /// * `reader` - a reader created i.e. from the opening of a file
@@ -37,20 +43,24 @@ impl<'a, R> Fits<R> {
     }
 }
 
-use hdu::data::DataBufRead;
-impl<'a, R> Fits<R>
+use futures::AsyncBufReadExt;
+impl<'a, R> AsyncFits<R>
 where
-    R: DataBufRead<'a, Image> + DataBufRead<'a, AsciiTable> + DataBufRead<'a, BinTable> + 'a,
+    R: AsyncDataBufRead<'a, Image>
+        + AsyncDataBufRead<'a, AsciiTable>
+        + AsyncDataBufRead<'a, BinTable>
+        + 'a,
 {
     /// Returns a boolean to know if we are at EOF
-    fn consume_until_next_hdu(&mut self) -> Result<bool, Error> {
+    async fn consume_until_next_hdu(&mut self) -> Result<bool, Error> {
         // 1. Check if there are still bytes to be read to get to the end of data
         if self.num_remaining_bytes_in_cur_hdu > 0 {
             // Then read them
-            <R as DataBufRead<'_, Image>>::read_n_bytes_exact(
+            <R as AsyncDataBufRead<'_, Image>>::read_n_bytes_exact(
                 &mut self.reader,
                 self.num_remaining_bytes_in_cur_hdu as u64,
-            )?;
+            )
+            .await?;
         }
 
         // 2. We are at the end of the real data. As FITS standard stores data in block of 2880 bytes
@@ -62,7 +72,11 @@ where
             let mut block_mem_buf: [u8; 2880] = [0; 2880];
 
             let num_off_bytes = (2880 - (self.num_bytes_in_cur_hdu % 2880)) as usize;
-            match self.reader.read_exact(&mut block_mem_buf[..num_off_bytes]) {
+            match self
+                .reader
+                .read_exact(&mut block_mem_buf[..num_off_bytes])
+                .await
+            {
                 // An error like unexpected EOF is not permitted by the standard but we make it pass
                 // interpreting it as the last HDU in the file
                 Err(ref e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(true),
@@ -71,28 +85,50 @@ where
             }
         }
 
-        let eof = self.reader.fill_buf()?.is_empty();
+        let eof = self.reader.fill_buf().await?.is_empty();
         Ok(eof)
     }
 }
 
-impl<'a, R> Iterator for Fits<R>
+use futures::task::Context;
+use futures::task::Poll;
+impl<'a, R> Stream for AsyncFits<R>
 where
-    R: DataBufRead<'a, Image> + DataBufRead<'a, AsciiTable> + DataBufRead<'a, BinTable> + 'a,
+    R: AsyncDataBufRead<'a, Image>
+        + AsyncDataBufRead<'a, BinTable>
+        + AsyncDataBufRead<'a, AsciiTable>
+        + 'a,
 {
-    type Item = Result<hdu::HDU, Error>;
+    type Item = Result<hdu::AsyncHDU, Error>;
 
-    fn next(&mut self) -> Option<Self::Item> {
+    /// Attempt to resolve the next item in the stream.
+    /// Returns `Poll::Pending` if not ready, `Poll::Ready(Some(x))` if a value
+    /// is ready, and `Poll::Ready(None)` if the stream has completed.
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         if self.error_parsing_encountered {
-            None
+            Poll::Ready(None)
         } else {
-            let n = if !self.start {
+            let hdu = if !self.start {
                 // We must consume the bytes until the next header is found
                 // if eof then the iterator finishes
-                match self.consume_until_next_hdu() {
+                let mut consume_tokens_until_next_hdu = self.consume_until_next_hdu();
+                let eof = match std::pin::pin!(consume_tokens_until_next_hdu).poll(cx) {
+                    Poll::Pending => return Poll::Pending,
+                    // The future finished returning the eof information
+                    Poll::Ready(r) => r,
+                };
+
+                match eof {
                     Ok(eof) => {
                         if !eof {
-                            Some(hdu::HDU::new_xtension(&mut self.reader))
+                            // parse the extension HDU
+                            let r = &mut self.reader;
+                            let mut parse_x_hdu = hdu::AsyncHDU::new_xtension(r);
+                            match std::pin::pin!(parse_x_hdu).poll(cx) {
+                                Poll::Pending => return Poll::Pending,
+                                // the future finished, returning the parsed hdu or the error while parsing it
+                                Poll::Ready(r) => Some(r),
+                            }
                         } else {
                             None
                         }
@@ -100,25 +136,29 @@ where
                     Err(e) => Some(Err(e)),
                 }
             } else {
-                // primary HDU parsing
-                let hdu = hdu::HDU::new_primary(&mut self.reader);
-                Some(hdu)
+                // parse the primary HDU
+                let mut parse_first_hdu = hdu::AsyncHDU::new_primary(&mut self.reader);
+                match std::pin::pin!(parse_first_hdu).poll(cx) {
+                    Poll::Pending => return Poll::Pending,
+                    // the future finished, returning the parsed hdu or the error while parsing it
+                    Poll::Ready(r) => Some(r),
+                }
             };
 
             self.start = false;
 
-            match n {
+            match hdu {
                 Some(Ok(hdu)) => {
                     self.num_bytes_in_cur_hdu = match &hdu {
-                        hdu::HDU::XImage(h) | hdu::HDU::Primary(h) => {
+                        hdu::AsyncHDU::XImage(h) | hdu::AsyncHDU::Primary(h) => {
                             let xtension = h.get_header().get_xtension();
                             xtension.get_num_bytes_data_block() as usize
                         }
-                        hdu::HDU::XASCIITable(h) => {
+                        hdu::AsyncHDU::XASCIITable(h) => {
                             let xtension = h.get_header().get_xtension();
                             xtension.get_num_bytes_data_block() as usize
                         }
-                        hdu::HDU::XBinaryTable(h) => {
+                        hdu::AsyncHDU::XBinaryTable(h) => {
                             let xtension = h.get_header().get_xtension();
                             xtension.get_num_bytes_data_block() as usize
                         }
@@ -126,22 +166,22 @@ where
 
                     self.num_remaining_bytes_in_cur_hdu = self.num_bytes_in_cur_hdu;
 
-                    Some(Ok(hdu))
+                    Poll::Ready(Some(Ok(hdu)))
                 }
                 Some(Err(e)) => {
                     // an error has been found we return it and ends the iterator for future next calls
                     self.error_parsing_encountered = true;
 
-                    Some(Err(e))
+                    Poll::Ready(Some(Err(e)))
                 }
-                None => None,
+                None => Poll::Ready(None),
             }
         }
     }
 }
 
 #[derive(Debug)]
-pub struct HDU<X>
+pub struct AsyncHDU<X>
 where
     X: Xtension,
 {
@@ -149,20 +189,21 @@ where
     header: Header<X>,
 }
 
-impl<X> HDU<X>
+use futures::AsyncReadExt;
+impl<X> AsyncHDU<X>
 where
     X: Xtension + std::fmt::Debug,
 {
-    pub fn new<'a, R>(
+    pub async fn new<'a, R>(
         reader: &mut R,
         num_bytes_read: &mut usize,
         card_80_bytes_buf: &mut [u8; 80],
     ) -> Result<Self, Error>
     where
-        R: DataBufRead<'a, X> + 'a,
+        R: AsyncDataBufRead<'a, X> + 'a,
     {
         /* 1. Parse the header first */
-        let header = Header::parse(reader, num_bytes_read, card_80_bytes_buf)?;
+        let header = Header::parse_async(reader, num_bytes_read, card_80_bytes_buf).await?;
         /* 2. Skip the next bytes to a new 2880 multiple of bytes
         This is where the data block should start */
         let is_remaining_bytes = ((*num_bytes_read) % 2880) > 0;
@@ -174,6 +215,7 @@ where
             let num_off_bytes = (2880 - ((*num_bytes_read) % 2880)) as usize;
             reader
                 .read_exact(&mut block_mem_buf[..num_off_bytes])
+                .await
                 .map_err(|_| Error::StaticError("EOF reached"))?;
 
             *num_bytes_read += num_off_bytes;
@@ -190,18 +232,24 @@ where
 
     // Retrieve the iterator or in memory data from the reader
     // This has the effect of consuming the HDU
-    pub fn get_data<'a, R>(self, hdu_list: &'a mut Fits<R>) -> <R as DataBufRead<'a, X>>::Data
+    pub fn get_data<'a, R>(
+        self,
+        hdu_list: &'a mut AsyncFits<R>,
+    ) -> <R as AsyncDataBufRead<'a, X>>::Data
     where
-        R: DataBufRead<'a, X> + 'a,
+        R: AsyncDataBufRead<'a, X>
+            + AsyncDataBufRead<'a, Image>
+            + AsyncDataBufRead<'a, BinTable>
+            + AsyncDataBufRead<'a, AsciiTable>,
     {
         // Unroll the internal fits parsing parameters to give it to the data reader
-        let Fits {
+        let AsyncFits {
             num_remaining_bytes_in_cur_hdu,
             reader,
             ..
         } = hdu_list;
         let xtension = self.header.get_xtension();
-        <R as DataBufRead<'a, X>>::prepare_data_reading(
+        <R as AsyncDataBufRead<'a, X>>::prepare_data_reading(
             xtension,
             num_remaining_bytes_in_cur_hdu,
             reader,

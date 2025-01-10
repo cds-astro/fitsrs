@@ -15,7 +15,7 @@ use crate::byteorder::ReadBytesExt;
 /// for non in-memory readers (typically BufReader) that ensures
 /// a file may not fit in memory
 #[derive(Serialize, Debug)]
-pub enum Iter<'a, R>
+pub enum DataIter<'a, R>
 where
     R: BufRead,
 {
@@ -33,8 +33,7 @@ where
     R: BufRead,
 {
     pub reader: &'a mut R,
-    pub num_bytes_read: &'a mut usize,
-    pub num_bytes_to_read: usize,
+    pub num_remaining_bytes_in_cur_hdu: &'a mut usize,
     phantom: std::marker::PhantomData<T>,
 }
 
@@ -42,11 +41,10 @@ impl<'a, R, T> It<'a, R, T>
 where
     R: BufRead,
 {
-    pub fn new(reader: &'a mut R, num_bytes_read: &'a mut usize, num_bytes_to_read: usize) -> Self {
+    pub fn new(reader: &'a mut R, num_remaining_bytes_in_cur_hdu: &'a mut usize) -> Self {
         Self {
             reader,
-            num_bytes_to_read: *num_bytes_read + num_bytes_to_read,
-            num_bytes_read: num_bytes_read,
+            num_remaining_bytes_in_cur_hdu,
             phantom: std::marker::PhantomData,
         }
     }
@@ -59,13 +57,13 @@ where
     type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.num_bytes_to_read == *self.num_bytes_read {
+        if *self.num_remaining_bytes_in_cur_hdu == 0 {
             None
         } else {
             let item = self.reader.read_u8();
 
             let num_bytes_item = std::mem::size_of::<Self::Item>();
-            *self.num_bytes_read += num_bytes_item;
+            *self.num_remaining_bytes_in_cur_hdu -= num_bytes_item;
 
             item.ok()
         }
@@ -79,13 +77,13 @@ where
     type Item = i16;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.num_bytes_to_read == *self.num_bytes_read {
+        if *self.num_remaining_bytes_in_cur_hdu == 0 {
             None
         } else {
             let item = self.reader.read_i16::<BigEndian>();
 
             let num_bytes_item = std::mem::size_of::<Self::Item>();
-            *self.num_bytes_read += num_bytes_item;
+            *self.num_remaining_bytes_in_cur_hdu -= num_bytes_item;
 
             item.ok()
         }
@@ -99,13 +97,13 @@ where
     type Item = i32;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.num_bytes_to_read == *self.num_bytes_read {
+        if *self.num_remaining_bytes_in_cur_hdu == 0 {
             None
         } else {
             let item = self.reader.read_i32::<BigEndian>();
 
             let num_bytes_item = std::mem::size_of::<Self::Item>();
-            *self.num_bytes_read += num_bytes_item;
+            *self.num_remaining_bytes_in_cur_hdu -= num_bytes_item;
 
             item.ok()
         }
@@ -119,13 +117,13 @@ where
     type Item = i64;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.num_bytes_to_read == *self.num_bytes_read {
+        if *self.num_remaining_bytes_in_cur_hdu == 0 {
             None
         } else {
             let item = self.reader.read_i64::<BigEndian>();
 
             let num_bytes_item = std::mem::size_of::<Self::Item>();
-            *self.num_bytes_read += num_bytes_item;
+            *self.num_remaining_bytes_in_cur_hdu -= num_bytes_item;
 
             item.ok()
         }
@@ -139,13 +137,13 @@ where
     type Item = f32;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.num_bytes_to_read == *self.num_bytes_read {
+        if *self.num_remaining_bytes_in_cur_hdu == 0 {
             None
         } else {
             let item = self.reader.read_f32::<BigEndian>();
 
             let num_bytes_item = std::mem::size_of::<Self::Item>();
-            *self.num_bytes_read += num_bytes_item;
+            *self.num_remaining_bytes_in_cur_hdu -= num_bytes_item;
 
             item.ok()
         }
@@ -159,13 +157,13 @@ where
     type Item = f64;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.num_bytes_to_read == *self.num_bytes_read {
+        if *self.num_remaining_bytes_in_cur_hdu == 0 {
             None
         } else {
             let item = self.reader.read_f64::<BigEndian>();
 
             let num_bytes_item = std::mem::size_of::<Self::Item>();
-            *self.num_bytes_read += num_bytes_item;
+            *self.num_remaining_bytes_in_cur_hdu -= num_bytes_item;
 
             item.ok()
         }
