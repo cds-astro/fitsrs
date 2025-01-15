@@ -2,16 +2,18 @@ pub mod asciitable;
 pub mod bintable;
 pub mod image;
 
+use std::convert::TryFrom;
 use std::io::Read;
 
 use async_trait::async_trait;
 use futures::AsyncRead;
 
-use crate::card::{Card, Keyword, Value};
+use crate::card::Value;
 use crate::error::Error;
-use crate::hdu::primary::check_card_keyword;
 
 use std::collections::HashMap;
+
+use super::{Card, CardBuf};
 
 #[derive(Debug)]
 pub enum XtensionType {
@@ -20,13 +22,19 @@ pub enum XtensionType {
     AsciiTable,
 }
 
-pub fn parse_xtension_card(card: &[u8; 80]) -> Result<XtensionType, Error> {
-    let xtension = check_card_keyword(card, b"XTENSION")?.check_for_string()?;
-    match xtension.as_bytes() {
+pub fn parse_xtension_card(card: &CardBuf) -> Result<XtensionType, Error> {
+    let xtension = if let Card::Extension(x) = Card::try_from(card)? {
+        x
+    } else {
+        let kw = String::from_utf8_lossy(&card[..8]).into_owned();
+        return Err(Error::FailTypeCardParsing(kw, "XTENSION".to_owned()))
+    };
+
+    match &xtension {
         b"IMAGE   " | b"IUEIMAGE" => Ok(XtensionType::Image),
         b"TABLE   " => Ok(XtensionType::AsciiTable),
         b"BINTABLE" => Ok(XtensionType::BinTable),
-        _ => Err(Error::NotSupportedXtensionType(xtension)),
+        _ => Err(Error::NotSupportedXtensionType(String::from_utf8_lossy(&xtension).into_owned())),
     }
 }
 
@@ -34,7 +42,7 @@ pub fn parse_xtension_card(card: &[u8; 80]) -> Result<XtensionType, Error> {
 pub trait Xtension {
     fn get_num_bytes_data_block(&self) -> u64;
 
-    fn update_with_parsed_header(&mut self, cards: &HashMap<[u8; 8], Card>) -> Result<(), Error>;
+    fn update_with_parsed_header(&mut self, cards: &HashMap<String, Value>) -> Result<(), Error>;
 
     // Parse the Xtension keywords
     // During the parsing, some checks will be made
@@ -42,7 +50,7 @@ pub trait Xtension {
         reader: &mut R,
         num_bytes_read: &mut usize,
         card_80_bytes_buf: &mut [u8; 80],
-        cards: &mut HashMap<Keyword, Card>,
+        cards: &mut Vec<Card>,
     ) -> Result<Self, Error>
     where
         Self: Sized;
@@ -52,7 +60,7 @@ pub trait Xtension {
         reader: &mut R,
         num_bytes_read: &mut usize,
         card_80_bytes_buf: &mut [u8; 80],
-        cards: &mut HashMap<Keyword, Card>,
+        cards: &mut Vec<Card>,
     ) -> Result<Self, Error>
     where
         Self: Sized,

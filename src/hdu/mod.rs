@@ -4,6 +4,7 @@ pub mod data;
 pub mod extension;
 pub mod primary;
 
+use crate::card::Value;
 use crate::hdu::data::DataBufRead;
 
 //use self::data::DataAsyncBufRead;
@@ -76,7 +77,9 @@ impl HDU {
 
         // SIMPLE
         consume_next_card(reader, &mut card_80_bytes_buf, &mut num_bytes_read)?;
-        let _ = check_card_keyword(&card_80_bytes_buf, b"SIMPLE  ")?;
+        if let Value::Logical { value: false, .. } = check_card_keyword(&card_80_bytes_buf, b"SIMPLE  ")? {
+            return Err(Error::StaticError("not a FITSv4 file"))
+        }
 
         let hdu = fits::HDU::<Image>::new(reader, &mut num_bytes_read, &mut card_80_bytes_buf)?;
 
@@ -148,7 +151,9 @@ impl AsyncHDU {
 
         // SIMPLE
         consume_next_card_async(reader, &mut card_80_bytes_buf, &mut num_bytes_read).await?;
-        let _ = check_card_keyword(&card_80_bytes_buf, b"SIMPLE  ")?;
+        if let Value::Logical { value: false, .. } = check_card_keyword(&card_80_bytes_buf, b"SIMPLE  ")? {
+            return Err(Error::StaticError("not a FITSv4 file"))
+        }
 
         let hdu =
             async_fits::AsyncHDU::<Image>::new(reader, &mut num_bytes_read, &mut card_80_bytes_buf)

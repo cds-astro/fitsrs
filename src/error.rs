@@ -1,3 +1,5 @@
+use crate::card::Card;
+
 quick_error! {
     #[derive(Debug, PartialEq)]
     pub enum Error {

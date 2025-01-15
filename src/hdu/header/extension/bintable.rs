@@ -51,23 +51,16 @@ impl Xtension for BinTable {
         self.naxis1 * self.naxis2
     }
 
-    fn update_with_parsed_header(&mut self, cards: &HashMap<[u8; 8], Card>) -> Result<(), Error> {
+    fn update_with_parsed_header(&mut self, cards: &HashMap<String, Value>) -> Result<(), Error> {
         // TFORMS
         self.tforms = (0..self.tfields)
             .map(|idx_field| {
                 let idx_field = idx_field + 1;
-                let kw = format!("TFORM{idx_field:?}       ");
-                let kw_bytes = kw.as_bytes();
-
-                // 1. Init the fixed keyword slice
-                let mut owned_kw: [u8; 8] = [0; 8];
-                // 2. Copy from slice
-                owned_kw.copy_from_slice(&kw_bytes[..8]);
+                let kw = format!("TFORM{idx_field:?}");
 
                 let card_value = cards
-                    .get(&owned_kw)
+                    .get(&kw)
                     .ok_or(Error::StaticError("TFIELDS idx does not map any TFORM!"))?
-                    .v
                     .clone()
                     .check_for_string()?;
 
@@ -113,7 +106,7 @@ impl Xtension for BinTable {
         reader: &mut R,
         num_bytes_read: &mut usize,
         card_80_bytes_buf: &mut [u8; 80],
-        _cards: &mut HashMap<[u8; 8], Card>,
+        _cards: &mut Vec<Card>,
     ) -> Result<Self, Error> {
         // BITPIX
         consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
@@ -172,7 +165,7 @@ impl Xtension for BinTable {
         reader: &mut R,
         num_bytes_read: &mut usize,
         card_80_bytes_buf: &mut [u8; 80],
-        _cards: &mut HashMap<[u8; 8], Card>,
+        _cards: &mut Vec<Card>,
     ) -> Result<Self, Error>
     where
         R: AsyncRead + std::marker::Unpin,
