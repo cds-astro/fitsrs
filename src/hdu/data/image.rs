@@ -16,7 +16,7 @@ use crate::hdu::DataBufRead;
 
 impl<'a, R> DataBufRead<'a, Image> for Cursor<R>
 where
-    R: AsRef<[u8]> + Debug + Read + 'a,
+    R: AsRef<[u8]> + Debug + 'a,
 {
     type Data = Data<'a>;
 

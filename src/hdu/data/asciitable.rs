@@ -13,7 +13,7 @@ use crate::hdu::header::extension::Xtension;
 
 impl<'a, R> DataBufRead<'a, AsciiTable> for Cursor<R>
 where
-    R: AsRef<[u8]> + Debug + Read + 'a,
+    R: AsRef<[u8]> + Debug + 'a,
 {
     type Data = Data<'a>;
 
