@@ -451,6 +451,7 @@ mod tests {
                     TFormBinaryTableType::I(TFormBinaryTable::new(640)),
                     TFormBinaryTableType::E(TFormBinaryTable::new(640)),
                 ],
+                theap: 11535,
                 // Should be 0
                 pcount: 0,
                 // Should be 1

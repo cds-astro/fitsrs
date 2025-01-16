@@ -7,7 +7,6 @@ pub mod stream;
 use serde::Serialize;
 
 use std::fmt::Debug;
-use std::io::BufRead;
 
 use std::marker::Unpin;
 
@@ -15,60 +14,23 @@ use crate::error::Error;
 use crate::hdu::header::Xtension;
 
 pub use iter::DataIter;
+use std::io::Read;
 pub use stream::DataStream;
 
 // reader must impl this
-pub trait DataBufRead<'a, X>: BufRead
+pub trait DataRead<'a, X>: Read + Sized
 where
     X: Xtension,
 {
     type Data: Debug + 'a;
 
-    fn prepare_data_reading(
+    fn init_data_reading_process(
         ctx: &X,
         num_remaining_bytes_in_cur_hdu: &'a mut usize,
         reader: &'a mut Self,
     ) -> Self::Data
     where
         Self: Sized;
-
-    fn read_n_bytes_exact(&mut self, num_bytes_to_read: u64) -> Result<(), Error> {
-        let mut num_bytes_read = 0;
-
-        let mut buf = self.fill_buf().map_err(|_| {
-            Error::StaticError("The underlying reader was read, but returned an error.")
-        })?;
-        let mut size_buf = buf.len() as u64;
-        let mut is_eof = buf.is_empty();
-
-        while !is_eof && size_buf < (num_bytes_to_read - num_bytes_read) {
-            self.consume(size_buf as usize);
-            num_bytes_read += size_buf;
-
-            buf = self.fill_buf().map_err(|_| {
-                Error::StaticError("The underlying reader was read, but returned an error.")
-            })?;
-            size_buf = buf.len() as u64;
-
-            is_eof = buf.is_empty();
-        }
-
-        if is_eof {
-            if num_bytes_to_read != num_bytes_read {
-                // EOF and the num of bytes to read has not been reached
-                Err(Error::StaticError("The file has reached EOF"))
-            } else {
-                // EOF buf all the bytes do have been read
-                Ok(())
-            }
-        } else {
-            // Not EOF, we consume the remainig bytes
-            let amt = (num_bytes_to_read - num_bytes_read) as usize;
-            self.consume(amt);
-
-            Ok(())
-        }
-    }
 }
 
 use async_trait::async_trait;
@@ -137,10 +99,10 @@ where
 /// for in-memory readers (typically for `&[u8]` or a `Cursor<AsRef<[u8]>>`) that ensures
 /// all the data fits in memory
 ///
-
+use std::borrow::Cow;
 #[derive(Serialize, Debug, Clone)]
 pub enum Data<'a> {
-    U8(&'a [u8]),
+    U8(Cow<'a, [u8]>),
     I16(Box<[i16]>),
     I32(Box<[i32]>),
     I64(Box<[i64]>),

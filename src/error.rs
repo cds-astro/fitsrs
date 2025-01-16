@@ -1,6 +1,6 @@
 
 quick_error! {
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug)]
     pub enum Error {
         /// General error case
         StaticError(message: &'static str) {
@@ -34,8 +34,8 @@ quick_error! {
             from(std::str::Utf8Error)
             display("Fail to parse a keyword as a utf8 string")
         }
-        Io {
-            from(std::io::Error)
+        Io(err: std::io::Error) {
+            from()
         }
     }
 }

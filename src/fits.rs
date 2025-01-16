@@ -1,12 +1,13 @@
-use serde::Serialize;
-
-use crate::card::Card;
 use crate::hdu;
 use crate::hdu::header::extension::asciitable::AsciiTable;
 use crate::hdu::header::extension::bintable::BinTable;
 use crate::hdu::header::extension::image::Image;
 use crate::hdu::header::Header;
 use crate::hdu::header::Xtension;
+use crate::card::Card;
+
+use serde::Serialize;
+use std::fmt::Debug;
 
 #[derive(Debug, Serialize)]
 pub struct Fits<R> {
@@ -21,8 +22,21 @@ pub struct Fits<R> {
     error_parsing_encountered: bool,
     reader: R,
 }
+use std::io::Read;
+impl<R> Read for Fits<R>
+where
+    R: Read,
+{
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.reader.read(buf)
+    }
+}
 
 use crate::error::Error;
+use flate2::bufread::GzDecoder;
+use std::fs::File;
+use std::io::{BufReader, Seek};
+use std::path::Path;
 impl<'a, R> Fits<R> {
     /// Parse a FITS file
     /// # Params
@@ -38,20 +52,32 @@ impl<'a, R> Fits<R> {
     }
 }
 
-use hdu::data::DataBufRead;
+use hdu::data::DataRead;
 impl<'a, R> Fits<R>
 where
-    R: DataBufRead<'a, Image> + DataBufRead<'a, AsciiTable> + DataBufRead<'a, BinTable> + 'a,
+    R: DataRead<'a, Image> + DataRead<'a, AsciiTable> + DataRead<'a, BinTable> + 'a,
 {
-    /// Returns a boolean to know if we are at EOF
-    fn consume_until_next_hdu(&mut self) -> Result<bool, Error> {
+    /// Consume the bytes until the next HDU
+    ///
+    /// 1. If the data has not all been read, then read it
+    /// 2. Once all the data has been read we must read the last bytes until a 2880 block of bytes
+    /// has been read
+    ///     a/ it is possible that EOF is reached immediately because some fits files do not have these blank bytes
+    ///        at the end of its last HDU
+    ///     b/
+    pub(crate) fn consume_until_next_hdu(&mut self) -> Result<(), Error> {
+        let mut block_mem_buf: [u8; 2880] = [0; 2880];
+
         // 1. Check if there are still bytes to be read to get to the end of data
         if self.num_remaining_bytes_in_cur_hdu > 0 {
             // Then read them
-            <R as DataBufRead<'_, Image>>::read_n_bytes_exact(
-                &mut self.reader,
-                self.num_remaining_bytes_in_cur_hdu as u64,
-            )?;
+            match self
+                .reader
+                .read_exact(&mut block_mem_buf[..self.num_remaining_bytes_in_cur_hdu])
+            {
+                Err(e) => return Err(Error::Io(e)),
+                Ok(()) => {}
+            }
         }
 
         // 2. We are at the end of the real data. As FITS standard stores data in block of 2880 bytes
@@ -60,26 +86,44 @@ where
         let is_remaining_bytes = (self.num_bytes_in_cur_hdu % 2880) > 0;
         // Skip the remaining bytes to set the reader where a new HDU begins
         if is_remaining_bytes {
-            let mut block_mem_buf: [u8; 2880] = [0; 2880];
-
             let num_off_bytes = (2880 - (self.num_bytes_in_cur_hdu % 2880)) as usize;
             match self.reader.read_exact(&mut block_mem_buf[..num_off_bytes]) {
                 // An error like unexpected EOF is not permitted by the standard but we make it pass
                 // interpreting it as the last HDU in the file
-                Err(ref e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(true),
-                Err(e) => return Err(e.into()),
-                Ok(()) => {}
+                Err(ref e) if e.kind() == std::io::ErrorKind::UnexpectedEof => Ok(()),
+                Err(e) => Err(Error::Io(e)),
+                Ok(()) => Ok(()),
             }
+        } else {
+            Ok(())
         }
+    }
 
-        let eof = self.reader.fill_buf()?.is_empty();
-        Ok(eof)
+    // Retrieve the iterator or in memory data from the reader
+    // This has the effect of consuming the HDU
+    pub fn get_data<X>(&'a mut self, hdu: HDU<X>) -> <R as DataRead<'a, X>>::Data
+    where
+        X: Xtension + Debug,
+        R: DataRead<'a, X> + 'a,
+    {
+        // Unroll the internal fits parsing parameters to give it to the data reader
+        let Self {
+            num_remaining_bytes_in_cur_hdu,
+            reader,
+            ..
+        } = self;
+        let xtension = hdu.header.get_xtension();
+        <R as DataRead<'a, X>>::init_data_reading_process(
+            xtension,
+            num_remaining_bytes_in_cur_hdu,
+            reader,
+        )
     }
 }
 
 impl<'a, R> Iterator for Fits<R>
 where
-    R: DataBufRead<'a, Image> + DataBufRead<'a, AsciiTable> + DataBufRead<'a, BinTable> + 'a,
+    R: DataRead<'a, Image> + DataRead<'a, AsciiTable> + DataRead<'a, BinTable> + 'a,
 {
     type Item = Result<hdu::HDU, Error>;
 
@@ -91,12 +135,18 @@ where
                 // We must consume the bytes until the next header is found
                 // if eof then the iterator finishes
                 match self.consume_until_next_hdu() {
-                    Ok(eof) => {
-                        if !eof {
-                            Some(hdu::HDU::new_xtension(&mut self.reader))
-                        } else {
-                            None
-                        }
+                    Ok(()) => {
+                        let mut num_bytes_read = 0;
+                        match hdu::HDU::new_xtension(&mut self.reader, &mut num_bytes_read) {
+                                Ok(hdu) => Some(Ok(hdu)),
+                                Err(Error::Io(e))
+                                    // an EOF has been encountered but the number of bytes read is 0
+                                    // this is valid since we have terminated the previous HDU
+                                    if e.kind() == std::io::ErrorKind::UnexpectedEof && num_bytes_read == 0 => {
+                                        None
+                                    },
+                                Err(e) => Some(Err(e))
+                            }
                     }
                     Err(e) => Some(Err(e)),
                 }
@@ -160,7 +210,7 @@ where
         cards: Vec<Card>,
     ) -> Result<Self, Error>
     where
-        R: DataBufRead<'a, X> + 'a,
+        R: DataRead<'a, X> + 'a,
     {
         let header = Header::parse(cards)?;
         /* 2. Skip the next bytes to a new 2880 multiple of bytes
@@ -184,25 +234,5 @@ where
 
     pub fn get_header(&self) -> &Header<X> {
         &self.header
-    }
-
-    // Retrieve the iterator or in memory data from the reader
-    // This has the effect of consuming the HDU
-    pub fn get_data<'a, R>(self, hdu_list: &'a mut Fits<R>) -> <R as DataBufRead<'a, X>>::Data
-    where
-        R: DataBufRead<'a, X> + 'a,
-    {
-        // Unroll the internal fits parsing parameters to give it to the data reader
-        let Fits {
-            num_remaining_bytes_in_cur_hdu,
-            reader,
-            ..
-        } = hdu_list;
-        let xtension = self.header.get_xtension();
-        <R as DataBufRead<'a, X>>::prepare_data_reading(
-            xtension,
-            num_remaining_bytes_in_cur_hdu,
-            reader,
-        )
     }
 }

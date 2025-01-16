@@ -7,17 +7,17 @@ use super::{iter, Data};
 use super::{stream, AsyncDataBufRead};
 
 use crate::hdu::header::extension::asciitable::AsciiTable;
-use crate::hdu::DataBufRead;
-
 use crate::hdu::header::extension::Xtension;
+use crate::hdu::DataRead;
+use std::borrow::Cow;
 
-impl<'a, R> DataBufRead<'a, AsciiTable> for Cursor<R>
+impl<'a, R> DataRead<'a, AsciiTable> for Cursor<R>
 where
     R: AsRef<[u8]> + Debug + 'a,
 {
     type Data = Data<'a>;
 
-    fn prepare_data_reading(
+    fn init_data_reading_process(
         ctx: &AsciiTable,
         _num_remaining_bytes_in_cur_hdu: &'a mut usize,
         reader: &'a mut Self,
@@ -37,17 +37,17 @@ where
 
         debug_assert!(bytes.len() >= num_pixels);
 
-        Data::U8(bytes)
+        Data::U8(Cow::Borrowed(bytes))
     }
 }
 
-impl<'a, R> DataBufRead<'a, AsciiTable> for BufReader<R>
+impl<'a, R> DataRead<'a, AsciiTable> for BufReader<R>
 where
     R: Read + Debug + 'a,
 {
     type Data = iter::It<'a, Self, u8>;
 
-    fn prepare_data_reading(
+    fn init_data_reading_process(
         _ctx: &AsciiTable,
         num_remaining_bytes_in_cur_hdu: &'a mut usize,
         reader: &'a mut Self,

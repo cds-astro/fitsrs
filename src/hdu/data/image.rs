@@ -7,20 +7,20 @@ use byteorder::{BigEndian, ByteOrder};
 use futures::AsyncReadExt;
 use std::io::{BufReader, Cursor, Read};
 
-use std::fmt::Debug;
-
 use super::{iter, AsyncDataBufRead, Data, DataIter, DataStream};
 use crate::hdu::header::extension::image::Image;
 use crate::hdu::header::extension::Xtension;
-use crate::hdu::DataBufRead;
+use crate::hdu::DataRead;
+use std::borrow::Cow;
+use std::fmt::Debug;
 
-impl<'a, R> DataBufRead<'a, Image> for Cursor<R>
+impl<'a, R> DataRead<'a, Image> for Cursor<R>
 where
     R: AsRef<[u8]> + Debug + 'a,
 {
     type Data = Data<'a>;
 
-    fn prepare_data_reading(
+    fn init_data_reading_process(
         ctx: &Image,
         _num_remaining_bytes_in_cur_hdu: &'a mut usize,
         reader: &'a mut Self,
@@ -44,7 +44,7 @@ where
 
                 debug_assert!(bytes.len() >= num_pixels);
 
-                Data::U8(bytes)
+                Data::U8(Cow::Borrowed(bytes))
             }
             BitpixValue::I16 => {
                 let data = bytes
@@ -100,36 +100,18 @@ where
     }
 }
 
-impl<'a, R> DataBufRead<'a, Image> for BufReader<R>
+impl<'a, R> DataRead<'a, Image> for BufReader<R>
 where
     R: Read + Debug + 'a,
 {
     type Data = DataIter<'a, Self>;
 
-    fn prepare_data_reading(
+    fn init_data_reading_process(
         ctx: &Image,
         num_remaining_bytes_in_cur_hdu: &'a mut usize,
         reader: &'a mut Self,
     ) -> Self::Data {
-        let bitpix = ctx.get_bitpix();
-        match bitpix {
-            BitpixValue::U8 => DataIter::U8(iter::It::new(reader, num_remaining_bytes_in_cur_hdu)),
-            BitpixValue::I16 => {
-                DataIter::I16(iter::It::new(reader, num_remaining_bytes_in_cur_hdu))
-            }
-            BitpixValue::I32 => {
-                DataIter::I32(iter::It::new(reader, num_remaining_bytes_in_cur_hdu))
-            }
-            BitpixValue::I64 => {
-                DataIter::I64(iter::It::new(reader, num_remaining_bytes_in_cur_hdu))
-            }
-            BitpixValue::F32 => {
-                DataIter::F32(iter::It::new(reader, num_remaining_bytes_in_cur_hdu))
-            }
-            BitpixValue::F64 => {
-                DataIter::F64(iter::It::new(reader, num_remaining_bytes_in_cur_hdu))
-            }
-        }
+        DataIter::new(ctx, num_remaining_bytes_in_cur_hdu, reader)
     }
 }
 

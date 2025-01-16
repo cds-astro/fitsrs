@@ -24,10 +24,8 @@ pub fn consume_next_card<R: Read>(
     buf: &mut [u8; 80],
     bytes_read: &mut usize,
 ) -> Result<(), Error> {
+    reader.read_exact(buf)?;
     *bytes_read += 80;
-    reader
-        .read_exact(buf)
-        .map_err(|_| Error::FailReadingNextBytes)?;
 
     Ok(())
 }
@@ -276,7 +274,6 @@ fn process_cards(cards: &[Card]) -> Result<HashMap<String, Value>, Error> {
 
 #[cfg(test)]
 mod tests {
-
     use crate::card::Card;
     use crate::error::Error;
     use crate::fits::Fits;
