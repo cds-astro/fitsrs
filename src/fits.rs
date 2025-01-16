@@ -33,8 +33,6 @@ where
 }
 
 use crate::error::Error;
-use flate2::bufread::GzDecoder;
-use std::fs::File;
 use std::io::{BufReader, Seek};
 use std::path::Path;
 impl<'a, R> Fits<R> {
@@ -69,14 +67,17 @@ where
         let mut block_mem_buf: [u8; 2880] = [0; 2880];
 
         // 1. Check if there are still bytes to be read to get to the end of data
-        if self.num_remaining_bytes_in_cur_hdu > 0 {
+        while self.num_remaining_bytes_in_cur_hdu > 0 {
+            let num_bytes_to_read = self.num_remaining_bytes_in_cur_hdu.min(2880);
             // Then read them
             match self
                 .reader
-                .read_exact(&mut block_mem_buf[..self.num_remaining_bytes_in_cur_hdu])
+                .read_exact(&mut block_mem_buf[..num_bytes_to_read])
             {
                 Err(e) => return Err(Error::Io(e)),
-                Ok(()) => {}
+                Ok(()) => {
+                    self.num_remaining_bytes_in_cur_hdu -= num_bytes_to_read;
+                }
             }
         }
 

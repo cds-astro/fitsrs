@@ -2,28 +2,33 @@ use flate2::read::GzDecoder;
 use std::fs::File;
 use std::io::{BufReader, Seek};
 use std::path::Path;
-
-use crate::fits::HDU;
 use crate::hdu::data::bintable::RowIt;
 use crate::hdu::data::iter::It;
 use crate::hdu::data::{DataIter, DataRead};
 use crate::hdu::header::extension::asciitable::AsciiTable;
 use crate::hdu::header::extension::bintable::BinTable;
 use crate::hdu::header::extension::image::Image;
-use crate::hdu::header::Xtension;
 use crate::Fits;
+
+#[derive(Debug)]
 pub enum FITSFile {
-    Gz(Fits<GzDecoder<BufReader<File>>>),
-    Plain(Fits<BufReader<File>>),
+    GzFile(GzDecoder<BufReader<File>>),
+    File(BufReader<File>),
+}
+
+impl Read for FITSFile {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            FITSFile::GzFile(f) => f.read(buf),
+            FITSFile::File(f) => f.read(buf)
+        }
+    }
 }
 
 use std::fmt::Debug;
 use std::io::Read;
 
-impl<'a, R> DataRead<'a, Image> for GzDecoder<R>
-where
-    R: Read + Debug + 'a,
-{
+impl<'a> DataRead<'a, Image> for FITSFile {
     type Data = DataIter<'a, Self>;
 
     fn init_data_reading_process(
@@ -34,10 +39,7 @@ where
         DataIter::new(ctx, num_remaining_bytes_in_cur_hdu, reader)
     }
 }
-impl<'a, R> DataRead<'a, BinTable> for GzDecoder<R>
-where
-    R: Read + Debug + 'a,
-{
+impl<'a> DataRead<'a, BinTable> for FITSFile {
     type Data = RowIt<'a, Self>;
 
     fn init_data_reading_process(
@@ -48,10 +50,7 @@ where
         RowIt::new(reader, ctx, num_remaining_bytes_in_cur_hdu)
     }
 }
-impl<'a, R> DataRead<'a, AsciiTable> for GzDecoder<R>
-where
-    R: Read + Debug + 'a,
-{
+impl<'a> DataRead<'a, AsciiTable> for FITSFile {
     type Data = It<'a, Self, u8>;
 
     fn init_data_reading_process(
@@ -66,7 +65,7 @@ where
 use crate::error::Error;
 impl FITSFile {
     /// Open a fits file from a path. Can be gzip-compressed
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<Fits<Self>, Error> {
         let f = File::open(path)?;
 
         let bufreader = BufReader::new(f);
@@ -74,7 +73,7 @@ impl FITSFile {
 
         match gz.header() {
             // `path` points to a file that is gzip-compressed.
-            Some(_) => Ok(FITSFile::Gz(Fits::from_reader(gz))),
+            Some(_) => Ok(Fits::from_reader(FITSFile::GzFile(gz))),
             // `path` points to a plain text file.
             None => {
                 let mut f = gz.into_inner();
@@ -84,34 +83,8 @@ impl FITSFile {
                 // file twice.
                 let _ = f.rewind()?;
 
-                Ok(FITSFile::Plain(Fits::from_reader(f)))
+                Ok(Fits::from_reader(FITSFile::File(f)))
             }
-        }
-    }
-
-    /*pub fn get_data<'a, R, X: Xtension + Debug>(
-        &'a mut self,
-        hdu: HDU<X>,
-    ) -> <BufReader<File> as DataRead<'a, X>>::Data
-    where
-        std::io::BufReader<File>: DataRead<'a, X>,
-        flate2::read::GzDecoder<std::io::BufReader<File>>: DataRead<'a, X>,
-    {
-        // Unroll the internal fits parsing parameters to give it to the data reader
-        match self {
-            FITSFile::Gz(gz) => gz.get_data(hdu),
-            FITSFile::Plain(f) => f.get_data(hdu),
-        }
-    }*/
-}
-
-impl Iterator for FITSFile {
-    type Item = Result<crate::hdu::HDU, Error>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            FITSFile::Gz(gz) => gz.next(),
-            FITSFile::Plain(f) => f.next(),
         }
     }
 }

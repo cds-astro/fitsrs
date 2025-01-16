@@ -20,7 +20,7 @@
 //!     let naxis1 = *xtension.get_naxisn(1).unwrap() as usize;
 //!     let naxis2 = *xtension.get_naxisn(2).unwrap() as usize;
 //!
-//!     if let DataIter::F32(it) = hdu.get_data(&mut hdu_list) {
+//!     if let DataIter::F32(it) = hdu_list.get_data(hdu) {
 //!         let data = it.collect::<Vec<_>>();
 //!         assert_eq!(data.len(), naxis1 * naxis2);
 //!     } else {
@@ -66,6 +66,7 @@ mod tests {
     use std::io::{BufReader, Read};
 
     use futures::StreamExt;
+    use image::DynamicImage;
     use test_case::test_case;
 
     #[test]
@@ -310,9 +311,12 @@ mod tests {
         }
     }
 
+    #[test_case("samples/misc/SN2923fxjA.fits.gz")]
     #[test_case("samples/misc/SN2923fxjA.fits")]
     fn open_external_gzipped_file(filename: &str) {
+        use image::{ImageBuffer, Rgba, Luma};
         let mut hdu_list = FITSFile::open(filename).unwrap();
+        use std::iter::Iterator;
 
         while let Some(Ok(hdu)) = hdu_list.next() {
             match hdu {
@@ -321,14 +325,14 @@ mod tests {
                     let naxis1 = *xtension.get_naxisn(1).unwrap();
                     let naxis2 = *xtension.get_naxisn(2).unwrap();
 
-                    // Create a new ImgBuf with width: imgx and height: imgy
-                    // Iterate over the coordinates and pixels of the image
+                    let s = hdu.get_header().get_parsed::<f64>(b"BSCALE  ").unwrap_or(Ok(1.0));
+                    let off = hdu.get_header().get_parsed::<f64>(b"BZERO   ").unwrap_or(Ok(0.0));
 
-                    /*match hdu_list.get_data(hdu) {
-                        DataIter::I16(it) => {
+                    match hdu_list.get_data(hdu) {
+                        /*DataIter::I16(it) => {
                             let c = it.collect::<Vec<_>>();
 
-                            let imgbuf =
+                            let imgbuf: image::ImageBuffer<Luma<i16>, Vec<i16>> =
                                 image::ImageBuffer::from_raw(naxis1 as u32, naxis2 as u32, c)
                                     .unwrap();
                             imgbuf.save(&format!("{}.png", filename)).unwrap();
@@ -357,14 +361,6 @@ mod tests {
                                     .unwrap();
                             imgbuf.save(&format!("{}.png", filename)).unwrap();
                         }
-                        DataIter::F32(it) => {
-                            let c = it.collect::<Vec<_>>();
-
-                            let imgbuf =
-                                image::ImageBuffer::from_raw(naxis1 as u32, naxis2 as u32, c)
-                                    .unwrap();
-                            imgbuf.save(&format!("{}.png", filename)).unwrap();
-                        }
                         DataIter::F64(it) => {
                             let c = it.collect::<Vec<_>>();
 
@@ -372,10 +368,29 @@ mod tests {
                                 image::ImageBuffer::from_raw(naxis1 as u32, naxis2 as u32, c)
                                     .unwrap();
                             imgbuf.save(&format!("{}.png", filename)).unwrap();
-                        }
-                    };*/
+                        }*/
+                        DataIter::F32(it) => {
+                            
+                            let mut min = 6386.00;
+                            let mut max = 5415.00;
+                            /*let c = it.map(|v| {
+                                min = min.min(v);
+                                max = max.max(v);
 
-                    // Save the image as “fractal.png”, the format is deduced from the path
+                                v
+                            }).collect::<Vec<_>>();*/
+
+                            let c = it.map(|v| (((v - min)/(max - min)) * 255.0) as u8).collect::<Vec<_>>();
+
+                            let imgbuf = DynamicImage::ImageLuma8(
+                                image::ImageBuffer::from_raw(naxis1 as u32, naxis2 as u32, c)
+                                    .unwrap()
+                                );
+                            imgbuf.save(&format!("{}.jpg", filename)).unwrap();
+                        }
+                        _ => ()
+                        
+                    };
                 }
                 _ => (),
             }
