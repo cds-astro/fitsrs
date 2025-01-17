@@ -109,11 +109,12 @@ mod tests {
         num_bintable_ext: usize,
     ) {
         let f = File::open(filename).unwrap();
-        let bytes: Result<Vec<_>, _> = f.bytes().collect();
-        let buf = bytes.unwrap();
+        //let bytes: Result<Vec<_>, _> = f.bytes().collect();
+        //let buf = bytes.unwrap();
 
-        let reader = Cursor::new(&buf[..]);
-        let mut hdu_list = Fits::from_reader(reader);
+        //let reader = Cursor::new(&buf[..]);
+        //let mut hdu_list = Fits::from_reader(reader);
+        let mut hdu_list = Fits::from_reader(BufReader::new(f));
 
         let mut n_image_ext = 1; // because the primary hdu is an image
         let mut n_bintable_ext = 0;
@@ -381,7 +382,7 @@ mod tests {
                     };
                 }
                 HDU::XBinaryTable(hdu) => {
-                    let num_bytes = hdu.get_header().get_xtension().get_num_bytes_data_block();
+                    let _num_bytes = hdu.get_header().get_xtension().get_num_bytes_data_block();
                     let _data = hdu_list.get_data(hdu);
                     /*{
                         It(mem) => assert_eq!(num_bytes as usize, mem.len()),

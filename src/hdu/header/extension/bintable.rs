@@ -650,20 +650,18 @@ impl TFormBinaryTableType {
 mod tests {
     use super::{BinTable, TFormBinaryTable, TFormBinaryTableType};
     use crate::{
-        fits::Fits,
-        hdu::{header::BitpixValue, HDU},
+        hdu::{header::BitpixValue, HDU}, FITSFile,
     };
-    use std::{fs::File, io::BufReader};
 
     fn compare_bintable_ext(filename: &str, bin_table: BinTable) {
-        let f = File::open(filename).unwrap();
+        let f = FITSFile::open(filename).unwrap();
 
-        let reader = BufReader::new(f);
-        let hdu_list = Fits::from_reader(reader);
+        //let reader = BufReader::new(f);
+        //let hdu_list = Fits::from_reader(reader);
 
         // Get the first HDU extension,
         // this should be the table for these fits examples
-        let hdu = hdu_list
+        let hdu = f
             // skip the primary hdu
             .skip(1)
             .next()
