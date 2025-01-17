@@ -382,7 +382,7 @@ mod tests {
                 }
                 HDU::XBinaryTable(hdu) => {
                     let num_bytes = hdu.get_header().get_xtension().get_num_bytes_data_block();
-                    let data = hdu_list.get_data(hdu);
+                    let _data = hdu_list.get_data(hdu);
                     /*{
                         It(mem) => assert_eq!(num_bytes as usize, mem.len()),
                         _ => unreachable!(),
@@ -445,7 +445,7 @@ mod tests {
                         }
                     }
                 }
-                HDU::XBinaryTable(hdu) => {
+                HDU::XBinaryTable(_) => {
                     /*let num_bytes = hdu.get_header().get_xtension().get_num_bytes_data_block();
 
                     let it_bytes = hdu.get_data(&mut hdu_list);

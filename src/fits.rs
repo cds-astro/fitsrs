@@ -113,10 +113,10 @@ where
             ..
         } = self;
         let xtension = hdu.header.get_xtension();
-        <R as DataRead<'a, X>>::init_data_reading_process(
+        <R as DataRead<'a, X>>::new(
+            reader,
             xtension,
             num_remaining_bytes_in_cur_hdu,
-            reader,
         )
     }
 }

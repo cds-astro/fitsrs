@@ -34,3 +34,13 @@ image = { version = "0.25.5" }
 [profile.release]
 lto = true
 opt-level = 3
+
+[profile.test]
+incremental = true
+opt-level = 0
+debug = 1
+lto = false
+debug-assertions = true
+overflow-checks = true
+rpath = false
+codegen-units = 512

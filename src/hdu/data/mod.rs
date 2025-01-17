@@ -17,6 +17,7 @@ pub use iter::DataIter;
 use std::io::Read;
 pub use stream::DataStream;
 
+
 // reader must impl this
 pub trait DataRead<'a, X>: Read + Sized
 where
@@ -24,10 +25,10 @@ where
 {
     type Data: Debug + 'a;
 
-    fn init_data_reading_process(
+    fn new(
+        reader: &'a mut Self,
         ctx: &X,
         num_remaining_bytes_in_cur_hdu: &'a mut usize,
-        reader: &'a mut Self,
     ) -> Self::Data
     where
         Self: Sized;

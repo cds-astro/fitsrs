@@ -1,7 +1,6 @@
 use flate2::read::GzDecoder;
-//use serde::Serialize;
 use std::io::Seek;
-use crate::hdu::data::bintable::RowIt;
+use crate::hdu::data::bintable::buf::RowIt;
 use crate::hdu::data::iter::It;
 use crate::hdu::data::{DataIter, DataRead};
 use crate::hdu::header::extension::asciitable::AsciiTable;
@@ -28,45 +27,45 @@ where
 
 use std::fmt::Debug;
 use std::io::Read;
-
-impl<'a, R> DataRead<'a, Image> for GzReader<R>
+use std::io::BufReader;
+// We only impl DataRead on gzreaders that wraps a bufreader because in-memory cursors
+// do not "read" the data block. Instead the bytes are directly retrieved which prevent the GzDecoder to operate...
+impl<'a, R> DataRead<'a, Image> for GzReader<BufReader<R>>
 where
-    R: Read + Debug + 'a
+    R: Read + Debug + 'a,
 {
     type Data = DataIter<'a, Self>;
 
-    fn init_data_reading_process(
-        ctx: &Image,
-        num_remaining_bytes_in_cur_hdu: &'a mut usize,
-        reader: &'a mut Self,
-    ) -> Self::Data {
+    fn new(reader: &'a mut Self, ctx: &Image, num_remaining_bytes_in_cur_hdu: &'a mut usize) -> Self::Data {
         DataIter::new(ctx, num_remaining_bytes_in_cur_hdu, reader)
     }
 }
-impl<'a, R> DataRead<'a, BinTable> for GzReader<R>
+
+
+impl<'a, R> DataRead<'a, BinTable> for GzReader<BufReader<R>>
 where
     R: Read + Debug + 'a
 {
     type Data = RowIt<'a, Self>;
 
-    fn init_data_reading_process(
+    fn new(
+        reader: &'a mut Self,
         ctx: &BinTable,
         num_remaining_bytes_in_cur_hdu: &'a mut usize,
-        reader: &'a mut Self,
     ) -> Self::Data {
         RowIt::new(reader, ctx, num_remaining_bytes_in_cur_hdu)
     }
 }
-impl<'a, R> DataRead<'a, AsciiTable> for GzReader<R>
+impl<'a, R> DataRead<'a, AsciiTable> for GzReader<BufReader<R>>
 where
     R: Read + Debug + 'a
 {
     type Data = It<'a, Self, u8>;
 
-    fn init_data_reading_process(
+    fn new(
+        reader: &'a mut Self,
         _ctx: &AsciiTable,
         num_remaining_bytes_in_cur_hdu: &'a mut usize,
-        reader: &'a mut Self,
     ) -> Self::Data {
         It::new(reader, num_remaining_bytes_in_cur_hdu)
     }

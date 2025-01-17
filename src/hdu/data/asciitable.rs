@@ -17,10 +17,10 @@ where
 {
     type Data = Data<'a>;
 
-    fn init_data_reading_process(
+    fn new(
+        reader: &'a mut Self,
         ctx: &AsciiTable,
         _num_remaining_bytes_in_cur_hdu: &'a mut usize,
-        reader: &'a mut Self,
     ) -> Self::Data {
         let num_bytes_of_data = ctx.get_num_bytes_data_block() as usize;
 
@@ -47,10 +47,10 @@ where
 {
     type Data = iter::It<'a, Self, u8>;
 
-    fn init_data_reading_process(
+    fn new(
+        reader: &'a mut Self,
         _ctx: &AsciiTable,
         num_remaining_bytes_in_cur_hdu: &'a mut usize,
-        reader: &'a mut Self,
     ) -> Self::Data {
         iter::It::new(reader, num_remaining_bytes_in_cur_hdu)
     }
