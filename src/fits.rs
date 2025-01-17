@@ -6,10 +6,9 @@ use crate::hdu::header::Header;
 use crate::hdu::header::Xtension;
 use crate::card::Card;
 
-use serde::Serialize;
 use std::fmt::Debug;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 pub struct Fits<R> {
     start: bool,
     // Store the number of bytes that remains to read so that the current HDU data finishes
@@ -20,6 +19,7 @@ pub struct Fits<R> {
     num_bytes_in_cur_hdu: usize,
     // If an error has been encountered, the HDU iterator ends
     error_parsing_encountered: bool,
+    // The reader
     reader: R,
 }
 use std::io::Read;
@@ -33,13 +33,13 @@ where
 }
 
 use crate::error::Error;
-use std::io::{BufReader, Seek};
-use std::path::Path;
+
 impl<'a, R> Fits<R> {
     /// Parse a FITS file
     /// # Params
     /// * `reader` - a reader created i.e. from the opening of a file
     pub fn from_reader(reader: R) -> Self {
+        // Decorate the reader with a gz decoder. This decorates the reader and check if it is externally gzipped
         Self {
             reader,
             num_remaining_bytes_in_cur_hdu: 0,
@@ -59,10 +59,9 @@ where
     ///
     /// 1. If the data has not all been read, then read it
     /// 2. Once all the data has been read we must read the last bytes until a 2880 block of bytes
-    /// has been read
-    ///     a/ it is possible that EOF is reached immediately because some fits files do not have these blank bytes
-    ///        at the end of its last HDU
-    ///     b/
+    /// has been read.
+    /// It is possible that EOF is reached immediately because some fits files do not have these blank bytes
+    /// at the end of its last HDU
     pub(crate) fn consume_until_next_hdu(&mut self) -> Result<(), Error> {
         let mut block_mem_buf: [u8; 2880] = [0; 2880];
 
@@ -124,7 +123,7 @@ where
 
 impl<'a, R> Iterator for Fits<R>
 where
-    R: DataRead<'a, Image> + DataRead<'a, AsciiTable> + DataRead<'a, BinTable> + 'a,
+    R: DataRead<'a, Image> + DataRead<'a, AsciiTable> + DataRead<'a, BinTable> + Debug + 'a,
 {
     type Item = Result<hdu::HDU, Error>;
 

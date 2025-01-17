@@ -129,7 +129,6 @@ impl HDU {
 
     pub(crate) fn new_primary<'a, R>(reader: &mut R) -> Result<Self, Error>
     where
-        //R: DataBufRead<'a, Image> + DataBufRead<'a, BinTable> + DataBufRead<'a, AsciiTable> + 'a,
         R: DataRead<'a, Image> + 'a,
     {
         let mut num_bytes_read = 0;

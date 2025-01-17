@@ -26,34 +26,34 @@ use crate::hdu::DataRead;
 use crate::hdu::header::extension::Xtension;
 
 pub enum FieldTy<'a> {
-    // 'L' => Ok(TFormBinaryTableType::L(TFormBinaryTable::new(count))), // Logical
+    // 'L' => Logical
     Logical(Box<[bool]>),
-    // 'X' => Ok(TFormBinaryTableType::X(TFormBinaryTable::new(count))), // Bit
+    // 'X' => Bit
     Bit {
         bytes: Cow<'a, [u8]>,
         num_bits: usize,
     },
-    // 'B' => Ok(TFormBinaryTableType::B(TFormBinaryTable::new(count))), // Unsigned Byte
+    // 'B' => Unsigned Byte
     UnsignedByte(Cow<'a, [u8]>),
-    // 'I' => Ok(TFormBinaryTableType::I(TFormBinaryTable::new(count))), // 16-bit integer
+    // 'I' => 16-bit integer
     Short(Box<[i16]>),
-    // 'J' => Ok(TFormBinaryTableType::J(TFormBinaryTable::new(count))), // 32-bit integer
+    // 'J' => 32-bit integer
     Integer(Box<[i32]>),
-    // 'K' => Ok(TFormBinaryTableType::K(TFormBinaryTable::new(count))), // 64-bit integer
+    // 'K' => 64-bit integer
     Long(Box<[i64]>),
-    // 'A' => Ok(TFormBinaryTableType::A(TFormBinaryTable::new(count))), // Character
+    // 'A' => Character
     Character(Cow<'a, [u8]>),
-    // 'E' => Ok(TFormBinaryTableType::E(TFormBinaryTable::new(count))), // Single-precision floating point
+    // 'E' => Single-precision floating point
     Float(Box<[f32]>),
-    // 'D' => Ok(TFormBinaryTableType::D(TFormBinaryTable::new(count))), // Double-precision floating point
+    // 'D' => Double-precision floating point
     Double(Box<[f64]>),
-    // 'C' => Ok(TFormBinaryTableType::C(TFormBinaryTable::new(count))), // Single-precision complex
+    // 'C' => Single-precision complex
     ComplexFloat(Box<[(f32, f32)]>),
-    // 'M' => Ok(TFormBinaryTableType::M(TFormBinaryTable::new(count))), // Double-precision complex
+    // 'M' => Double-precision complex
     ComplexDouble(Box<[(f64, f64)]>),
-    // 'P' => Ok(TFormBinaryTableType::P(TFormBinaryTable::new(count))), // Array Descriptor (32-bit)
+    // 'P' => Array Descriptor (32-bit)
     Array32Desc(Data<'a>),
-    // 'Q' => Ok(TFormBinaryTableType::Q(TFormBinaryTable::new(count))), // Array Descriptor (64-bit)
+    // 'Q' => Array Descriptor (64-bit)
     Array64Desc(Data<'a>),
 }
 

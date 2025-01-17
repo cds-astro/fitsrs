@@ -41,6 +41,7 @@ pub mod error;
 pub mod file;
 pub mod fits;
 pub mod hdu;
+mod gz;
 
 pub use async_fits::AsyncFits;
 pub use file::FITSFile;
@@ -51,7 +52,6 @@ pub use hdu::{AsyncHDU, HDU};
 mod tests {
     use crate::async_fits::AsyncFits;
     use crate::fits::Fits;
-    use crate::hdu::data::bintable::It;
     use crate::hdu::data::{DataIter, DataStream};
     use crate::hdu::AsyncHDU;
     use crate::FITSFile;
@@ -311,10 +311,9 @@ mod tests {
         }
     }
 
-    #[test_case("samples/misc/SN2923fxjA.fits.gz")]
-    #[test_case("samples/misc/SN2923fxjA.fits")]
-    fn open_external_gzipped_file(filename: &str) {
-        use image::{ImageBuffer, Rgba, Luma};
+    #[test_case("samples/misc/SN2923fxjA.fits.gz", 5415.0, 6386.0)]
+    #[test_case("samples/misc/SN2923fxjA.fits", 5415.0, 6386.0)]
+    fn open_external_gzipped_file(filename: &str, min: f32, max: f32) {
         let mut hdu_list = FITSFile::open(filename).unwrap();
         use std::iter::Iterator;
 
@@ -325,61 +324,8 @@ mod tests {
                     let naxis1 = *xtension.get_naxisn(1).unwrap();
                     let naxis2 = *xtension.get_naxisn(2).unwrap();
 
-                    let s = hdu.get_header().get_parsed::<f64>(b"BSCALE  ").unwrap_or(Ok(1.0));
-                    let off = hdu.get_header().get_parsed::<f64>(b"BZERO   ").unwrap_or(Ok(0.0));
-
                     match hdu_list.get_data(hdu) {
-                        /*DataIter::I16(it) => {
-                            let c = it.collect::<Vec<_>>();
-
-                            let imgbuf: image::ImageBuffer<Luma<i16>, Vec<i16>> =
-                                image::ImageBuffer::from_raw(naxis1 as u32, naxis2 as u32, c)
-                                    .unwrap();
-                            imgbuf.save(&format!("{}.png", filename)).unwrap();
-                        }
-                        DataIter::U8(it) => {
-                            let c = it.collect::<Vec<_>>();
-
-                            let imgbuf =
-                                image::ImageBuffer::from_raw(naxis1 as u32, naxis2 as u32, c)
-                                    .unwrap();
-                            imgbuf.save(&format!("{}.png", filename)).unwrap();
-                        }
-                        DataIter::I32(it) => {
-                            let c = it.collect::<Vec<_>>();
-
-                            let imgbuf =
-                                image::ImageBuffer::from_raw(naxis1 as u32, naxis2 as u32, c)
-                                    .unwrap();
-                            imgbuf.save(&format!("{}.png", filename)).unwrap();
-                        }
-                        DataIter::I64(it) => {
-                            let c = it.collect::<Vec<_>>();
-
-                            let imgbuf =
-                                image::ImageBuffer::from_raw(naxis1 as u32, naxis2 as u32, c)
-                                    .unwrap();
-                            imgbuf.save(&format!("{}.png", filename)).unwrap();
-                        }
-                        DataIter::F64(it) => {
-                            let c = it.collect::<Vec<_>>();
-
-                            let imgbuf =
-                                image::ImageBuffer::from_raw(naxis1 as u32, naxis2 as u32, c)
-                                    .unwrap();
-                            imgbuf.save(&format!("{}.png", filename)).unwrap();
-                        }*/
                         DataIter::F32(it) => {
-                            
-                            let mut min = 6386.00;
-                            let mut max = 5415.00;
-                            /*let c = it.map(|v| {
-                                min = min.min(v);
-                                max = max.max(v);
-
-                                v
-                            }).collect::<Vec<_>>();*/
-
                             let c = it.map(|v| (((v - min)/(max - min)) * 255.0) as u8).collect::<Vec<_>>();
 
                             let imgbuf = DynamicImage::ImageLuma8(

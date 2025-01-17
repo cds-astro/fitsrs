@@ -7,7 +7,7 @@ use byteorder::{BigEndian, ByteOrder};
 use futures::AsyncReadExt;
 use std::io::{BufReader, Cursor, Read};
 
-use super::{iter, AsyncDataBufRead, Data, DataIter, DataStream};
+use super::{AsyncDataBufRead, Data, DataIter, DataStream};
 use crate::hdu::header::extension::image::Image;
 use crate::hdu::header::extension::Xtension;
 use crate::hdu::DataRead;
