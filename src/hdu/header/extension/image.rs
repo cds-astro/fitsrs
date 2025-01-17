@@ -57,7 +57,7 @@ impl Xtension for Image {
         values: &HashMap<String, Value>
     ) -> Result<Self, Error> {
         // BITPIX
-        let bitpix = check_for_bitpix(dbg!(values))?;
+        let bitpix = check_for_bitpix(values)?;
         // NAXIS
         let naxis = check_for_naxis(values)?;
         // The size of each NAXIS

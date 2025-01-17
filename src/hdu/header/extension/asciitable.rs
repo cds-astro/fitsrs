@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use serde::Serialize;
 
+use crate::card::Cards;
 use crate::card::Value;
 use crate::error::Error;
 use crate::hdu::header::check_for_bitpix;

@@ -46,8 +46,6 @@ impl TryFrom<&str> for XtensionType {
 pub trait Xtension {
     fn get_num_bytes_data_block(&self) -> u64;
 
-    //fn update_with_parsed_header(&mut self, cards: &HashMap<String, Value>) -> Result<(), Error>;
-
     // Parse the Xtension keywords
     // During the parsing, some checks will be made
     fn parse(

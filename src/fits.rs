@@ -39,7 +39,6 @@ impl<'a, R> Fits<R> {
     /// # Params
     /// * `reader` - a reader created i.e. from the opening of a file
     pub fn from_reader(reader: R) -> Self {
-        // Decorate the reader with a gz decoder. This decorates the reader and check if it is externally gzipped
         Self {
             reader,
             num_remaining_bytes_in_cur_hdu: 0,
