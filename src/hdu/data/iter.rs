@@ -5,7 +5,7 @@ use serde::Serialize;
 
 use crate::{
     byteorder::ReadBytesExt,
-    hdu::header::{extension::image::Image, BitpixValue},
+    hdu::header::{extension::image::Image, Bitpix},
 };
 
 //use super::Access;
@@ -35,12 +35,12 @@ impl<'a, R> DataIter<'a, R> {
     ) -> Self {
         let bitpix = ctx.get_bitpix();
         match bitpix {
-            BitpixValue::U8 => DataIter::U8(It::new(reader, num_remaining_bytes_in_cur_hdu)),
-            BitpixValue::I16 => DataIter::I16(It::new(reader, num_remaining_bytes_in_cur_hdu)),
-            BitpixValue::I32 => DataIter::I32(It::new(reader, num_remaining_bytes_in_cur_hdu)),
-            BitpixValue::I64 => DataIter::I64(It::new(reader, num_remaining_bytes_in_cur_hdu)),
-            BitpixValue::F32 => DataIter::F32(It::new(reader, num_remaining_bytes_in_cur_hdu)),
-            BitpixValue::F64 => DataIter::F64(It::new(reader, num_remaining_bytes_in_cur_hdu)),
+            Bitpix::U8 => DataIter::U8(It::new(reader, num_remaining_bytes_in_cur_hdu)),
+            Bitpix::I16 => DataIter::I16(It::new(reader, num_remaining_bytes_in_cur_hdu)),
+            Bitpix::I32 => DataIter::I32(It::new(reader, num_remaining_bytes_in_cur_hdu)),
+            Bitpix::I64 => DataIter::I64(It::new(reader, num_remaining_bytes_in_cur_hdu)),
+            Bitpix::F32 => DataIter::F32(It::new(reader, num_remaining_bytes_in_cur_hdu)),
+            Bitpix::F64 => DataIter::F64(It::new(reader, num_remaining_bytes_in_cur_hdu)),
         }
     }
 }

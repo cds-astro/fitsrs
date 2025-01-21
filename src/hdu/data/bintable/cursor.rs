@@ -1,13 +1,15 @@
 use std::fmt::Debug;
 use crate::hdu::data::Data;
-use crate::hdu::header::extension::bintable::{TFormBinaryTable, P};
-use byteorder::{BigEndian, ByteOrder};
+use crate::hdu::header::Bitpix;
+use crate::hdu::header::extension::bintable::{TFormBinaryTable, P, ZCmpType, Q};
+use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
+use flate2::read::GzDecoder;
 use crate::hdu::header::extension::bintable::{BinTable, TFormBinaryTableType};
 use crate::hdu::DataRead;
 use crate::hdu::header::extension::Xtension;
-use std::io::Cursor;
+use std::io::{Cursor, Read};
 
-use super::FieldTy;
+use super::{FieldTy, VariableArray, BigEndianIt, CastIt};
 
 use std::borrow::Cow;
 
@@ -83,10 +85,12 @@ impl<'a> Iterator for RowBytesIt<'a> {
 
 #[derive(Debug)]
 pub struct RowIt<'a> {
+    /// A simple iterator over the bytes of a row
     row_bytes_it: RowBytesIt<'a>,
 
-    pub tforms: Box<[TFormBinaryTableType]>,
-    pub theap: usize,
+    /// Context of the binary table
+    /// It contains all the mandatory and optional cards parsed from the header unit
+    pub ctx: BinTable,
 }
 
 impl<'a> RowIt<'a> {
@@ -99,13 +103,9 @@ impl<'a> RowIt<'a> {
     {
         let row_bytes_it = RowBytesIt::new(reader, ctx);
 
-        let tforms = ctx.tforms.clone().into_boxed_slice();
-        let theap = ctx.theap;
-
         Self {
             row_bytes_it,
-            tforms,
-            theap,
+            ctx: ctx.clone()
         }
     }
 
@@ -123,7 +123,7 @@ impl<'a> Iterator for RowIt<'a> {
         let row_bytes = self.row_bytes_it.next()?;
 
         let off_bytes_in_row = 0;
-        let row = self.tforms.iter().map(|tform| {
+        let row = self.ctx.tforms.iter().map(|tform| {
             let start_off_byte = off_bytes_in_row;
             let end_off_byte = start_off_byte + tform.num_bytes_field();
 
@@ -187,16 +187,9 @@ impl<'a> Iterator for RowIt<'a> {
                     let byte_offset = BigEndian::read_u32(&field_bytes[4..8]);
 
                     // seek to the heap location where the start of the array lies
-                    /*let off =
-                    // go back to the beginning of the main table data block
-                    - (self.num_bytes_in_table as i64 - (*self.num_remaining_bytes_in_cur_hdu as i64))
-                    // from the beginning of the main table go to the beginning of the heap
-                    + self.theap as i64
-                    // from the beginning of the heap go to the start of the array
-                    + byte_offset as i64;*/
                     let off =
                     // from the beginning of the main table go to the beginning of the heap
-                        self.theap
+                        self.ctx.theap
                     // from the beginning of the heap go to the start of the array
                         + byte_offset as usize;
 
@@ -205,55 +198,61 @@ impl<'a> Iterator for RowIt<'a> {
                     let end_array_off = start_array_off + (n_elems as usize) * config.t_byte_size;
                     let array_raw_bytes = &self.row_bytes_it.bytes[start_array_off..end_array_off];
 
-                    // once we have the bytes, convert it accordingly
+                    #[cfg(feature="tile-compressed-image")]
+                    {
+                        // TILE compressed convention case. More details here: https://fits.gsfc.nasa.gov/registry/tilecompression.html
+                        if let Some(z_image) = &self.ctx.z_image {
+                            let tile_raw_bytes = array_raw_bytes;
+
+                            let field = match (z_image.z_cmp_type, z_image.z_bitpix) {
+                                // It can only store integer typed values i.e. bytes, short or integers
+                                (ZCmpType::GZIP_1, Bitpix::U8) => VariableArray::GZIP1_U8(
+                                    CastIt::new(
+                                        BigEndianIt::new(
+                                            GzDecoder::new(
+                                                Cursor::new(Cow::Borrowed(tile_raw_bytes))
+                                            )
+                                        )
+                                    )
+                                ),
+                                (ZCmpType::GZIP_1, Bitpix::I16) => VariableArray::GZIP1_I16(
+                                    CastIt::new(
+                                        BigEndianIt::new(
+                                            GzDecoder::new(
+                                                Cursor::new(Cow::Borrowed(tile_raw_bytes))
+                                            )
+                                        )
+                                    )
+                                ),
+                                (ZCmpType::GZIP_1, Bitpix::I32) => VariableArray::GZIP1_I32(
+                                    BigEndianIt::new(
+                                        GzDecoder::new(
+                                            Cursor::new(Cow::Borrowed(tile_raw_bytes))
+                                        )
+                                    )
+                                ),
+                                _ => VariableArray::U8(Cow::Borrowed(b"Compression algorithm not supported"))
+                            };
+
+                            return FieldTy::VariableArray(field);
+                        }
+                    }
+                    // Once we have the bytes, convert it accordingly
                     let field = match config.ty {
-                        'B' => Data::U8(Cow::Borrowed(array_raw_bytes)),
-                        'I' => Data::I16(
-                            array_raw_bytes
-                                .chunks(2)
-                                .map(|item| BigEndian::read_i16(item))
-                                .collect::<Vec<_>>()
-                                .into_boxed_slice(),
-                        ),
-                        'J' => Data::I32(
-                            array_raw_bytes
-                                .chunks(4)
-                                .map(|item| BigEndian::read_i32(item))
-                                .collect::<Vec<_>>()
-                                .into_boxed_slice(),
-                        ),
-                        'K' => Data::I64(
-                            array_raw_bytes
-                                .chunks(8)
-                                .map(|item| BigEndian::read_i64(item))
-                                .collect::<Vec<_>>()
-                                .into_boxed_slice(),
-                        ),
-                        'E' => Data::F32(
-                            array_raw_bytes
-                                .chunks(4)
-                                .map(|item| BigEndian::read_f32(item))
-                                .collect::<Vec<_>>()
-                                .into_boxed_slice(),
-                        ),
-                        'D' => Data::F64(
-                            array_raw_bytes
-                                .chunks(8)
-                                .map(|item| BigEndian::read_f64(item))
-                                .collect::<Vec<_>>()
-                                .into_boxed_slice(),
-                        ),
-                        _ => Data::U8(Cow::Borrowed(b"Value not parsed")),
+                        'B' => VariableArray::U8(Cow::Borrowed(array_raw_bytes)),
+                        'I' => VariableArray::I16(BigEndianIt::new(Cursor::new(Cow::Borrowed(array_raw_bytes)))),
+                        'J' => VariableArray::I32(BigEndianIt::new(Cursor::new(Cow::Borrowed(array_raw_bytes)))),
+                        'K' => VariableArray::I64(BigEndianIt::new(Cursor::new(Cow::Borrowed(array_raw_bytes)))),
+                        'E' => VariableArray::F32(BigEndianIt::new(Cursor::new(Cow::Borrowed(array_raw_bytes)))),
+                        'D' => VariableArray::F64(BigEndianIt::new(Cursor::new(Cow::Borrowed(array_raw_bytes)))),
+                        _ => VariableArray::U8(Cow::Borrowed(b"Value not parsed")),
                     };
 
-                    FieldTy::Array32Desc(field)
-                }
-                TFormBinaryTableType::Q(_) => {
-                    // TODO: same logic as the P case
-                    FieldTy::Array64Desc(Data::U8(Cow::Owned(vec![])))
-                }
+                    FieldTy::VariableArray(field)
+                },
+                TFormBinaryTableType::Q(TFormBinaryTable::<Q> { config, .. }) => todo!()
             }
-        }).collect::<Vec<_>>().into_boxed_slice();
+        }).collect::<Vec<_>>();
 
         Some(row)
     }

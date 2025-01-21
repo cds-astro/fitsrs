@@ -4,7 +4,7 @@ extern crate wasm_bindgen;
 // see https://rustwasm.github.io/wasm-bindgen/
 use wasm_bindgen::prelude::*;
 
-use fitsrs::{BitpixValue, DataType, FITSHeaderKeyword, FITSKeywordValue, Fits};
+use fitsrs::{Bitpix, DataType, FITSHeaderKeyword, FITSKeywordValue, Fits};
 use js_sys::{Float32Array, Float64Array, Int16Array, Int32Array, Uint8Array};
 
 #[wasm_bindgen(js_name = read)]
@@ -46,12 +46,12 @@ pub fn read(bytes: Vec<u8>) -> Result<js_sys::Object, JsValue> {
             FITSHeaderKeyword::Simple => (String::from("SIMPLE"), JsValue::undefined()),
             FITSHeaderKeyword::Bitpix(b) => {
                 let value = match b {
-                    BitpixValue::F32 => -32,
-                    BitpixValue::F64 => -64,
-                    BitpixValue::U8 => 8,
-                    BitpixValue::I16 => 16,
-                    BitpixValue::I32 => 32,
-                    BitpixValue::I64 => 64,
+                    Bitpix::F32 => -32,
+                    Bitpix::F64 => -64,
+                    Bitpix::U8 => 8,
+                    Bitpix::I16 => 16,
+                    Bitpix::I32 => 32,
+                    Bitpix::I64 => 64,
                 };
 
                 (String::from("BITPIX"), JsValue::from_f64(value as f64))

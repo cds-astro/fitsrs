@@ -6,13 +6,14 @@ use crate::card::Value;
 use crate::error::Error;
 use crate::hdu::header::check_for_bitpix;
 use crate::hdu::header::check_for_naxis;
-use crate::hdu::header::BitpixValue;
+use crate::hdu::header::Bitpix;
+
 use crate::hdu::header::Xtension;
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct Image {
     // A number of bit that each pixel has
-    bitpix: BitpixValue,
+    bitpix: Bitpix,
     // The number of axis
     naxis: usize,
     // The size of each axis
@@ -32,7 +33,7 @@ impl Image {
     }
 
     /// Get the bitpix value given by the "BITPIX" card
-    pub fn get_bitpix(&self) -> BitpixValue {
+    pub fn get_bitpix(&self) -> Bitpix {
         self.bitpix
     }
 }
@@ -74,7 +75,7 @@ impl Xtension for Image {
 
         Ok(Image {
             bitpix,
-            naxis,
+            naxis: naxis as usize,
             naxisn,
         })
     }

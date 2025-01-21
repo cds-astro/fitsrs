@@ -52,6 +52,7 @@ pub use hdu::{AsyncHDU, HDU};
 mod tests {
     use crate::async_fits::AsyncFits;
     use crate::fits::Fits;
+    use crate::hdu::data::bintable::{cursor, FieldTy, VariableArray};
     use crate::hdu::data::{DataIter, DataStream};
     use crate::hdu::AsyncHDU;
     use crate::FITSFile;
@@ -59,7 +60,7 @@ mod tests {
     use crate::hdu::data::Data;
     //use crate::hdu::extension::AsyncXtensionHDU;
     use crate::hdu::header::extension::Xtension;
-    use crate::hdu::header::BitpixValue;
+    use crate::hdu::header::Bitpix;
 
     use std::fs::File;
     use std::io::Cursor;
@@ -85,7 +86,7 @@ mod tests {
             assert_eq!(header.get_xtension().get_naxisn(1), Some(&64));
             assert_eq!(header.get_xtension().get_naxisn(2), Some(&64));
             assert_eq!(header.get_xtension().get_naxis(), 2);
-            assert_eq!(header.get_xtension().get_bitpix(), BitpixValue::F32);
+            assert_eq!(header.get_xtension().get_bitpix(), Bitpix::F32);
         }
 
         assert!(hdu_list.next().is_none());
@@ -231,7 +232,7 @@ mod tests {
         let reader = Cursor::new(&buf[..]);
         let hdu_list = Fits::from_reader(reader);
         let mut correctly_opened = true;
-        for hdu in dbg!(hdu_list) {
+        for hdu in hdu_list {
             match hdu {
                 Err(_) => {
                     correctly_opened = false;
@@ -344,6 +345,43 @@ mod tests {
         }
     }
 
+    #[test_case("samples/fits.gsfc.nasa.gov/m13_gzip.fits")]
+    fn open_tile_compressed_image(filename: &str) {
+        use std::fs::File;
+
+        let mut f = File::open(filename).unwrap();
+        let mut buf = Vec::new();
+        f.read_to_end(&mut buf).unwrap();
+        let reader = Cursor::new(&buf[..]);
+
+        let mut hdu_list = Fits::from_reader(reader);
+
+        while let Some(Ok(hdu)) = hdu_list.next() {
+            match hdu {
+                HDU::XBinaryTable(hdu) => {
+                    let pixels = hdu_list.get_data(hdu)
+                        .flat_map(|row| { 
+                            match row.into_iter().nth(0).unwrap() {
+                                FieldTy::VariableArray(VariableArray::GZIP1_I16(r)) => {
+                                    r
+                                }
+                                _ => unimplemented!()
+                            }
+                        })
+                        .map(|v| (((v as f32) / 1000.0) * 255.0) as u8)
+                        .collect::<Vec<_>>();
+
+                    let imgbuf = DynamicImage::ImageLuma8(
+                        image::ImageBuffer::from_raw(300, 300, pixels)
+                            .unwrap()
+                        );
+                    imgbuf.save(&format!("{}.jpg", filename)).unwrap();
+                },
+                _ => (),
+            }
+        }
+    }
+
     use super::hdu::HDU;
     #[test]
     fn test_fits_images_data_block() {
@@ -359,7 +397,7 @@ mod tests {
         while let Some(Ok(hdu)) = hdu_list.next() {
             match hdu {
                 HDU::XImage(hdu) | HDU::Primary(hdu) => {
-                    let xtension = dbg!(hdu.get_header().get_xtension());
+                    let xtension = hdu.get_header().get_xtension();
 
                     let naxis1 = xtension.get_naxisn(1);
                     let naxis2 = xtension.get_naxisn(2);

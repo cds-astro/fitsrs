@@ -5,12 +5,11 @@ use async_trait::async_trait;
 use serde::Serialize;
 use crate::hdu::Value;
 use crate::error::Error;
-use crate::hdu::header::BitpixValue;
+use crate::hdu::header::Bitpix;
 use crate::hdu::header::check_for_bitpix;
 use crate::hdu::header::check_for_gcount;
 use crate::hdu::header::check_for_naxis;
 use crate::hdu::header::check_for_naxisi;
-
 use crate::hdu::header::check_for_pcount;
 use crate::hdu::header::check_for_tfields;
 
@@ -18,9 +17,9 @@ use super::Xtension;
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct BinTable {
-    bitpix: BitpixValue,
+    bitpix: Bitpix,
     // Number of axis, Should be 2,
-    naxis: usize,
+    naxis: u64,
     // A non-negative integer, giving the number of eight-bit bytes in each row of the
     // table.
     pub(crate) naxis1: u64,
@@ -36,7 +35,7 @@ pub struct BinTable {
     // called the heap. The default value, which is also the minimum
     // allowed value, shall be the product of the values of NAXIS1 and
     // NAXIS2. This keyword shall not be used if the value of PCOUNT
-    // is 0. The use of this keyword is described in in Sect. 7.3.5.
+    // is 0. The use sof this keyword is described in in Sect. 7.3.5.
     pub(crate) theap: usize,
     // Contain a character string describing the format in which Field n is encoded.
     // Only the formats in Table 15, interpreted as Fortran (ISO 2004)
@@ -47,37 +46,37 @@ pub struct BinTable {
     // The value field shall contain the number of
     // bytes that follow the table in the supplemental data area called
     // the heap.
-    pcount: usize,
+    pcount: u64,
     // The value field shall contain the integer 1;
     // the data blocks contain a single table.
-    gcount: usize,
+    gcount: u64,
 
 
     /// ZIMAGE (required keyword) This keyword must have the logical value T. It indicates that the
     /// FITS binary table extension contains a compressed image and that logically this extension
     /// should be interpreted as an image and not as a table.
-    z_image: Option<TileCompressedImage>
+    pub z_image: Option<TileCompressedImage>
 }
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
-struct TileCompressedImage {
+pub(crate) struct TileCompressedImage {
     /// ZCMPTYPE (required keyword) The value field of this keyword shall contain a character string
     /// giving the name of the algorithm that must be used to decompress the image. Currently, values of GZIP 1, GZIP 2, RICE 1, PLIO 1, and HCOMPRESS 1 are reserved, and the corresponding
     /// algorithms are described in a later section of this document. The value RICE ONE is also
     /// reserved as an alias for RICE 1.
-    z_cmp_type: ZCmpType,
+    pub(crate) z_cmp_type: ZCmpType,
 
     /// ZBITPIX (required keyword) The value field of this keyword shall contain an integer that gives
     /// the value of the BITPIX keyword in the uncompressed FITS image.
-    z_bitpix: BitpixValue,
+    pub(crate) z_bitpix: Bitpix,
 
     /// ZNAXIS (required keyword) The value field of this keyword shall contain an integer that gives
     /// the value of the NAXIS keyword in the uncompressed FITS image.
-    z_naxis: usize,
+    pub(crate) z_naxis: usize,
 
     /// ZNAXISn (required keywords) The value field of these keywords shall contain a positive integer
     /// that gives the value of the NAXISn keywords in the uncompressed FITS image.
-    z_naxisn: Box<[usize]>,
+    pub(crate) z_naxisn: Box<[usize]>,
 
     /// ZTILEn (optional keywords) The value of these indexed keywords (where n ranges from 1 to
     /// ZNAXIS) shall contain a positive integer representing the number of pixels along axis n of
@@ -91,18 +90,18 @@ struct TileCompressedImage {
     /// in each tile appears in the FITS image; the tile containing the first pixel in the image appears
     /// in the first row of the table, and the tile containing the last pixel in the image appears in the
     /// last row of the binary table.
-    z_tilen: Option<Box<[usize]>>,
+    pub(crate) z_tilen: Box<[usize]>,
 
     /// ZQUANTIZ (optional keyword) This keyword records the name of the algorithm that was
     /// used to quantize floating-point image pixels into integer values which are then passed to
     /// the compression algorithm, as discussed further in section 4 of this document.
-    z_quantiz: Option<ZQuantiz>,
+    pub(crate) z_quantiz: Option<ZQuantiz>,
 
     /// ZDITHER0 (optional keyword) The value field of this keyword shall contain an integer that
     /// gives the seed value for the random dithering pattern that was used when quantizing the
     /// floating-point pixel values. The value may range from 1 to 10000, inclusive. See section 4 for
     /// further discussion of this keyword.
-    z_dither_0: Option<usize>
+    pub(crate) z_dither_0: Option<i64>
 }
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
@@ -112,8 +111,8 @@ enum ZQuantiz {
     SUBTRACTIVE_DITHER_2,
 }
 
-#[derive(Debug, PartialEq, Serialize, Clone)]
-enum ZCmpType {
+#[derive(Debug, PartialEq, Serialize, Clone, Copy)]
+pub(crate) enum ZCmpType {
     GZIP_1,
     GZIP_2,
     RICE_1,
@@ -121,7 +120,6 @@ enum ZCmpType {
     PLI0_1,
     HCOMPRESS_1
 }
-
 
 #[async_trait(?Send)]
 impl Xtension for BinTable {
@@ -650,7 +648,7 @@ impl TFormBinaryTableType {
 mod tests {
     use super::{BinTable, TFormBinaryTable, TFormBinaryTableType};
     use crate::{
-        hdu::{header::BitpixValue, HDU}, FITSFile,
+        hdu::{header::Bitpix, HDU}, FITSFile,
     };
 
     fn compare_bintable_ext(filename: &str, bin_table: BinTable) {
@@ -684,7 +682,7 @@ mod tests {
         compare_bintable_ext(
             "samples/fits.gsfc.nasa.gov/IUE_LWP.fits",
             BinTable {
-                bitpix: BitpixValue::U8,
+                bitpix: Bitpix::U8,
                 naxis: 2,
                 naxis1: 11535,
                 naxis2: 1,
@@ -705,6 +703,10 @@ mod tests {
                 pcount: 0,
                 // Should be 1
                 gcount: 1,
+<<<<<<< HEAD
+=======
+                #[cfg(feature="tile-compressed-image")]
+>>>>>>> 19e1d54 (wip return iterator for variable array + TCI: GZIP)
                 z_image: None,
             },
         );

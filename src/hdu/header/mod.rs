@@ -118,7 +118,7 @@ fn check_for_tfields(values: &HashMap<String, Value>) -> Result<usize, Error> {
 }
 
 #[derive(Debug, PartialEq, Serialize, Clone, Copy)]
-pub enum BitpixValue {
+pub enum Bitpix {
     U8 = 8,
     I16 = 16,
     I32 = 32,

@@ -1,7 +1,7 @@
 //pub use super::Access;
 //use super::DataAsyncBufRead;
 
-use crate::hdu::header::BitpixValue;
+use crate::hdu::header::Bitpix;
 use async_trait::async_trait;
 use byteorder::{BigEndian, ByteOrder};
 use futures::AsyncReadExt;
@@ -35,14 +35,14 @@ where
         let bytes = &bytes[start_byte_pos..end_byte_pos];
 
         match bitpix {
-            BitpixValue::U8 => {
+            Bitpix::U8 => {
                 let num_pixels = num_bytes_of_data as usize;
 
                 debug_assert!(bytes.len() >= num_pixels);
 
                 Data::U8(Cow::Borrowed(bytes))
             }
-            BitpixValue::I16 => {
+            Bitpix::I16 => {
                 let data = bytes
                     .chunks(2)
                     .map(|item| BigEndian::read_i16(item))
@@ -52,7 +52,7 @@ where
 
                 Data::I16(data.into_boxed_slice())
             }
-            BitpixValue::I32 => {
+            Bitpix::I32 => {
                 let data = bytes
                     .chunks(4)
                     .map(|item| BigEndian::read_i32(item))
@@ -62,7 +62,7 @@ where
 
                 Data::I32(data.into_boxed_slice())
             }
-            BitpixValue::I64 => {
+            Bitpix::I64 => {
                 let data = bytes
                     .chunks(8)
                     .map(|item| BigEndian::read_i64(item))
@@ -72,7 +72,7 @@ where
 
                 Data::I64(data.into_boxed_slice())
             }
-            BitpixValue::F32 => {
+            Bitpix::F32 => {
                 let data = bytes
                     .chunks(4)
                     .map(|item| BigEndian::read_f32(item))
@@ -82,7 +82,7 @@ where
 
                 Data::F32(data.into_boxed_slice())
             }
-            BitpixValue::F64 => {
+            Bitpix::F64 => {
                 let data = bytes
                     .chunks(8)
                     .map(|item| BigEndian::read_f64(item))
@@ -126,22 +126,22 @@ where
     ) -> Self::Data {
         let bitpix = ctx.get_bitpix();
         match bitpix {
-            BitpixValue::U8 => {
+            Bitpix::U8 => {
                 DataStream::U8(stream::St::new(reader, num_remaining_bytes_in_cur_hdu))
             }
-            BitpixValue::I16 => {
+            Bitpix::I16 => {
                 DataStream::I16(stream::St::new(reader, num_remaining_bytes_in_cur_hdu))
             }
-            BitpixValue::I32 => {
+            Bitpix::I32 => {
                 DataStream::I32(stream::St::new(reader, num_remaining_bytes_in_cur_hdu))
             }
-            BitpixValue::I64 => {
+            Bitpix::I64 => {
                 DataStream::I64(stream::St::new(reader, num_remaining_bytes_in_cur_hdu))
             }
-            BitpixValue::F32 => {
+            Bitpix::F32 => {
                 DataStream::F32(stream::St::new(reader, num_remaining_bytes_in_cur_hdu))
             }
-            BitpixValue::F64 => {
+            Bitpix::F64 => {
                 DataStream::F64(stream::St::new(reader, num_remaining_bytes_in_cur_hdu))
             }
         }

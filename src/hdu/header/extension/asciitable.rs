@@ -6,21 +6,23 @@ use serde::Serialize;
 use crate::card::Cards;
 use crate::card::Value;
 use crate::error::Error;
+
 use crate::hdu::header::check_for_bitpix;
 use crate::hdu::header::check_for_gcount;
 use crate::hdu::header::check_for_naxis;
 use crate::hdu::header::check_for_naxisi;
 use crate::hdu::header::check_for_pcount;
 use crate::hdu::header::check_for_tfields;
-use crate::hdu::header::BitpixValue;
+use crate::hdu::header::Bitpix;
+
 use crate::hdu::header::Xtension;
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct AsciiTable {
     // Should be 1
-    bitpix: BitpixValue,
+    bitpix: Bitpix,
     // Number of axis, Should be 2,
-    naxis: usize,
+    naxis: u64,
     // A non-negative integer, giving the number of ASCII characters in each row of
     // the table. This includes all the characters in the defined fields
     // plus any characters that are not included in any field.
@@ -39,21 +41,21 @@ pub struct AsciiTable {
     // permitted for encoding
     tforms: Vec<TFormAsciiTable>,
     // Should be 0
-    pcount: usize,
+    pcount: u64,
     // Should be 1
-    gcount: usize,
+    gcount: u64,
 }
 
 impl AsciiTable {
     /// Get the bitpix value given by the "BITPIX" card
     #[inline]
-    pub fn get_bitpix(&self) -> BitpixValue {
+    pub fn get_bitpix(&self) -> Bitpix {
         self.bitpix
     }
 
     /// Get the number of axis given by the "NAXIS" card
     #[inline]
-    pub fn get_naxis(&self) -> usize {
+    pub fn get_naxis(&self) -> u64 {
         self.naxis
     }
 
@@ -85,13 +87,13 @@ impl AsciiTable {
 
     /// Get the pcount value given by the "PCOUNT" card
     #[inline]
-    pub fn get_pcount(&self) -> usize {
+    pub fn get_pcount(&self) -> u64 {
         self.pcount
     }
 
     /// Get the gcount value given by the "PCOUNT" card
     #[inline]
-    pub fn get_gcount(&self) -> usize {
+    pub fn get_gcount(&self) -> u64 {
         self.gcount
     }
 }
@@ -282,7 +284,7 @@ mod tests {
     use super::{AsciiTable, TFormAsciiTable};
     use crate::{
         fits::Fits,
-        hdu::{header::BitpixValue, HDU},
+        hdu::{header::Bitpix, HDU},
     };
     use std::{fs::File, io::BufReader};
 
@@ -315,7 +317,7 @@ mod tests {
         compare_ascii_ext(
             "samples/fits.gsfc.nasa.gov/HST_FGS.fits",
             AsciiTable {
-                bitpix: BitpixValue::U8,
+                bitpix: Bitpix::U8,
                 naxis: 2,
                 naxis1: 99,
                 naxis2: 7,
@@ -339,7 +341,7 @@ mod tests {
         compare_ascii_ext(
             "samples/fits.gsfc.nasa.gov/HST_FOC.fits",
             AsciiTable {
-                bitpix: BitpixValue::U8,
+                bitpix: Bitpix::U8,
                 naxis: 2,
                 naxis1: 312,
                 naxis2: 1,
@@ -378,7 +380,7 @@ mod tests {
         compare_ascii_ext(
             "samples/fits.gsfc.nasa.gov/HST_HRS.fits",
             AsciiTable {
-                bitpix: BitpixValue::U8,
+                bitpix: Bitpix::U8,
                 naxis: 2,
                 naxis1: 412,
                 naxis2: 4,
@@ -424,7 +426,7 @@ mod tests {
         compare_ascii_ext(
             "samples/fits.gsfc.nasa.gov/HST_WFPC_II.fits",
             AsciiTable {
-                bitpix: BitpixValue::U8,
+                bitpix: Bitpix::U8,
                 naxis: 2,
                 naxis1: 796,
                 naxis2: 4,
