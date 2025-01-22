@@ -48,11 +48,11 @@ impl<'a, R> Fits<R> {
         }
     }
 }
-
+use std::io::Seek;
 use hdu::data::DataRead;
 impl<'a, R> Fits<R>
 where
-    R: DataRead<'a, Image> + DataRead<'a, AsciiTable> + DataRead<'a, BinTable> + 'a,
+    R: DataRead<'a, Image> + DataRead<'a, AsciiTable> + DataRead<'a, BinTable> + 'a + Seek,
 {
     /// Consume the bytes until the next HDU
     ///
@@ -65,7 +65,7 @@ where
         let mut block_mem_buf: [u8; 2880] = [0; 2880];
 
         // 1. Check if there are still bytes to be read to get to the end of data
-        while self.num_remaining_bytes_in_cur_hdu > 0 {
+        /*while self.num_remaining_bytes_in_cur_hdu > 0 {
             let num_bytes_to_read = self.num_remaining_bytes_in_cur_hdu.min(2880);
             // Then read them
             match self
@@ -77,7 +77,19 @@ where
                     self.num_remaining_bytes_in_cur_hdu -= num_bytes_to_read;
                 }
             }
-        }
+        }*/
+
+        // We seek to the beginning of the next HDU, skipping the current data block remains
+        match self
+            .reader
+            .seek_relative(self.num_remaining_bytes_in_cur_hdu as i64)
+            {
+                Err(e) => return Err(Error::Io(e)),
+                Ok(()) => {
+                    self.num_remaining_bytes_in_cur_hdu = 0;
+                }
+            }
+
 
         // 2. We are at the end of the real data. As FITS standard stores data in block of 2880 bytes
         // we must read until the next block of data to get the location of the next HDU
@@ -122,7 +134,7 @@ where
 
 impl<'a, R> Iterator for Fits<R>
 where
-    R: DataRead<'a, Image> + DataRead<'a, AsciiTable> + DataRead<'a, BinTable> + Debug + 'a,
+    R: DataRead<'a, Image> + DataRead<'a, AsciiTable> + DataRead<'a, BinTable> + Debug + 'a + Seek,
 {
     type Item = Result<hdu::HDU, Error>;
 

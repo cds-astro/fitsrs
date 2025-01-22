@@ -1,21 +1,15 @@
 use std::fmt::Debug;
-#[cfg(feature="tile-compressed-image")]
-use crate::hdu::header::{
-    Bitpix,
-    extension::bintable::ZCmpType
-};
+
 use crate::hdu::header::extension::bintable::{P, Q, ArrayDescriptor};
 
 use byteorder::{BigEndian, ByteOrder};
-use flate2::read::GzDecoder;
+
 use crate::hdu::header::extension::bintable::{BinTable, TFormBinaryTableType};
 use crate::hdu::DataRead;
 use crate::hdu::header::extension::Xtension;
 use std::io::Cursor;
 
-use super::{FieldTy, VariableArray, BigEndianIt, CastIt, EitherIt};
-
-use std::borrow::Cow;
+use super::FieldTy;
 
 #[derive(Debug)]
 pub struct RowBytesIt<'a> {

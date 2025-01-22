@@ -5,6 +5,11 @@ pub mod cursor;
 
 use std::borrow::Cow;
 
+use std::io::{Read, Cursor};
+use crate::byteorder::ReadBytesExt;
+
+use crate::hdu::header::extension::bintable::BinTable;
+
 #[derive(Debug)]
 pub enum FieldTy<'a> {
     // 'L' => Logical
@@ -37,11 +42,14 @@ pub enum FieldTy<'a> {
 }
 
 impl<'a> FieldTy<'a> {
-    fn parse_variable_array(array_bytes: Cow<'a, [u8]>, elem_ty: char, ctx: &BinTable) -> Self {
-        #[cfg(feature="tile-compressed-image")]
+    fn parse_variable_array(array_bytes: Cow<'a, [u8]>, elem_ty: char, _ctx: &BinTable) -> Self {
+        #[cfg(feature="tci")]
         let field = {
+            use crate::hdu::header::Bitpix;
+            use crate::hdu::header::extension::bintable::ZCmpType;
+
             // TILE compressed convention case. More details here: https://fits.gsfc.nasa.gov/registry/tilecompression.html
-            if let Some(z_image) = &ctx.z_image {
+            if let Some(z_image) = &_ctx.z_image {
                 let tile_raw_bytes = array_bytes;
 
                 match (z_image.z_cmp_type, z_image.z_bitpix) {
@@ -64,7 +72,7 @@ impl<'a> FieldTy<'a> {
                 }
             }
         };
-        #[cfg(not(feature="tile-compressed-image"))]
+        #[cfg(not(feature="tci"))]
         let field = {
             // once we have the bytes, convert it accordingly
             match elem_ty {
@@ -131,27 +139,23 @@ where
     }
 }
 
+//#[cfg(feature="tci")]
 /// This contains variable array content
-/// 
-/// For each type
 #[derive(Debug)]
 pub enum VariableArray<'a> {
-    /// Iterator that will return bytes and decode the data
-    /// for tile compressed images
+    /// Iterator that will return bytes and decode the data for tile compressed images
     U8(EitherIt<
         BigEndianByteIt<'a, u8>,
         BigEndianGzByteIt<'a, u8>,
         u8
     >),
-    /// Iterator that will return shorts and decode the data
-    /// for tile compressed images
+    /// Iterator that will return shorts and decode the data for tile compressed images
     I16(EitherIt<
         BigEndianByteIt<'a, i16>,
         BigEndianGzByteIt<'a, i16>,
         i16
     >),
-    /// Iterator that will return integers and decode the data
-    /// for tile compressed images
+    /// Iterator that will return integers and decode the data for tile compressed images
     I32(EitherIt<
         BigEndianByteIt<'a, i32>,
         BigEndianGzByteIt<'a, i32>,
@@ -161,6 +165,27 @@ pub enum VariableArray<'a> {
     F32(BigEndianByteIt<'a, f32>),
     F64(BigEndianByteIt<'a, f64>),
 }
+/*
+#[cfg(not(feature="tci"))]
+pub enum VariableArray<'a> {
+    /// Return the bytes directly
+    U8(Bytes<'a>),
+    /// Iterator that will return shorts and decode the data for tile compressed images
+    I16(EitherIt<
+        BigEndianByteIt<'a, i16>,
+        BigEndianGzByteIt<'a, i16>,
+        i16
+    >),
+    /// Iterator that will return integers and decode the data for tile compressed images
+    I32(EitherIt<
+        BigEndianByteIt<'a, i32>,
+        BigEndianGzByteIt<'a, i32>,
+        i32
+    >),
+    I64(BigEndianByteIt<'a, i64>),
+    F32(BigEndianByteIt<'a, f32>),
+    F64(BigEndianByteIt<'a, f64>),
+}*/
 
 use std::fmt::Debug;
 #[derive(Debug)]
@@ -283,10 +308,6 @@ where
     }
 }
 
-use std::io::{Read, Cursor};
-use crate::byteorder::ReadBytesExt;
-use crate::hdu::header::Bitpix;
-use crate::hdu::header::extension::bintable::{ZCmpType, BinTable};
 impl<'a, R> Iterator for BigEndianIt<R, u8>
 where
     R: Read,

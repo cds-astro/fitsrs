@@ -1,19 +1,15 @@
 use std::fmt::Debug;
 use crate::hdu::data::{AsyncDataBufRead, stream::St};
-use crate::hdu::header::Bitpix;
 use crate::hdu::header::extension::bintable::{P, Q, ArrayDescriptor};
-#[cfg(feature="tile-compressed-image")]
-use crate::hdu::header::extension::bintable::ZCmpType;
+
 use byteorder::{BigEndian, ByteOrder};
-use crate::error::Error;
 use crate::hdu::header::extension::bintable::{BinTable, TFormBinaryTableType};
 use crate::hdu::DataRead;
 use crate::hdu::header::extension::Xtension;
 
-use std::io::{BufReader, Cursor};
+use std::io::BufReader;
 use std::io::Read;
-use super::{FieldTy, VariableArray, BigEndianIt, EitherIt};
-use std::borrow::Cow;
+use super::FieldTy;
 
 impl<'a, R> DataRead<'a, BinTable> for BufReader<R>
 where

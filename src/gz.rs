@@ -25,6 +25,37 @@ where
     }
 }
 
+/// Hack. I implement Seek so that for non externally gzipped files
+/// a seek can be done to get to the next hdu.
+/// 
+/// For gzipped file, the data has to be read block by block
+impl<R> Seek for GzReader<R>
+where
+    R: Read + Seek,
+{
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        match self {
+            GzReader::GzReader(r) => {
+                match pos {
+                    SeekFrom::Current(mut off) if off > 0 => {
+                        let mut bbuf = [0_u8; 2880];
+                        while off > 0 {
+                            let bytes2read = 2880.min(off);
+                            let _ = r.read_exact(&mut bbuf[..bytes2read as usize])?;
+
+                            off -= bytes2read;
+                        }
+
+                        Ok(0)
+                    },
+                    _ => Err(std::io::ErrorKind::NotSeekable.into())
+                }
+            }
+            GzReader::Reader(r) => r.seek(pos)
+        }
+    }
+}
+
 use std::fmt::Debug;
 use std::io::Read;
 use std::io::BufReader;

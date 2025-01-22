@@ -26,7 +26,8 @@ quick-error = "2.0.1"
 flate2 = "1.0.35"
 
 [features]
-tile-compressed-image = []
+# Tile compressed image stored in binary table convention https://fits.gsfc.nasa.gov/registry/tilecompression.html
+tci = []
 
 [dev-dependencies]
 test-case = "3.0.0"

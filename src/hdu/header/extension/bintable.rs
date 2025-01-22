@@ -55,7 +55,7 @@ pub struct BinTable {
     /// ZIMAGE (required keyword) This keyword must have the logical value T. It indicates that the
     /// FITS binary table extension contains a compressed image and that logically this extension
     /// should be interpreted as an image and not as a table.
-    pub z_image: Option<TileCompressedImage>
+    pub(crate) z_image: Option<TileCompressedImage>
 }
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
@@ -105,7 +105,7 @@ pub(crate) struct TileCompressedImage {
 }
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
-enum ZQuantiz {
+pub(crate) enum ZQuantiz {
     NoDither,
     SubtractiveDither1,
     SubtractiveDither2,
