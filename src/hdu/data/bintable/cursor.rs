@@ -4,7 +4,7 @@ use crate::hdu::header::{
     Bitpix,
     extension::bintable::ZCmpType
 };
-use crate::hdu::header::extension::bintable::{TFormBinaryTable, P, Q};
+use crate::hdu::header::extension::bintable::{P, Q, ArrayDescriptor};
 
 use byteorder::{BigEndian, ByteOrder};
 use flate2::read::GzDecoder;
@@ -134,61 +134,58 @@ impl<'a> Iterator for RowIt<'a> {
             let field_bytes = &row_bytes[start_off_byte..end_off_byte];
 
             match tform {
-                TFormBinaryTableType::L(_) => FieldTy::Logical(
+                TFormBinaryTableType::L { .. } => FieldTy::Logical(
                     field_bytes
                         .iter()
                         .map(|v| *v != 0)
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
                 ),
-                TFormBinaryTableType::B(_) => FieldTy::UnsignedByte(Cow::Borrowed(field_bytes)),
-                TFormBinaryTableType::A(_) => FieldTy::Character(Cow::Borrowed(field_bytes)),
-                TFormBinaryTableType::X(x) => FieldTy::Bit {
-                    bytes: Cow::Borrowed(field_bytes),
-                    num_bits: x.num_bits_field(),
+                TFormBinaryTableType::B { .. } => FieldTy::UnsignedByte(field_bytes.into()),
+                TFormBinaryTableType::A { .. } => FieldTy::Character(field_bytes.into()),
+                TFormBinaryTableType::X { repeat_count } => FieldTy::Bit {
+                    bytes: field_bytes.into(),
+                    num_bits: *repeat_count,
                 },
-                TFormBinaryTableType::I(_) => FieldTy::Short(
+                TFormBinaryTableType::I { .. } => FieldTy::Short(
                     field_bytes
                         .chunks(2)
                         .map(|v| BigEndian::read_i16(v))
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
                 ),
-                TFormBinaryTableType::J(_) => FieldTy::Integer(
+                TFormBinaryTableType::J { .. } => FieldTy::Integer(
                     field_bytes
                         .chunks(4)
                         .map(|v| BigEndian::read_i32(v))
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
                 ),
-                TFormBinaryTableType::K(_) => FieldTy::Long(
+                TFormBinaryTableType::K { .. } => FieldTy::Long(
                     field_bytes
                         .chunks(8)
                         .map(|v| BigEndian::read_i64(v))
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
                 ),
-                TFormBinaryTableType::E(_) => FieldTy::Float(
+                TFormBinaryTableType::E { .. } => FieldTy::Float(
                     field_bytes
                         .chunks(4)
                         .map(|v| BigEndian::read_f32(v))
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
                 ),
-                TFormBinaryTableType::D(_) => FieldTy::Double(
+                TFormBinaryTableType::D { .. } => FieldTy::Double(
                     field_bytes
                         .chunks(8)
                         .map(|v| BigEndian::read_f64(v))
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
                 ),
-                TFormBinaryTableType::C(_) => FieldTy::ComplexFloat(Box::new([])),
-                TFormBinaryTableType::M(_) => FieldTy::ComplexDouble(Box::new([])),
-                TFormBinaryTableType::P(TFormBinaryTable::<P> { config, .. }) => {
-                    // get the number of elements in the array
-                    let n_elems = BigEndian::read_u32(&field_bytes[0..4]);
-                    // byte offset starting from the beginning of the heap
-                    let byte_offset = BigEndian::read_u32(&field_bytes[4..8]);
+                TFormBinaryTableType::C { .. } => FieldTy::ComplexFloat(Box::new([])),
+                TFormBinaryTableType::M { .. } => FieldTy::ComplexDouble(Box::new([])),
+                TFormBinaryTableType::P { ty, t_byte_size, .. } => {
+                    let (n_elems, byte_offset) = P::parse_array_location(field_bytes);
 
                     // seek to the heap location where the start of the array lies
                     let off =
@@ -199,40 +196,28 @@ impl<'a> Iterator for RowIt<'a> {
 
                     // as the reader is positioned at the beginning of the main data table
                     let start_array_off = self.row_bytes_it.position + off;
-                    let end_array_off = start_array_off + (n_elems as usize) * config.t_byte_size;
+                    let end_array_off = start_array_off + (n_elems as usize) * (*t_byte_size as usize);
                     let array_raw_bytes = &self.row_bytes_it.bytes[start_array_off..end_array_off];
 
-                    #[cfg(feature="tile-compressed-image")]
-                    {
-                        // TILE compressed convention case. More details here: https://fits.gsfc.nasa.gov/registry/tilecompression.html
-                        if let Some(z_image) = &self.ctx.z_image {
-                            let tile_raw_bytes = array_raw_bytes;
-
-                            let field = match (z_image.z_cmp_type, z_image.z_bitpix) {
-                                // It can only store integer typed values i.e. bytes, short or integers
-                                (ZCmpType::Gzip1, Bitpix::U8) => VariableArray::U8(EitherIt::second(Cow::Borrowed(tile_raw_bytes).into())),
-                                (ZCmpType::Gzip1, Bitpix::I16) => VariableArray::I16(EitherIt::second(Cow::Borrowed(tile_raw_bytes).into())),
-                                (ZCmpType::Gzip1, Bitpix::I32) => VariableArray::I32(EitherIt::second(Cow::Borrowed(tile_raw_bytes).into())),
-                                // Return the slice of bytes
-                                _ => VariableArray::U8(EitherIt::first(Cow::Borrowed(tile_raw_bytes).into()))
-                            };
-
-                            return FieldTy::VariableArray(field);
-                        }
-                    }
-                    // Once we have the bytes, convert it accordingly
-                    let field = match config.ty {
-                        'I' => VariableArray::I16(EitherIt::first(Cow::Borrowed(array_raw_bytes).into())),
-                        'J' => VariableArray::I32(EitherIt::first(Cow::Borrowed(array_raw_bytes).into())),
-                        'K' => VariableArray::I64(Cow::Borrowed(array_raw_bytes).into()),
-                        'E' => VariableArray::F32(Cow::Borrowed(array_raw_bytes).into()),
-                        'D' => VariableArray::F64(Cow::Borrowed(array_raw_bytes).into()),
-                        _ => VariableArray::U8(EitherIt::first(Cow::Borrowed(array_raw_bytes).into())),
-                    };
-
-                    FieldTy::VariableArray(field)
+                    FieldTy::parse_variable_array(array_raw_bytes.into(), *ty, &self.ctx)
                 },
-                TFormBinaryTableType::Q(TFormBinaryTable::<Q> { config, .. }) => todo!()
+                TFormBinaryTableType::Q { ty, t_byte_size, .. } => {
+                    let (n_elems, byte_offset) = Q::parse_array_location(field_bytes);
+
+                    // seek to the heap location where the start of the array lies
+                    let off =
+                    // from the beginning of the main table go to the beginning of the heap
+                        self.ctx.theap
+                    // from the beginning of the heap go to the start of the array
+                        + byte_offset as usize;
+
+                    // as the reader is positioned at the beginning of the main data table
+                    let start_array_off = self.row_bytes_it.position + off;
+                    let end_array_off = start_array_off + (n_elems as usize) * (*t_byte_size as usize);
+                    let array_raw_bytes = &self.row_bytes_it.bytes[start_array_off..end_array_off];
+
+                    FieldTy::parse_variable_array(array_raw_bytes.into(), *ty, &self.ctx)
+                },
             }
         }).collect::<Vec<_>>();
 

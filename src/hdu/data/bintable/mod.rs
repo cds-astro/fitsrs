@@ -36,6 +36,51 @@ pub enum FieldTy<'a> {
     VariableArray(VariableArray<'a>),
 }
 
+impl<'a> FieldTy<'a> {
+    fn parse_variable_array(array_bytes: Cow<'a, [u8]>, elem_ty: char, ctx: &BinTable) -> Self {
+        #[cfg(feature="tile-compressed-image")]
+        let field = {
+            // TILE compressed convention case. More details here: https://fits.gsfc.nasa.gov/registry/tilecompression.html
+            if let Some(z_image) = &ctx.z_image {
+                let tile_raw_bytes = array_bytes;
+
+                match (z_image.z_cmp_type, z_image.z_bitpix) {
+                    // It can only store integer typed values i.e. bytes, short or integers
+                    (ZCmpType::Gzip1, Bitpix::U8) => VariableArray::U8(EitherIt::second(tile_raw_bytes.into())),
+                    (ZCmpType::Gzip1, Bitpix::I16) => VariableArray::I16(EitherIt::second(tile_raw_bytes.into())),
+                    (ZCmpType::Gzip1, Bitpix::I32) => VariableArray::I32(EitherIt::second(tile_raw_bytes.into())),
+                    // Return the slice of bytes
+                    _ => VariableArray::U8(EitherIt::first(tile_raw_bytes.into()))
+                }
+            } else {
+                // once we have the bytes, convert it accordingly to the type given by the array descriptor
+                match elem_ty {
+                    'I' => VariableArray::I16(EitherIt::first(array_bytes.into())),
+                    'J' => VariableArray::I32(EitherIt::first(array_bytes.into())),
+                    'K' => VariableArray::I64(array_bytes.into()),
+                    'E' => VariableArray::F32(array_bytes.into()),
+                    'D' => VariableArray::F64(array_bytes.into()),
+                    _ => VariableArray::U8(EitherIt::first(array_bytes.into())),
+                }
+            }
+        };
+        #[cfg(not(feature="tile-compressed-image"))]
+        let field = {
+            // once we have the bytes, convert it accordingly
+            match elem_ty {
+                'I' => VariableArray::I16(EitherIt::first(array_bytes.into())),
+                'J' => VariableArray::I32(EitherIt::first(array_bytes.into())),
+                'K' => VariableArray::I64(array_bytes.into()),
+                'E' => VariableArray::F32(array_bytes.into()),
+                'D' => VariableArray::F64(array_bytes.into()),
+                _ => VariableArray::U8(EitherIt::first(array_bytes.into())),
+            }
+        };
+
+        FieldTy::VariableArray(field)
+    }
+}
+
 pub type Row<'a> = Vec<FieldTy<'a>>;
 use flate2::read::GzDecoder;
 
@@ -86,7 +131,9 @@ where
     }
 }
 
-
+/// This contains variable array content
+/// 
+/// For each type
 #[derive(Debug)]
 pub enum VariableArray<'a> {
     /// Iterator that will return bytes and decode the data
@@ -238,6 +285,8 @@ where
 
 use std::io::{Read, Cursor};
 use crate::byteorder::ReadBytesExt;
+use crate::hdu::header::Bitpix;
+use crate::hdu::header::extension::bintable::{ZCmpType, BinTable};
 impl<'a, R> Iterator for BigEndianIt<R, u8>
 where
     R: Read,

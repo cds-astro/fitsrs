@@ -131,14 +131,14 @@ impl Xtension for BinTable {
     ) -> Result<Self, Error> {
         // BITPIX
         let bitpix = check_for_bitpix(values)?;
-        if bitpix != BitpixValue::U8 {
+        if bitpix != Bitpix::U8 {
             return Err(Error::StaticError(
                 "Binary Table HDU must have a BITPIX = 8",
             ));
         }
 
         // NAXIS
-        let naxis = check_for_naxis(values)?;
+        let naxis = check_for_naxis(values)? as u64;
         if naxis != 2 {
             return Err(Error::StaticError("Binary Table HDU must have NAXIS = 2"));
         }
@@ -150,10 +150,10 @@ impl Xtension for BinTable {
 
 
         // PCOUNT
-        let pcount = check_for_pcount(values)?;
+        let pcount = check_for_pcount(values)? as u64;
 
         // GCOUNT
-        let gcount = check_for_gcount(values)?;
+        let gcount = check_for_gcount(values)? as u64;
         if gcount != 1 {
             return Err(Error::StaticError("Ascii Table HDU must have GCOUNT = 1"));
         }
@@ -164,11 +164,11 @@ impl Xtension for BinTable {
         // Tile compressed image parameters
         let z_cmp_type = if let Some(Value::String{value: ref z_cmp_type, ..}) = values.get("ZCMPTYPE") {
             match z_cmp_type.trim_ascii_end() {
-                "GZIP_1" => Some(ZCmpType::GZIP_1),
-                "GZIP_2" => Some(ZCmpType::GZIP_2),
-                "RICE_1" | "RICE_ONE" => Some(ZCmpType::RICE_1),
+                "GZIP_1" => Some(ZCmpType::Gzip1),
+                "GZIP_2" => Some(ZCmpType::Gzip2),
+                "RICE_1" | "RICE_ONE" => Some(ZCmpType::Rice),
                 "PLI0_1" => Some(ZCmpType::PLI0_1),
-                "HCOMPRESS_1" => Some(ZCmpType::HCOMPRESS_1),
+                "HCOMPRESS_1" => Some(ZCmpType::Hcompress1),
                 _ => {
                     warn!("ZCMPTYPE is not valid. The tile compressed image column will be discarded if any");
                     None
@@ -258,7 +258,7 @@ impl Xtension for BinTable {
         // ZQUANTIZ (optional keyword) This keyword records the name of the algorithm that was
         // used to quantize floating-point image pixels into integer values which are then passed to
         // the compression algorithm, as discussed further in section 4 of this document.
-        let z_quantiz = if let Some(Ok(z_quantiz)) = cards.get_parsed::<String>("ZQUANTIZ") {
+        let z_quantiz = if let Some(Value::String { value: z_quantiz, .. }) = values.get("ZQUANTIZ") {
             match z_quantiz.trim_ascii_end() {
                 "NO_DITHER" => Some(ZQuantiz::NoDither),
                 "SUBTRACTIVE_DITHER_1" => Some(ZQuantiz::SubtractiveDither1),
@@ -464,180 +464,234 @@ impl Xtension for BinTable {
 // See Appendix F
 
 pub trait TFormType {
+    /// Number of bit associated to the TFORM
     const BITS_SIZE: usize;
+    /// Number of bytes needed to store the tform
     const BYTES_SIZE: usize = (Self::BITS_SIZE as usize + 8 - 1) / 8;
-}
 
-impl<T> TFormType for TFormBinaryTable<T>
-where
-    T: TFormType + Clone + Copy + Debug + Serialize + PartialEq + Default,
-{
-    const BITS_SIZE: usize = T::BITS_SIZE;
+    /// Rust type associated to the TFORM
+    type Ty;
 }
-
 // Logical
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
 pub struct L;
 impl TFormType for L {
     const BITS_SIZE: usize = 8;
+
+    type Ty = u8;
 }
 // Bit
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
 pub struct X;
 impl TFormType for X {
     const BITS_SIZE: usize = 1;
+
+    type Ty = bool;
 }
 // Unsigned byte
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
 pub struct B;
 impl TFormType for B {
     const BITS_SIZE: usize = 8;
+
+    type Ty = u8;
 }
 // 16-bit integer
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
 pub struct I;
 impl TFormType for I {
     const BITS_SIZE: usize = 16;
+
+    type Ty = i16;
 }
 // 32-bit integer
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
 pub struct J;
 impl TFormType for J {
     const BITS_SIZE: usize = 32;
+
+    type Ty = i32;
+
 }
 // 64-bit integer
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
 pub struct K;
 impl TFormType for K {
     const BITS_SIZE: usize = 64;
+
+    type Ty = i64;
 }
 // Character
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
 pub struct A;
 impl TFormType for A {
     const BITS_SIZE: usize = 8;
+
+    type Ty = char;
 }
 // Single-precision floating point
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
 pub struct E;
 impl TFormType for E {
     const BITS_SIZE: usize = 32;
+
+    type Ty = f32;
 }
 // Double-precision floating point
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
 pub struct D;
 impl TFormType for D {
     const BITS_SIZE: usize = 64;
+
+    type Ty = f64;
 }
 // Single-precision complex
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
 pub struct C;
 impl TFormType for C {
     const BITS_SIZE: usize = 64;
+
+    type Ty = (f32, f32);
 }
 // Double-precision complex
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
 pub struct M;
 impl TFormType for M {
     const BITS_SIZE: usize = 128;
+
+    type Ty = (f64, f64);
 }
+
+pub(crate) trait ArrayDescriptor: TFormType {
+    /// From bytes of the field, returns a tuple containing
+    /// * The number of elements in the array
+    /// * The offset in bytes from the beginning of the HEAP to the first element of the array
+    fn parse_array_location(field_bytes: &[u8]) -> (usize, usize);
+}
+
 // Array Descriptor (32-bit)
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
-pub struct P {
-    // elem type
-    pub(crate) t_byte_size: usize,
-    // max number of elements of type t
-    pub(crate) e_max: usize,
-
-    pub(crate) ty: char,
-}
+pub struct P;
 impl TFormType for P {
     const BITS_SIZE: usize = 64;
+
+    type Ty = u64;
 }
+
+impl ArrayDescriptor for P {
+    fn parse_array_location(field_bytes: &[u8]) -> (usize, usize) {
+        // get the number of elements in the array
+        let n_elems = BigEndian::read_u32(&field_bytes[0..4]);
+        // byte offset starting from the beginning of the heap
+        let byte_offset = BigEndian::read_u32(&field_bytes[4..8]);
+
+        (n_elems as usize, byte_offset as usize)
+    }
+}
+
 // Array Descriptor (64-bit)
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
-pub struct Q {
-    // elem type
-    t_byte_size: usize,
-    // max number of elements of type t
-    e_max: usize,
-}
+pub struct Q;
 impl TFormType for Q {
     const BITS_SIZE: usize = 128;
+
+    type Ty = u128;
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
-pub struct TFormBinaryTable<T>
-where
-    T: TFormType + Clone + Copy + Debug + Serialize + PartialEq + Default,
-{
-    repeat_count: usize,
-    // additional metadata for that form
-    pub(crate) config: T,
-}
+impl ArrayDescriptor for Q {
+    fn parse_array_location(field_bytes: &[u8]) -> (usize, usize) {
+        // get the number of elements in the array
+        let n_elems = BigEndian::read_u64(&field_bytes[0..8]);
+        // byte offset starting from the beginning of the heap
+        let byte_offset = BigEndian::read_u64(&field_bytes[8..16]);
 
-impl<T> TFormBinaryTable<T>
-where
-    T: TFormType + Clone + Copy + Debug + PartialEq + Serialize + Default,
-{
-    pub fn new(repeat_count: usize) -> Self {
-        Self {
-            repeat_count,
-            config: Default::default(),
-        }
-    }
-
-    pub fn set_additional_data(mut self, config: T) -> Self {
-        self.config = config;
-
-        self
-    }
-
-    pub fn get_repeat_count(&self) -> usize {
-        self.repeat_count
-    }
-
-    pub fn num_bits_field(&self) -> usize {
-        let ri = self.get_repeat_count();
-        let bi = <T as TFormType>::BITS_SIZE;
-
-        ri * bi
+        (n_elems as usize, byte_offset as usize)
     }
 }
+
 
 #[derive(PartialEq, Serialize, Clone, Copy, Debug)]
 pub enum TFormBinaryTableType {
-    L(TFormBinaryTable<L>), // Logical
-    X(TFormBinaryTable<X>), // Bit
-    B(TFormBinaryTable<B>), // Unsigned byte
-    I(TFormBinaryTable<I>), // 16-bit integer
-    J(TFormBinaryTable<J>), // 32-bit integer
-    K(TFormBinaryTable<K>), // 64-bit integer
-    A(TFormBinaryTable<A>), // Character
-    E(TFormBinaryTable<E>), // Single-precision floating point
-    D(TFormBinaryTable<D>), // Double-precision floating point
-    C(TFormBinaryTable<C>), // Single-precision complex
-    M(TFormBinaryTable<M>), // Double-precision complex
-    P(TFormBinaryTable<P>), // Array Descriptor (32-bit)
-    Q(TFormBinaryTable<Q>), // Array Descriptor (64-bit)
+    /// Logical
+    L {
+        repeat_count: usize,
+    },
+    // Bit
+    X {
+        repeat_count: usize,
+    },
+    // Unsigned byte
+    B {
+        repeat_count: usize,
+    },
+    // 16-bit integer
+    I {
+        repeat_count: usize,
+    },
+    // 32-bit integer
+    J {
+        repeat_count: usize,
+    },
+    // 64-bit integer
+    K {
+        repeat_count: usize
+    },
+    // Character
+    A {
+        repeat_count: usize
+    },
+    // Single-precision floating point
+    E {
+        repeat_count: usize
+    },
+    // Double-precision floating point
+    D {
+        repeat_count: usize,
+    },
+    // Single-precision complex
+    C {
+        repeat_count: usize
+    },
+    // Double-precision complex
+    M {
+        repeat_count: usize
+    },
+    // Array Descriptor (32-bit) 
+    P {
+        /// number of bytes per element
+        t_byte_size: u64,
+        /// max number of elements of type t
+        e_max: u64,
+        /// the type
+        ty: char,
+    },
+    // Array Descriptor (64-bit)
+    Q {
+        /// number of bytes per element
+        t_byte_size: u64,
+        /// max number of elements of type t
+        e_max: u64,
+        /// the type
+        ty: char,
+    }
 }
 
 impl TFormBinaryTableType {
     pub(crate) fn num_bits_field(&self) -> usize {
         match self {
-            TFormBinaryTableType::L(tform) => tform.num_bits_field(), // Logical
-            TFormBinaryTableType::X(tform) => tform.num_bits_field(), // Bit
-            TFormBinaryTableType::B(tform) => tform.num_bits_field(), // Unsigned byte
-            TFormBinaryTableType::I(tform) => tform.num_bits_field(), // 16-bit integer
-            TFormBinaryTableType::J(tform) => tform.num_bits_field(), // 32-bit integer
-            TFormBinaryTableType::K(tform) => tform.num_bits_field(), // 64-bit integer
-            TFormBinaryTableType::A(tform) => tform.num_bits_field(), // Character
-            TFormBinaryTableType::E(tform) => tform.num_bits_field(), // Single-precision floating point
-            TFormBinaryTableType::D(tform) => tform.num_bits_field(), // Double-precision floating point
-            TFormBinaryTableType::C(tform) => tform.num_bits_field(), // Single-precision complex
-            TFormBinaryTableType::M(tform) => tform.num_bits_field(), // Double-precision complex
-            TFormBinaryTableType::P(tform) => tform.num_bits_field(), // Array Descriptor (32-bit)
-            TFormBinaryTableType::Q(tform) => tform.num_bits_field(), // Array Descriptor (64-bit)
+            TFormBinaryTableType::L { repeat_count } => repeat_count * L::BITS_SIZE, // Logical
+            TFormBinaryTableType::X { repeat_count } => repeat_count * X::BITS_SIZE, // Bit
+            TFormBinaryTableType::B { repeat_count } => repeat_count * B::BITS_SIZE, // Unsigned byte
+            TFormBinaryTableType::I { repeat_count } => repeat_count * I::BITS_SIZE, // 16-bit integer
+            TFormBinaryTableType::J { repeat_count } => repeat_count * J::BITS_SIZE, // 32-bit integer
+            TFormBinaryTableType::K { repeat_count } => repeat_count * K::BITS_SIZE, // 64-bit integer
+            TFormBinaryTableType::A { repeat_count } => repeat_count * A::BITS_SIZE, // Character
+            TFormBinaryTableType::E { repeat_count } => repeat_count * E::BITS_SIZE, // Single-precision floating point
+            TFormBinaryTableType::D { repeat_count } => repeat_count * D::BITS_SIZE, // Double-precision floating point
+            TFormBinaryTableType::C { repeat_count } => repeat_count * C::BITS_SIZE, // Single-precision complex
+            TFormBinaryTableType::M { repeat_count } => repeat_count * M::BITS_SIZE, // Double-precision complex
+            TFormBinaryTableType::P { .. } => P::BITS_SIZE,                                  // Array Descriptor (32-bit)
+            TFormBinaryTableType::Q { .. } => Q::BITS_SIZE,                                  // Array Descriptor (64-bit)
         }
     }
 
@@ -648,7 +702,7 @@ impl TFormBinaryTableType {
 
 #[cfg(test)]
 mod tests {
-    use super::{BinTable, TFormBinaryTable, TFormBinaryTableType};
+    use super::{BinTable, TFormBinaryTableType};
     use crate::{
         hdu::{header::Bitpix, HDU}, FITSFile,
     };
@@ -690,15 +744,15 @@ mod tests {
                 naxis2: 1,
                 tfields: 9,
                 tforms: vec![
-                    TFormBinaryTableType::A(TFormBinaryTable::new(5)),
-                    TFormBinaryTableType::I(TFormBinaryTable::new(1)),
-                    TFormBinaryTableType::E(TFormBinaryTable::new(1)),
-                    TFormBinaryTableType::E(TFormBinaryTable::new(1)),
-                    TFormBinaryTableType::E(TFormBinaryTable::new(640)),
-                    TFormBinaryTableType::E(TFormBinaryTable::new(640)),
-                    TFormBinaryTableType::E(TFormBinaryTable::new(640)),
-                    TFormBinaryTableType::I(TFormBinaryTable::new(640)),
-                    TFormBinaryTableType::E(TFormBinaryTable::new(640)),
+                    TFormBinaryTableType::A { repeat_count: 5 },
+                    TFormBinaryTableType::I { repeat_count: 1 },
+                    TFormBinaryTableType::E { repeat_count: 1 },
+                    TFormBinaryTableType::E { repeat_count: 1 },
+                    TFormBinaryTableType::E { repeat_count: 640 },
+                    TFormBinaryTableType::E { repeat_count: 640 },
+                    TFormBinaryTableType::E { repeat_count: 640 },
+                    TFormBinaryTableType::I { repeat_count: 640 },
+                    TFormBinaryTableType::E { repeat_count: 640 },
                 ],
                 theap: 11535,
                 // Should be 0
