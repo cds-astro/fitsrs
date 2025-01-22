@@ -212,9 +212,15 @@ where
 
     /// Get the value of a card, returns `None` if the card is not
     /// found or is not a value card.
-    pub fn get(&self, key: &[u8; 8]) -> Option<&Value> {
+    pub fn get(&self, key: &Keyword) -> Option<&Value> {
         let kw = String::from_utf8_lossy(key);
         self.values.get(kw.trim())
+    }
+
+    /// Get the value for a value card, returns `None` if the keyword is not
+    /// found or if the card is not a value card.
+    pub fn value(&self, keyword: &str) -> Option<&Value> {
+        self.values.get(keyword)
     }
 
     /// Get the value a specific card and try to parse the value
@@ -247,7 +253,13 @@ where
     /// [cards](Card) using the `HISTORY` keyword.
     ///
     pub fn history(&self) -> impl Iterator<Item = &String> + use<'_, X> {
-        self.filter_string_values_by_kw("HISTORY")
+        self.cards.iter().filter_map(move |c|
+            if let Card::History(string) = c {
+                Some(string)
+            } else {
+                None
+            }
+        )
     }
 
     /// Return all header level comments, i.e. [cards](Card) using the `COMMENT`
@@ -255,25 +267,13 @@ where
     ///
     /// Note that comments on [Card::Value] cards are part of the [value](Value).
     pub fn comments(&self) -> impl Iterator<Item = &String> + use<'_, X> {
-        self.filter_string_values_by_kw("COMMENT")
-    }
-
-    fn filter_string_values_by_kw<'a>(
-        &'a self,
-        filter: &'a str,
-    ) -> impl Iterator<Item = &'a String> + use<'a, X> {
-        self.cards.iter().filter_map(move |c| {
-            if let Card::Value {
-                name,
-                value: Value::String { value, .. },
-            } = c
-            {
-                if name == filter {
-                    return Some(value);
-                }
+        self.cards.iter().filter_map(move |c|
+            if let Card::Comment(string) = c {
+                Some(string)
+            } else {
+                None
             }
-            None
-        })
+        )
     }
 }
 
@@ -387,17 +387,26 @@ fn parse_gcount_card(card: &[u8; 80]) -> Result<usize, Error> {
 #[cfg(test)]
 mod tests {
 
+    use crate::card::Card;
+    use crate::error::Error;
     use crate::fits::Fits;
     use crate::hdu::HDU;
 
     use core::panic;
     use std::collections::VecDeque;
     use std::fs::File;
+
     use std::io::Cursor;
     use std::io::Read;
 
     use super::check_card_keyword;
+    // use Iterator;
+
+    use std::iter::Iterator;
+    use super::CardBuf;
+
     use super::Value;
+
 
     #[test]
     fn card_keyword() {
@@ -407,6 +416,92 @@ mod tests {
         } else {
             panic!("could not find extension in card")
         }
+    }
+
+    #[test]
+    fn primary_hdu_with_no_data() -> Result<(), Error> {
+        let deck = [
+            b"SIMPLE  =                    T / this is a fake FITS file                       ",
+            b"BITPIX  =                    8 / byte sized numbers                             ",
+            b"NAXIS   =                    0 / no data arrays                                 ",
+            b"COMMENT some contextual comment                                                 ",
+            b"COMMENT ... over two lines                                                      ",
+            b"HISTORY this was processed manually using vscode                                ",
+            b"COMMENT comment on the history?                                                 ",
+            b"HISTORY did some more processing...                                             ",
+            b"END                            / this is the END!!                              "];
+        let data = mock_fits_data(deck);
+        let reader = Cursor::new(data);
+        let mut fits = Fits::from_reader(reader);
+
+        let hdu = fits
+            .next()
+            .expect("Should contain a primary HDU")
+            .unwrap()
+            ;
+        assert!(matches!(hdu, HDU::Primary(_)));
+        if let HDU::Primary(hdu) = hdu {
+            let mut cards = hdu.get_header().cards();
+            // FIXME ensure that SIMPLE is added to header cards
+            // assert_eq!(cards.next(), Some(&Card::Value {
+            //     name: "SIMPLE".to_owned(),
+            //     value: Value::Logical {
+            //         value: true,
+            //         comment: Some(" this is a FITS file".to_owned())
+            //     }
+            // }));
+            // FIXME ensure that BITPIX is added to header cards
+            // assert_eq!(cards.next(), Some(&Card::Value {
+            //     name: "BITPIX".to_owned(),
+            //     value: Value::Integer {
+            //         value: 8,
+            //         comment: Some(" byte sized numbers".to_owned())
+            //     }
+            // }));
+            assert_eq!(cards.next(), Some(&Card::Value {
+                name: "NAXIS".to_owned(),
+                value: Value::Integer {
+                    value: 0,
+                    // FIXME ensure that the a NAXIS comment is preserved
+                    // comment: Some(" no data arrays".to_owned())
+                    comment: None
+                }
+            }));
+            assert_eq!(cards.next(), Some(&Card::Comment("some contextual comment".to_owned())));
+            assert_eq!(cards.next(), Some(&Card::Comment("... over two lines".to_owned())));
+            assert_eq!(cards.next(), Some(&Card::History("this was processed manually using vscode".to_owned())));
+            assert_eq!(cards.next(), Some(&Card::Comment("comment on the history?".to_owned())));
+            assert_eq!(cards.next(), Some(&Card::History("did some more processing...".to_owned())));
+            assert_eq!(cards.next(), Some(&Card::End));
+            assert_eq!(cards.next(), None);
+
+            let header = hdu.get_header();
+
+            let mut comments = header.comments();
+            assert_eq!(comments.next(), Some(&"some contextual comment".to_string()));
+            assert_eq!(comments.next(), Some(&"... over two lines".to_string()));
+            assert_eq!(comments.next(), Some(&"comment on the history?".to_string()));
+            assert_eq!(comments.next(), None);
+
+            let mut history = header.history();
+            assert_eq!(history.next(), Some(&"this was processed manually using vscode".to_string()));
+            assert_eq!(history.next(), Some(&"did some more processing...".to_string()));
+            assert_eq!(history.next(), None);
+
+        }
+
+        Ok(())
+    }
+
+    /// panics if N > 36
+    fn mock_fits_data<const N: usize>(cards: [&CardBuf; N]) -> [u8; 2880] {
+        let mut data = [b' '; 2880];
+        let mut cursor = 0;
+        for card in cards {
+            data[cursor..cursor+80].copy_from_slice(card);
+            cursor += 80;
+        }
+        data
     }
 
     #[test]

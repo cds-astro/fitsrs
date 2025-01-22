@@ -22,6 +22,7 @@ pub enum Card {
         comment: Option<String>,
     },
     // FITS extension string value, cf FITSv4, section 4.2.1.1
+    // FIXME ensure that the an XTENSION comment is preserved
     Extension([u8; 8]),
     /// A file comment where the keyword field is `COMMENT` or an empty string.
     Comment(String),
@@ -30,6 +31,7 @@ pub enum Card {
     /// An empty line providing header space for adding new cards or used for aesthetic purposes.
     Space,
     /// End marker.
+    // FIXME ensure that the an END comment is preserved
     End,
     /// A card with an undefined FITS structure, possibly in violation with the FITS standard.
     Undefined(String),
@@ -355,7 +357,7 @@ fn parse_comment_text(buf: &[u8; 80]) -> Result<String, Error> {
 /// FITSv4, section 4.4.2.4. Commentary keywords, last two paragraphs.
 fn parse_empty_keyword_card(buf: &[u8; 80]) -> Result<Card, Error> {
     // FIXME handle valid ASCII but still non FITS characters \t, \n etc
-    // TODO Add unit test that tests for replacment character in this case
+    // TODO Add unit test that tests for replacement character in this case
     let c = std::str::from_utf8(buf[8..].trim_ascii_end())?;
     if c.is_empty() {
         Ok(Card::Space)
