@@ -1,12 +1,4 @@
 use byteorder::BigEndian;
-#[allow(unused_imports)]
-use serde::Serialize;
-
-#[allow(unused_imports)]
-use super::{iter, Data};
-#[allow(unused_imports)]
-use super::{stream, AsyncDataBufRead};
-
 
 pub mod buf;
 pub mod cursor;
@@ -46,30 +38,133 @@ pub enum FieldTy<'a> {
 
 pub type Row<'a> = Vec<FieldTy<'a>>;
 use flate2::read::GzDecoder;
+
+/// A type that can store a borrowed or owned slice of bytes
+pub type Bytes<'a> = Cow<'a, [u8]>;
+/// A type which is a reader over borrowed or owned bytes
+type BytesReader<'a> = Cursor<Bytes<'a>>;
+/// A Gzip1 decoder reader over a byte reader
+type GzBytesReader<'a> = GzDecoder<BytesReader<'a>>;
+
+/// An iterator generating T typed values by reading raw bytes in the big endian scheme.
+#[derive(Debug)]
+pub struct BigEndianByteIt<'a, T>(BigEndianIt<BytesReader<'a>, T>);
+impl<'a, T> From<Bytes<'a>> for BigEndianByteIt<'a, T> {
+    fn from(value: Bytes<'a>) -> Self {
+        Self(BigEndianIt::new(Cursor::new(value)))
+    }
+}
+
+impl<'a, T> Iterator for BigEndianByteIt<'a, T>
+where
+    BigEndianIt<BytesReader<'a>, T>: Iterator
+{
+    type Item = <BigEndianIt<BytesReader<'a>, T> as Iterator>::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next()
+    }
+}
+
+/// An iterator generating T typed values by reading gzipped bytes and converting them in the BE scheme.
+#[derive(Debug)]
+pub struct BigEndianGzByteIt<'a, T>(CastIt<BigEndianIt<GzBytesReader<'a>, i32>, T>);
+impl<'a, T> From<Bytes<'a>> for BigEndianGzByteIt<'a, T> {
+    fn from(value: Bytes<'a>) -> Self {
+        Self(CastIt::new(BigEndianIt::new(GzDecoder::new(Cursor::new(value)))))
+    }
+}
+
+impl<'a, T> Iterator for BigEndianGzByteIt<'a, T>
+where
+    CastIt<BigEndianIt<GzBytesReader<'a>, i32>, T>: Iterator
+{
+    type Item = <CastIt<BigEndianIt<GzBytesReader<'a>, i32>, T> as Iterator>::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next()
+    }
+}
+
+
 #[derive(Debug)]
 pub enum VariableArray<'a> {
-    /// Slice for in-memory readers (cursors), heap allocated array for bufreaders
-    U8(Cow<'a, [u8]>),
+    /// Iterator that will return bytes and decode the data
+    /// for tile compressed images
+    U8(EitherIt<
+        BigEndianByteIt<'a, u8>,
+        BigEndianGzByteIt<'a, u8>,
+        u8
+    >),
+    /// Iterator that will return shorts and decode the data
+    /// for tile compressed images
+    I16(EitherIt<
+        BigEndianByteIt<'a, i16>,
+        BigEndianGzByteIt<'a, i16>,
+        i16
+    >),
+    /// Iterator that will return integers and decode the data
+    /// for tile compressed images
+    I32(EitherIt<
+        BigEndianByteIt<'a, i32>,
+        BigEndianGzByteIt<'a, i32>,
+        i32
+    >),
+    I64(BigEndianByteIt<'a, i64>),
+    F32(BigEndianByteIt<'a, f32>),
+    F64(BigEndianByteIt<'a, f64>),
+}
 
-    /// Iterator over the array converting the bytes to values
-    I16(BigEndianIt<Cursor<Cow<'a, [u8]>>, i16>),
-    I32(BigEndianIt<Cursor<Cow<'a, [u8]>>, i32>),
-    I64(BigEndianIt<Cursor<Cow<'a, [u8]>>, i64>),
-    F32(BigEndianIt<Cursor<Cow<'a, [u8]>>, f32>),
-    F64(BigEndianIt<Cursor<Cow<'a, [u8]>>, f64>),
+use std::fmt::Debug;
+#[derive(Debug)]
+pub enum EitherIt<I, J, T>
+where
+    I: IntoIterator<Item = T>,
+    <I as IntoIterator>::IntoIter: Debug,
+    J: IntoIterator<Item = T>,
+    <J as IntoIterator>::IntoIter: Debug,
+{
+    I {
+        i: <I as IntoIterator>::IntoIter,
+        _t: std::marker::PhantomData<T>
+    },
+    J {
+        j: <J as IntoIterator>::IntoIter,
+        _t: std::marker::PhantomData<T>
+    }
+}
 
-    /// GZIP compressed tile images
-    GZIP1_U8(
-        CastIt<
-            BigEndianIt<GzDecoder<Cursor<Cow<'a, [u8]>>>, i32>,
-            u8
-        >),
-    GZIP1_I16(
-        CastIt<
-            BigEndianIt<GzDecoder<Cursor<Cow<'a, [u8]>>>, i32>,
-            i16
-        >),
-    GZIP1_I32(BigEndianIt<GzDecoder<Cursor<Cow<'a, [u8]>>>, i32>),
+impl<I, J, T> EitherIt<I, J, T>
+where
+    I: IntoIterator<Item = T>,
+    <I as IntoIterator>::IntoIter: Debug,
+    J: IntoIterator<Item = T>,
+    <J as IntoIterator>::IntoIter: Debug,
+{
+    pub(crate) fn first(it1: I) -> Self {
+        EitherIt::I { i: it1.into_iter(), _t: std::marker::PhantomData }
+    }
+
+    pub(crate) fn second(it2: J) -> Self {
+        EitherIt::J { j: it2.into_iter(), _t: std::marker::PhantomData }
+    }
+}
+
+impl<I, J, T> Iterator for EitherIt<I, J, T>
+where
+    I: IntoIterator<Item = T>,
+    <I as IntoIterator>::IntoIter: Debug,
+    J: IntoIterator<Item = T>,
+    <J as IntoIterator>::IntoIter: Debug,
+{
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            EitherIt::I { i, .. } => i.next(),
+            EitherIt::J { j, .. } => j.next()
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -106,6 +201,17 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         self.it.next().map(|v| v as i16)
+    }
+}
+
+impl<I> Iterator for CastIt<I, i32>
+where
+    I: Iterator<Item = i32>
+{
+    type Item = i32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.it.next()
     }
 }
 

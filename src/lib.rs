@@ -56,9 +56,8 @@ mod tests {
     use crate::hdu::data::{DataIter, DataStream};
     use crate::hdu::AsyncHDU;
     use crate::FITSFile;
-    //use crate::hdu::data::InMemData;
-    use crate::hdu::data::Data;
-    //use crate::hdu::extension::AsyncXtensionHDU;
+
+    use crate::hdu::data::iter::Data;
     use crate::hdu::header::extension::Xtension;
     use crate::hdu::header::Bitpix;
 
@@ -156,8 +155,8 @@ mod tests {
             let num_pixels = header.get_xtension().get_naxisn(1).unwrap()
                 * header.get_xtension().get_naxisn(2).unwrap();
             match hdu_list.get_data(hdu) {
-                Data::F32(slice) => {
-                    assert!(slice.len() as u64 == num_pixels);
+                Data::F32(it) => {
+                    assert!(it.collect::<Vec<_>>().len() as u64 == num_pixels);
                 }
                 _ => unreachable!(),
             }
@@ -183,7 +182,7 @@ mod tests {
                 * header.get_xtension().get_naxisn(2).unwrap();
             match hdu_list.get_data(hdu) {
                 Data::I16(data) => {
-                    assert!(data.len() as u64 == num_pixels)
+                    assert!(data.collect::<Vec<_>>().len() as u64 == num_pixels)
                 }
                 _ => unreachable!(),
             }
@@ -300,7 +299,7 @@ mod tests {
             let naxis2 = *xtension.get_naxisn(2).unwrap();
             match hdu_list.get_data(hdu) {
                 Data::F32(data) => {
-                    assert_eq!(data.len(), (naxis1 * naxis2) as usize);
+                    assert_eq!(data.collect::<Vec<_>>().len(), (naxis1 * naxis2) as usize);
                 }
                 _ => unreachable!(),
             }
@@ -339,6 +338,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature="tile-compressed-image")]
     #[test_case("samples/fits.gsfc.nasa.gov/m13_gzip.fits")]
     fn open_tile_compressed_image(filename: &str) {
         use std::fs::File;
@@ -356,7 +356,7 @@ mod tests {
                     let pixels = hdu_list.get_data(hdu)
                         .flat_map(|row| { 
                             match row.into_iter().nth(0).unwrap() {
-                                FieldTy::VariableArray(VariableArray::GZIP1_I16(r)) => {
+                                FieldTy::VariableArray(VariableArray::I16(r)) => {
                                     r
                                 }
                                 _ => unimplemented!()
@@ -403,11 +403,11 @@ mod tests {
                             let data = hdu_list.get_data(hdu);
                             match data {
                                 Data::U8(mem) => assert_eq!(num_pixels, mem.len()),
-                                Data::I16(mem) => assert_eq!(num_pixels, mem.len()),
-                                Data::I32(mem) => assert_eq!(num_pixels, mem.len()),
-                                Data::I64(mem) => assert_eq!(num_pixels, mem.len()),
-                                Data::F32(mem) => assert_eq!(num_pixels, mem.len()),
-                                Data::F64(mem) => assert_eq!(num_pixels, mem.len()),
+                                Data::I16(it) => assert_eq!(num_pixels, it.collect::<Vec<_>>().len()),
+                                Data::I32(it) => assert_eq!(num_pixels, it.collect::<Vec<_>>().len()),
+                                Data::I64(it) => assert_eq!(num_pixels, it.collect::<Vec<_>>().len()),
+                                Data::F32(it) => assert_eq!(num_pixels, it.collect::<Vec<_>>().len()),
+                                Data::F64(it) => assert_eq!(num_pixels, it.collect::<Vec<_>>().len()),
                             }
                         }
                         _ => (),

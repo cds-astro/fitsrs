@@ -1,6 +1,9 @@
 use std::fmt::Debug;
-use crate::hdu::data::{Data, AsyncDataBufRead, stream::St};
+use crate::hdu::data::{AsyncDataBufRead, stream::St};
+use crate::hdu::header::Bitpix;
 use crate::hdu::header::extension::bintable::{TFormBinaryTable, P};
+#[cfg(feature="tile-compressed-image")]
+use crate::hdu::header::extension::bintable::ZCmpType;
 use byteorder::{BigEndian, ByteOrder};
 use crate::error::Error;
 use crate::hdu::header::extension::bintable::{BinTable, TFormBinaryTableType};
@@ -9,7 +12,7 @@ use crate::hdu::header::extension::Xtension;
 
 use std::io::{BufReader, Cursor};
 use std::io::Read;
-use super::{FieldTy, VariableArray, BigEndianIt};
+use super::{FieldTy, VariableArray, BigEndianIt, EitherIt};
 use std::borrow::Cow;
 
 impl<'a, R> DataRead<'a, BinTable> for BufReader<R>
@@ -125,7 +128,7 @@ where
     R: Read + Seek + 'a,
 {
     // Return a vec of fields because to take into account the repeat count value for that field
-    type Item = Result<Row<'a>, Error>;
+    type Item = Row<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let row_bytes = self.row_bytes_it.next()?;
@@ -139,60 +142,58 @@ where
             let field_bytes = &row_bytes[off_bytes_in_row..end_off_byte];
 
             let field = match tform {
-                TFormBinaryTableType::L(_) => Ok(FieldTy::Logical(
+                TFormBinaryTableType::L(_) => FieldTy::Logical(
                     field_bytes
                         .iter()
                         .map(|v| *v != 0)
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
-                )),
+                ),
                 TFormBinaryTableType::B(_) => {
-                    Ok(FieldTy::UnsignedByte(Cow::Owned(field_bytes.to_vec())))
+                    FieldTy::UnsignedByte(Cow::Owned(field_bytes.to_vec()))
                 }
                 TFormBinaryTableType::A(_) => {
-                    Ok(FieldTy::Character(Cow::Owned(field_bytes.to_vec())))
+                    FieldTy::Character(Cow::Owned(field_bytes.to_vec()))
                 }
-                TFormBinaryTableType::X(x) => Ok(FieldTy::Bit {
+                TFormBinaryTableType::X(x) => FieldTy::Bit {
                     bytes: Cow::Owned(field_bytes.to_vec()),
                     num_bits: x.num_bits_field(),
-                }),
-                TFormBinaryTableType::I(_) => Ok(FieldTy::Short(
+                },
+                TFormBinaryTableType::I(_) => FieldTy::Short(
                     field_bytes
                         .chunks(2)
                         .map(|v| BigEndian::read_i16(v))
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
-                )),
-                TFormBinaryTableType::J(_) => Ok(FieldTy::Integer(
+                ),
+                TFormBinaryTableType::J(_) => FieldTy::Integer(
                     field_bytes
                         .chunks(4)
                         .map(|v| BigEndian::read_i32(v))
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
-                )),
-                TFormBinaryTableType::K(_) => Ok(FieldTy::Long(
+                ),
+                TFormBinaryTableType::K(_) => FieldTy::Long(
                     field_bytes
                         .chunks(8)
                         .map(|v| BigEndian::read_i64(v))
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
-                )),
-                TFormBinaryTableType::E(_) => Ok(FieldTy::Float(
+                ),
+                TFormBinaryTableType::E(_) => FieldTy::Float(
                     field_bytes
                         .chunks(4)
                         .map(|v| BigEndian::read_f32(v))
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
-                )),
-                TFormBinaryTableType::D(_) => Ok(FieldTy::Double(
+                ),
+                TFormBinaryTableType::D(_) => FieldTy::Double(
                     field_bytes
                         .chunks(8)
                         .map(|v| BigEndian::read_f64(v))
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
-                )),
-                TFormBinaryTableType::C(_) => Ok(FieldTy::ComplexFloat(Box::new([]))),
-                TFormBinaryTableType::M(_) => Ok(FieldTy::ComplexDouble(Box::new([]))),
+                ),
                 TFormBinaryTableType::P(TFormBinaryTable::<P> { config, .. }) => {
                     // get the number of elements in the array
                     let n_elems = BigEndian::read_u32(&field_bytes[0..4]);
@@ -213,37 +214,58 @@ where
                     let _ = self.row_bytes_it.reader.seek_relative(off);
                     let num_bytes = config.t_byte_size * (n_elems as usize);
                     let mut array_raw_bytes = vec![0_u8; num_bytes];
-                    match self.row_bytes_it.reader.read_exact(&mut array_raw_bytes) {
-                        Err(e) => return Some(Err(e.into())),
-                        Ok(()) => {}
-                    }
+                    self.row_bytes_it.reader.read_exact(&mut array_raw_bytes).ok()?;
                     // go back to the row
                     let _ = self.row_bytes_it.reader.seek_relative(-off - (num_bytes as i64));
-                    // once we have the bytes, convert it accordingly
-                    Ok(FieldTy::VariableArray(match config.ty {
-                        'B' => VariableArray::U8(Cow::Owned(array_raw_bytes)),
-                        'I' => VariableArray::I16(BigEndianIt::new(Cursor::new(Cow::Owned(array_raw_bytes)))),
-                        'J' => VariableArray::I32(BigEndianIt::new(Cursor::new(Cow::Owned(array_raw_bytes)))),
-                        'K' => VariableArray::I64(BigEndianIt::new(Cursor::new(Cow::Owned(array_raw_bytes)))),
-                        'E' => VariableArray::F32(BigEndianIt::new(Cursor::new(Cow::Owned(array_raw_bytes)))),
-                        'D' => VariableArray::F64(BigEndianIt::new(Cursor::new(Cow::Owned(array_raw_bytes)))),
-                        _ => VariableArray::U8(Cow::Borrowed(b"Value not parsed")),
-                    }))
-                }
-                TFormBinaryTableType::Q(_) => {
-                    unimplemented!()
-                }
+
+                    #[cfg(feature="tile-compressed-image")]
+                    {
+                        // TILE compressed convention case. More details here: https://fits.gsfc.nasa.gov/registry/tilecompression.html
+                        if let Some(z_image) = &self.ctx.z_image {
+                            let tile_raw_bytes = array_raw_bytes;
+
+                            let field = match (z_image.z_cmp_type, z_image.z_bitpix) {
+                                // It can only store integer typed values i.e. bytes, short or integers
+                                (ZCmpType::Gzip1, Bitpix::U8) => VariableArray::U8(EitherIt::second(Cow::Owned::<[u8]>(tile_raw_bytes).into())),
+                                (ZCmpType::Gzip1, Bitpix::I16) => VariableArray::I16(EitherIt::second(Cow::Owned::<[u8]>(tile_raw_bytes).into())),
+                                (ZCmpType::Gzip1, Bitpix::I32) => VariableArray::I32(EitherIt::second(Cow::Owned::<[u8]>(tile_raw_bytes).into())),
+                                // Return the slice of bytes
+                                _ => VariableArray::U8(EitherIt::first(Cow::Owned::<[u8]>(tile_raw_bytes).into()))
+                            };
+
+                            FieldTy::VariableArray(field)
+                        } else {
+                            // once we have the bytes, convert it accordingly
+                            FieldTy::VariableArray(match config.ty {
+                                'I' => VariableArray::I16(EitherIt::first(Cow::Owned::<[u8]>(array_raw_bytes).into())),
+                                'J' => VariableArray::I32(EitherIt::first(Cow::Owned::<[u8]>(array_raw_bytes).into())),
+                                'K' => VariableArray::I64(Cow::Owned::<[u8]>(array_raw_bytes).into()),
+                                'E' => VariableArray::F32(Cow::Owned::<[u8]>(array_raw_bytes).into()),
+                                'D' => VariableArray::F64(Cow::Owned::<[u8]>(array_raw_bytes).into()),
+                                _ => VariableArray::U8(EitherIt::first(Cow::Owned::<[u8]>(array_raw_bytes).into())),
+                            })
+                        }
+                    }
+                    #[cfg(not(feature="tile-compressed-image"))]
+                    {
+                        // once we have the bytes, convert it accordingly
+                        FieldTy::VariableArray(match config.ty {
+                            'I' => VariableArray::I16(EitherIt::first(Cow::Owned::<[u8]>(array_raw_bytes).into())),
+                            'J' => VariableArray::I32(EitherIt::first(Cow::Owned::<[u8]>(array_raw_bytes).into())),
+                            'K' => VariableArray::I64(Cow::Owned::<[u8]>(array_raw_bytes).into()),
+                            'E' => VariableArray::F32(Cow::Owned::<[u8]>(array_raw_bytes).into()),
+                            'D' => VariableArray::F64(Cow::Owned::<[u8]>(array_raw_bytes).into()),
+                            _ => VariableArray::U8(EitherIt::first(Cow::Owned::<[u8]>(array_raw_bytes).into())),
+                        })
+                    }
+                },
+                _ => FieldTy::UnsignedByte(Cow::Owned(field_bytes.to_vec()))
             };
 
-            match field {
-                Err(e) => return Some(Err(e)),
-                Ok(field) => {
-                    fields.push(field);
-                }
-            }
-        }
+            fields.push(field);
+        };
 
-        Some(Ok(fields))
+        Some(fields)
     }
 }
 

@@ -8,7 +8,17 @@ use crate::{
     hdu::header::{extension::image::Image, Bitpix},
 };
 
-//use super::Access;
+use super::bintable::BigEndianIt;
+
+#[derive(Debug)]
+pub enum Data<'a> {
+    U8(&'a [u8]),
+    I16(BigEndianIt<&'a [u8], i16>),
+    I32(BigEndianIt<&'a [u8], i32>),
+    I64(BigEndianIt<&'a [u8], i64>),
+    F32(BigEndianIt<&'a [u8], f32>),
+    F64(BigEndianIt<&'a [u8], f64>),
+}
 
 /// An iterator on the data array
 /// This is an enum whose content depends on the

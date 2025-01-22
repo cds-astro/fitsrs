@@ -4,8 +4,6 @@ pub mod image;
 pub mod iter;
 pub mod stream;
 
-use serde::Serialize;
-
 use std::fmt::Debug;
 
 use std::marker::Unpin;
@@ -90,23 +88,4 @@ where
             Ok(())
         }
     }
-}
-
-/// The full slice of data found in-memory
-/// This is an enum whose content depends on the
-/// bitpix value found in the header part of the HDU
-///
-/// The data part is expressed as a `DataBorrowed` structure
-/// for in-memory readers (typically for `&[u8]` or a `Cursor<AsRef<[u8]>>`) that ensures
-/// all the data fits in memory
-///
-use std::borrow::Cow;
-#[derive(Serialize, Debug, Clone)]
-pub enum Data<'a> {
-    U8(Cow<'a, [u8]>),
-    I16(Box<[i16]>),
-    I32(Box<[i32]>),
-    I64(Box<[i64]>),
-    F32(Box<[f32]>),
-    F64(Box<[f64]>),
 }

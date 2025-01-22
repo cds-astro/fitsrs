@@ -3,13 +3,12 @@ use futures::AsyncReadExt;
 use std::fmt::Debug;
 use std::io::{BufReader, Cursor, Read};
 
-use super::{iter, Data};
-use super::{stream, AsyncDataBufRead};
+use super::iter::{It, Data};
+use super::{stream::St, AsyncDataBufRead};
 
 use crate::hdu::header::extension::asciitable::AsciiTable;
 use crate::hdu::header::extension::Xtension;
 use crate::hdu::DataRead;
-use std::borrow::Cow;
 
 impl<'a, R> DataRead<'a, AsciiTable> for Cursor<R>
 where
@@ -37,7 +36,7 @@ where
 
         debug_assert!(bytes.len() >= num_pixels);
 
-        Data::U8(Cow::Borrowed(bytes))
+        Data::U8(bytes)
     }
 }
 
@@ -45,14 +44,14 @@ impl<'a, R> DataRead<'a, AsciiTable> for BufReader<R>
 where
     R: Read + Debug + 'a,
 {
-    type Data = iter::It<'a, Self, u8>;
+    type Data = It<'a, Self, u8>;
 
     fn new(
         reader: &'a mut Self,
         _ctx: &AsciiTable,
         num_remaining_bytes_in_cur_hdu: &'a mut usize,
     ) -> Self::Data {
-        iter::It::new(reader, num_remaining_bytes_in_cur_hdu)
+        It::new(reader, num_remaining_bytes_in_cur_hdu)
     }
 }
 
@@ -61,13 +60,13 @@ impl<'a, R> AsyncDataBufRead<'a, AsciiTable> for futures::io::BufReader<R>
 where
     R: AsyncReadExt + 'a + std::marker::Unpin,
 {
-    type Data = stream::St<'a, Self, u8>;
+    type Data = St<'a, Self, u8>;
 
     fn prepare_data_reading(
         _ctx: &AsciiTable,
         num_remaining_bytes_in_cur_hdu: &'a mut usize,
         reader: &'a mut Self,
     ) -> Self::Data {
-        stream::St::new(reader, num_remaining_bytes_in_cur_hdu)
+        St::new(reader, num_remaining_bytes_in_cur_hdu)
     }
 }

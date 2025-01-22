@@ -106,19 +106,18 @@ pub(crate) struct TileCompressedImage {
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
 enum ZQuantiz {
-    NO_DITHER,
-    SUBTRACTIVE_DITHER_1,
-    SUBTRACTIVE_DITHER_2,
+    NoDither,
+    SubtractiveDither1,
+    SubtractiveDither2,
 }
 
 #[derive(Debug, PartialEq, Serialize, Clone, Copy)]
 pub(crate) enum ZCmpType {
-    GZIP_1,
-    GZIP_2,
-    RICE_1,
-    RICE_ONE,
+    Gzip1,
+    Gzip2,
+    Rice,
     PLI0_1,
-    HCOMPRESS_1
+    Hcompress1
 }
 
 #[async_trait(?Send)]
@@ -295,9 +294,12 @@ impl Xtension for BinTable {
             .filter_map(|idx_field| {
                 let idx_field = idx_field + 1;
                 // discard the tform if it was not found and raise a warning
-                let tform = if let Some(Value::String{value, ..}) = values.get(&format!("TFORM{idx_field}")) {
+                let tform_kw = format!("TFORM{idx_field}");
+                let tform = if let Some(Value::String{value, ..}) = values.get(&tform_kw) {
                     Some(*value)
                 } else {
+                    warn!("{} has not been found. It will be discarded", &tform_kw);
+
                     None
                 }?;
                 // try to find a ttype (optional keyword)
@@ -703,10 +705,6 @@ mod tests {
                 pcount: 0,
                 // Should be 1
                 gcount: 1,
-<<<<<<< HEAD
-=======
-                #[cfg(feature="tile-compressed-image")]
->>>>>>> 19e1d54 (wip return iterator for variable array + TCI: GZIP)
                 z_image: None,
             },
         );
