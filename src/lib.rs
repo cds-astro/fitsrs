@@ -223,14 +223,8 @@ mod tests {
     #[test_case("samples/misc/skv1678175163788.fits", false)]
     #[test_case("samples/misc/SN2923fxjA.fits", false)]
     fn test_fits_opening(filename: &str, corrupted: bool) {
-        use std::fs::File;
+        let hdu_list = FITSFile::open(filename).expect("Can find fits file");
 
-        let mut f = File::open(filename).unwrap();
-        let mut buf = Vec::new();
-        f.read_to_end(&mut buf).unwrap();
-
-        let reader = Cursor::new(&buf[..]);
-        let hdu_list = Fits::from_reader(reader);
         let mut correctly_opened = true;
         for hdu in hdu_list {
             match hdu {
@@ -242,6 +236,8 @@ mod tests {
         }
 
         assert_eq!(!corrupted, correctly_opened);
+
+
     }
 
     #[test]

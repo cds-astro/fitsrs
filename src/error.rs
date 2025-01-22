@@ -1,3 +1,4 @@
+use crate::card::Value;
 
 quick_error! {
     #[derive(Debug)]
@@ -21,8 +22,8 @@ quick_error! {
         FailFindingKeyword(keyword: String) {
             display("{} keyword has not been found.", keyword)
         }
-        ValueBadParsing {
-            display("A value could not be parsed correctly")
+        ValueBadParsing(value: Value) {
+            display("{:?} value could not be parsed correctly", value)
         }
         FailTypeCardParsing(card: String, t: String) {
             display("{} card is not of type {}", card, t)
