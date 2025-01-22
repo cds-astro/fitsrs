@@ -236,8 +236,6 @@ mod tests {
         }
 
         assert_eq!(!corrupted, correctly_opened);
-
-
     }
 
     #[test]

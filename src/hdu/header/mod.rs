@@ -128,7 +128,7 @@ pub enum Bitpix {
 }
 
 /// The header part of an [HDU].
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct Header<X> {
     /// All cards in the order they appear in the header.
     cards: Vec<Card>,
