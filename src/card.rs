@@ -23,7 +23,7 @@ pub enum Card {
     },
     // FITS extension string value, cf FITSv4, section 4.2.1.1
     // FIXME ensure that the an XTENSION comment is preserved
-    Extension(XtensionType),
+    Xtension(XtensionType),
     /// A file comment where the keyword field is `COMMENT` or an empty string.
     Comment(String),
     /// A log line of the operations used for processing the file.
@@ -145,7 +145,7 @@ impl TryFrom<&CardBuf> for Card {
             "COMMENT" => Ok(Card::Comment(parse_comment_text(buf)?)),
             "HISTORY" => Ok(Card::History(parse_comment_text(buf)?)),
             "CONTINUE" => parse_continuation(buf),
-            "XTENSION" => Ok(Card::Extension(parse_extension(buf)?)),
+            "XTENSION" => Ok(Card::Xtension(parse_extension(buf)?)),
             "END" => Ok(Card::End),
             _ => {
                 if b"= " == &buf[8..10] {
@@ -156,7 +156,7 @@ impl TryFrom<&CardBuf> for Card {
                 } else {
                     Ok(Card::Undefined(String::from_utf8_lossy(buf).into_owned()))
                 }
-            },
+            }
         }
     }
 }
@@ -166,7 +166,9 @@ fn parse_extension(buf: &[u8; 80]) -> Result<XtensionType, Error> {
         b"IMAGE   " | b"IUEIMAGE" => Ok(XtensionType::Image),
         b"TABLE   " => Ok(XtensionType::AsciiTable),
         b"BINTABLE" => Ok(XtensionType::BinTable),
-        x => Err(Error::NotSupportedXtensionType(String::from_utf8_lossy(x).into_owned())),
+        x => Err(Error::NotSupportedXtensionType(
+            String::from_utf8_lossy(x).into_owned(),
+        )),
     }
 }
 
@@ -309,7 +311,8 @@ pub fn split_value_and_comment(buf: &[u8]) -> Result<(String, Option<String>), E
                     (false, true) => unreachable!("there must not be a toc without a tic"), // algorithmic failure
                 }
             }
-            ' '..='~' => { // 0x20..=0x7E, FITSv4, section 4.2.1.1
+            ' '..='~' => {
+                // 0x20..=0x7E, FITSv4, section 4.2.1.1
                 // valid FITS characters, add these even if outside string
                 if toc {
                     tic = false;
@@ -422,7 +425,7 @@ pub enum Value {
     /// UTF8 string with replacement characters.
     ///
     /// FITSv4, section 4.1.2.3. Value/comment (Bytes 11 through 80)
-    Invalid(String)
+    Invalid(String),
 }
 
 impl Value {
@@ -738,7 +741,7 @@ mod tests {
         let r = b"XTENSION= 'TABLE   '                                                            ";
         assert_eq!(
             Card::try_from(r),
-            Ok(Card::Extension(XtensionType::AsciiTable))
+            Ok(Card::Xtension(XtensionType::AsciiTable))
         );
     }
 

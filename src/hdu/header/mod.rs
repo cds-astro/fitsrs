@@ -297,7 +297,7 @@ fn process_cards(cards: &[Card]) -> Result<HashMap<String, Value>, Error> {
                     ));
                 }
             }
-            Card::Extension(x) => {
+            Card::Xtension(x) => {
                 if kw.is_some() {
                     return Err(Error::StaticError("expected continuation, found extension"));
                 }
