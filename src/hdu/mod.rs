@@ -48,15 +48,15 @@ impl HDU {
         consume_next_card(reader, &mut card_80_bytes_buf, &mut num_bytes_read)?;
 
         let hdu = match Card::try_from(&card_80_bytes_buf)? {
-            Card::Xtension(XtensionType::Image) => HDU::XImage(fits::HDU::<Image>::new(
+            Card::Xtension{ x: XtensionType::Image, .. } => HDU::XImage(fits::HDU::<Image>::new(
                 reader,
                 &mut num_bytes_read,
                 &mut card_80_bytes_buf,
             )?),
-            Card::Xtension(XtensionType::BinTable) => HDU::XBinaryTable(
+            Card::Xtension{ x: XtensionType::BinTable, .. } => HDU::XBinaryTable(
                 fits::HDU::<BinTable>::new(reader, &mut num_bytes_read, &mut card_80_bytes_buf)?,
             ),
-            Card::Xtension(XtensionType::AsciiTable) => HDU::XASCIITable(
+            Card::Xtension{ x: XtensionType::AsciiTable, .. } => HDU::XASCIITable(
                 fits::HDU::<AsciiTable>::new(reader, &mut num_bytes_read, &mut card_80_bytes_buf)?,
             ),
             _ => {
@@ -114,7 +114,7 @@ impl AsyncHDU {
         consume_next_card_async(reader, &mut card_80_bytes_buf, &mut num_bytes_read).await?;
 
         let hdu = match Card::try_from(&card_80_bytes_buf)? {
-            Card::Xtension(XtensionType::Image) => AsyncHDU::XImage(
+            Card::Xtension{ x: XtensionType::Image, .. } => AsyncHDU::XImage(
                 async_fits::AsyncHDU::<Image>::new(
                     reader,
                     &mut num_bytes_read,
@@ -122,7 +122,7 @@ impl AsyncHDU {
                 )
                 .await?,
             ),
-            Card::Xtension(XtensionType::BinTable) => AsyncHDU::XBinaryTable(
+            Card::Xtension{ x: XtensionType::BinTable, .. } => AsyncHDU::XBinaryTable(
                 async_fits::AsyncHDU::<BinTable>::new(
                     reader,
                     &mut num_bytes_read,
@@ -130,7 +130,7 @@ impl AsyncHDU {
                 )
                 .await?,
             ),
-            Card::Xtension(XtensionType::AsciiTable) => AsyncHDU::XASCIITable(
+            Card::Xtension{ x: XtensionType::AsciiTable, .. } => AsyncHDU::XASCIITable(
                 async_fits::AsyncHDU::<AsciiTable>::new(
                     reader,
                     &mut num_bytes_read,

@@ -297,7 +297,7 @@ fn process_cards(cards: &[Card]) -> Result<HashMap<String, Value>, Error> {
                     ));
                 }
             }
-            Card::Xtension(x) => {
+            Card::Xtension{ x, .. } => {
                 if kw.is_some() {
                     return Err(Error::StaticError("expected continuation, found extension"));
                 }
@@ -370,20 +370,19 @@ mod tests {
 
     #[test]
     fn primary_hdu_with_no_data() -> Result<(), Error> {
-        let deck = [
+        let data = mock_fits_data([
             b"SIMPLE  =                    T / this is a fake FITS file                       ",
             b"BITPIX  =                    8 / byte sized numbers                             ",
             b"NAXIS   =                    0 / no data arrays                                 ",
-            b"COMMENT some contextual comment                                                 ",
+            b"COMMENT some contextual comment on the header                                   ",
             b"COMMENT ... over two lines                                                      ",
             b"HISTORY this was processed manually using vscode                                ",
             b"COMMENT comment on the history?                                                 ",
             b"HISTORY did some more processing...                                             ",
-            b"END                            / this is the END!!                              "];
-        let data = mock_fits_data(deck);
+            b"END                                                                             "
+        ]);
         let reader = Cursor::new(data);
         let mut fits = Fits::from_reader(reader);
-
         let hdu = fits
             .next()
             .expect("Should contain a primary HDU")
@@ -417,7 +416,7 @@ mod tests {
                     comment: None
                 }
             }));
-            assert_eq!(cards.next(), Some(&Card::Comment("some contextual comment".to_owned())));
+            assert_eq!(cards.next(), Some(&Card::Comment("some contextual comment on the header".to_owned())));
             assert_eq!(cards.next(), Some(&Card::Comment("... over two lines".to_owned())));
             assert_eq!(cards.next(), Some(&Card::History("this was processed manually using vscode".to_owned())));
             assert_eq!(cards.next(), Some(&Card::Comment("comment on the history?".to_owned())));
@@ -428,7 +427,7 @@ mod tests {
             let header = hdu.get_header();
 
             let mut comments = header.comments();
-            assert_eq!(comments.next(), Some(&"some contextual comment".to_string()));
+            assert_eq!(comments.next(), Some(&"some contextual comment on the header".to_string()));
             assert_eq!(comments.next(), Some(&"... over two lines".to_string()));
             assert_eq!(comments.next(), Some(&"comment on the history?".to_string()));
             assert_eq!(comments.next(), None);

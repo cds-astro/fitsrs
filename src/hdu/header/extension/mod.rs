@@ -2,6 +2,7 @@ pub mod asciitable;
 pub mod bintable;
 pub mod image;
 
+use std::convert::TryFrom;
 use std::io::Read;
 
 use async_trait::async_trait;
@@ -28,6 +29,19 @@ impl From<XtensionType> for String {
             XtensionType::Image => "IMAGE".to_owned(),
             XtensionType::BinTable => "BINTABLE".to_owned(),
             XtensionType::AsciiTable => "TABLE".to_owned(),
+        }
+    }
+}
+
+impl TryFrom<&str> for XtensionType {
+    type Error = Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "IMAGE" | "IUEIMAGE" => Ok(XtensionType::Image),
+            "TABLE" => Ok(XtensionType::AsciiTable),
+            "BINTABLE" => Ok(XtensionType::BinTable),
+            _ => Err(Error::NotSupportedXtensionType(value.to_owned())),
         }
     }
 }
