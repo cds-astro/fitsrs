@@ -1,6 +1,6 @@
 use std::convert::TryFrom;
 
-use crate::error::Error;
+use crate::{error::Error, hdu::header::extension::XtensionType};
 /// Holds eight bytes of ASCII characters, i.e. the length of a FITS compliant keyword.
 pub type Keyword = [u8; 8];
 /// Holds 80 bytes of ASCII characters, i.e. one line in a FITS compliant file.
@@ -23,7 +23,7 @@ pub enum Card {
     },
     // FITS extension string value, cf FITSv4, section 4.2.1.1
     // FIXME ensure that the an XTENSION comment is preserved
-    Extension([u8; 8]),
+    Extension(XtensionType),
     /// A file comment where the keyword field is `COMMENT` or an empty string.
     Comment(String),
     /// A log line of the operations used for processing the file.
@@ -161,10 +161,13 @@ impl TryFrom<&CardBuf> for Card {
     }
 }
 
-fn parse_extension(buf: &[u8; 80]) -> Result<[u8; 8], Error> {
-    let mut x = [b' '; 8];
-    x.copy_from_slice(&buf[11..19]);
-    Ok(x)
+fn parse_extension(buf: &[u8; 80]) -> Result<XtensionType, Error> {
+    match &buf[11..19] {
+        b"IMAGE   " | b"IUEIMAGE" => Ok(XtensionType::Image),
+        b"TABLE   " => Ok(XtensionType::AsciiTable),
+        b"BINTABLE" => Ok(XtensionType::BinTable),
+        x => Err(Error::NotSupportedXtensionType(String::from_utf8_lossy(x).into_owned())),
+    }
 }
 
 /// FITSv4, sections 4.2. Value and 4.1.2.3. Value/comment (Bytes 11 through 80)
@@ -348,7 +351,7 @@ fn parse_continuation(buf: &[u8; 80]) -> Result<Card, Error> {
 }
 
 fn parse_comment_text(buf: &[u8; 80]) -> Result<String, Error> {
-    // FIXME handle valid ASCII but still non FITS characters \t, \n etc
+    // FIXME handle valid ASCII but still non-FITS characters \t, \n etc
     Ok(std::str::from_utf8(buf[8..].trim_ascii_end())?.to_owned())
 }
 
@@ -356,7 +359,7 @@ fn parse_comment_text(buf: &[u8; 80]) -> Result<String, Error> {
 ///
 /// FITSv4, section 4.4.2.4. Commentary keywords, last two paragraphs.
 fn parse_empty_keyword_card(buf: &[u8; 80]) -> Result<Card, Error> {
-    // FIXME handle valid ASCII but still non FITS characters \t, \n etc
+    // FIXME handle valid ASCII but still non-FITS characters \t, \n etc
     // TODO Add unit test that tests for replacement character in this case
     let c = std::str::from_utf8(buf[8..].trim_ascii_end())?;
     if c.is_empty() {
@@ -513,7 +516,7 @@ mod tests {
     use core::panic;
     use std::convert::TryFrom;
 
-    use crate::{card::parse_string, error::Error};
+    use crate::{card::parse_string, error::Error, hdu::header::extension::XtensionType};
 
     use super::{parse_number, split_value_and_comment, Card, CardBuf, Value};
 
@@ -735,7 +738,7 @@ mod tests {
         let r = b"XTENSION= 'TABLE   '                                                            ";
         assert_eq!(
             Card::try_from(r),
-            Ok(Card::Extension(b"TABLE   ".to_owned()))
+            Ok(Card::Extension(XtensionType::AsciiTable))
         );
     }
 

@@ -2,39 +2,33 @@ pub mod asciitable;
 pub mod bintable;
 pub mod image;
 
-use std::convert::TryFrom;
 use std::io::Read;
 
 use async_trait::async_trait;
 use futures::AsyncRead;
+use serde::Serialize;
 
 use crate::card::Value;
 use crate::error::Error;
 
 use std::collections::HashMap;
 
-use super::{Card, CardBuf};
+use super::Card;
 
-#[derive(Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Serialize)]
 pub enum XtensionType {
     Image,
     BinTable,
     AsciiTable,
 }
 
-pub fn parse_xtension_card(card: &CardBuf) -> Result<XtensionType, Error> {
-    let xtension = if let Card::Extension(x) = Card::try_from(card)? {
-        x
-    } else {
-        let kw = String::from_utf8_lossy(&card[..8]).into_owned();
-        return Err(Error::FailTypeCardParsing(kw, "XTENSION".to_owned()))
-    };
-
-    match &xtension {
-        b"IMAGE   " | b"IUEIMAGE" => Ok(XtensionType::Image),
-        b"TABLE   " => Ok(XtensionType::AsciiTable),
-        b"BINTABLE" => Ok(XtensionType::BinTable),
-        _ => Err(Error::NotSupportedXtensionType(String::from_utf8_lossy(&xtension).into_owned())),
+impl From<XtensionType> for String {
+    fn from(val: XtensionType) -> Self {
+        match val {
+            XtensionType::Image => "IMAGE".to_owned(),
+            XtensionType::BinTable => "BINTABLE".to_owned(),
+            XtensionType::AsciiTable => "TABLE".to_owned(),
+        }
     }
 }
 

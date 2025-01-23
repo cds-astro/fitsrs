@@ -4,6 +4,9 @@ pub mod data;
 pub mod extension;
 pub mod primary;
 
+use std::convert::TryFrom;
+
+use crate::card::Card;
 use crate::card::Value;
 use crate::hdu::data::DataBufRead;
 
@@ -22,7 +25,6 @@ use self::primary::check_card_keyword;
 //use super::AsyncHDU;
 use crate::async_fits;
 use crate::fits;
-use crate::hdu::header::extension::parse_xtension_card;
 use crate::hdu::primary::consume_next_card;
 
 #[derive(Debug)]
@@ -44,24 +46,28 @@ impl HDU {
 
         // XTENSION
         consume_next_card(reader, &mut card_80_bytes_buf, &mut num_bytes_read)?;
-        let xtension_type = parse_xtension_card(&card_80_bytes_buf)?;
 
-        let hdu = match xtension_type {
-            XtensionType::Image => HDU::XImage(fits::HDU::<Image>::new(
+        let hdu = match Card::try_from(&card_80_bytes_buf)? {
+            Card::Extension(XtensionType::Image) => HDU::XImage(fits::HDU::<Image>::new(
                 reader,
                 &mut num_bytes_read,
                 &mut card_80_bytes_buf,
             )?),
-            XtensionType::BinTable => HDU::XBinaryTable(fits::HDU::<BinTable>::new(
+            Card::Extension(XtensionType::BinTable) => HDU::XBinaryTable(fits::HDU::<BinTable>::new(
                 reader,
                 &mut num_bytes_read,
                 &mut card_80_bytes_buf,
             )?),
-            XtensionType::AsciiTable => HDU::XASCIITable(fits::HDU::<AsciiTable>::new(
+            Card::Extension(XtensionType::AsciiTable) => HDU::XASCIITable(fits::HDU::<AsciiTable>::new(
                 reader,
                 &mut num_bytes_read,
                 &mut card_80_bytes_buf,
             )?),
+            _ => {
+                let kw = String::from_utf8_lossy(&card_80_bytes_buf[0..8]).into_owned();
+                return Err(Error::FailTypeCardParsing(kw, "XTENSION".to_owned()))
+            }
+
         };
 
         Ok(hdu)
@@ -109,10 +115,9 @@ impl AsyncHDU {
 
         // XTENSION
         consume_next_card_async(reader, &mut card_80_bytes_buf, &mut num_bytes_read).await?;
-        let xtension_type = parse_xtension_card(&card_80_bytes_buf)?;
 
-        let hdu = match xtension_type {
-            XtensionType::Image => AsyncHDU::XImage(
+        let hdu = match Card::try_from(&card_80_bytes_buf)? {
+            Card::Extension(XtensionType::Image) => AsyncHDU::XImage(
                 async_fits::AsyncHDU::<Image>::new(
                     reader,
                     &mut num_bytes_read,
@@ -120,7 +125,7 @@ impl AsyncHDU {
                 )
                 .await?,
             ),
-            XtensionType::BinTable => AsyncHDU::XBinaryTable(
+            Card::Extension(XtensionType::BinTable) => AsyncHDU::XBinaryTable(
                 async_fits::AsyncHDU::<BinTable>::new(
                     reader,
                     &mut num_bytes_read,
@@ -128,7 +133,7 @@ impl AsyncHDU {
                 )
                 .await?,
             ),
-            XtensionType::AsciiTable => AsyncHDU::XASCIITable(
+            Card::Extension(XtensionType::AsciiTable) => AsyncHDU::XASCIITable(
                 async_fits::AsyncHDU::<AsciiTable>::new(
                     reader,
                     &mut num_bytes_read,
@@ -136,6 +141,10 @@ impl AsyncHDU {
                 )
                 .await?,
             ),
+            _ => {
+                let kw = String::from_utf8_lossy(&card_80_bytes_buf[0..8]).into_owned();
+                return Err(Error::FailTypeCardParsing(kw, "XTENSION".to_owned()))
+            }
         };
 
         Ok(hdu)
