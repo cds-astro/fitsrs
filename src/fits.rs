@@ -54,60 +54,33 @@ impl<'a, R> Fits<R>
 where
     R: DataRead<'a, Image> + DataRead<'a, AsciiTable> + DataRead<'a, BinTable> + 'a + Seek,
 {
-    /// Consume the bytes until the next HDU
+    /// Targets the reader to the next HDU
     ///
-    /// 1. If the data has not all been read, then read it
-    /// 2. Once all the data has been read we must read the last bytes until a 2880 block of bytes
-    /// has been read.
     /// It is possible that EOF is reached immediately because some fits files do not have these blank bytes
     /// at the end of its last HDU
     pub(crate) fn consume_until_next_hdu(&mut self) -> Result<(), Error> {
-        let mut block_mem_buf: [u8; 2880] = [0; 2880];
+        // Seek to the beginning of the next HDU.
+        // The number of bytes to skip is the remaining bytes + 
+        // an offset to get to a multiple of 2880 bytes
+        let mut num_bytes_to_skip = self.num_remaining_bytes_in_cur_hdu;
 
-        // 1. Check if there are still bytes to be read to get to the end of data
-        /*while self.num_remaining_bytes_in_cur_hdu > 0 {
-            let num_bytes_to_read = self.num_remaining_bytes_in_cur_hdu.min(2880);
-            // Then read them
-            match self
-                .reader
-                .read_exact(&mut block_mem_buf[..num_bytes_to_read])
-            {
-                Err(e) => return Err(Error::Io(e)),
-                Ok(()) => {
-                    self.num_remaining_bytes_in_cur_hdu -= num_bytes_to_read;
-                }
-            }
-        }*/
-
-        // We seek to the beginning of the next HDU, skipping the current data block remains
+        let offset_in_2880_block = self.num_bytes_in_cur_hdu % 2880;
+        let is_aligned_on_block = offset_in_2880_block == 0;
+        if !is_aligned_on_block {
+            num_bytes_to_skip += (2880 - offset_in_2880_block) as usize;
+        }
         match self
             .reader
-            .seek_relative(self.num_remaining_bytes_in_cur_hdu as i64)
+            .seek_relative(num_bytes_to_skip as i64)
             {
-                Err(e) => return Err(Error::Io(e)),
+                Err(e) => Err(Error::Io(e)),
                 Ok(()) => {
+                    // We totally consumed the HDU so we reset the counter for the next HDU
                     self.num_remaining_bytes_in_cur_hdu = 0;
+
+                    Ok(())
                 }
             }
-
-
-        // 2. We are at the end of the real data. As FITS standard stores data in block of 2880 bytes
-        // we must read until the next block of data to get the location of the next HDU
-
-        let is_remaining_bytes = (self.num_bytes_in_cur_hdu % 2880) > 0;
-        // Skip the remaining bytes to set the reader where a new HDU begins
-        if is_remaining_bytes {
-            let num_off_bytes = (2880 - (self.num_bytes_in_cur_hdu % 2880)) as usize;
-            match self.reader.read_exact(&mut block_mem_buf[..num_off_bytes]) {
-                // An error like unexpected EOF is not permitted by the standard but we make it pass
-                // interpreting it as the last HDU in the file
-                Err(ref e) if e.kind() == std::io::ErrorKind::UnexpectedEof => Ok(()),
-                Err(e) => Err(Error::Io(e)),
-                Ok(()) => Ok(()),
-            }
-        } else {
-            Ok(())
-        }
     }
 
     // Retrieve the iterator or in memory data from the reader
