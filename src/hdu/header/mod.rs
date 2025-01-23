@@ -45,17 +45,6 @@ pub async fn consume_next_card_async<'a, R: AsyncRead + std::marker::Unpin>(
     Ok(())
 }
 
-/*
-fn str_to_kw(name: &str) -> Keyword {
-    let bytes = name[0..8].as_bytes();
-    // 1. Init the fixed keyword slice
-    let mut owned_kw: Keyword = [0; 8];
-    // 2. Copy from slice
-    owned_kw.copy_from_slice(bytes);
-    owned_kw
-}
-*/
-
 fn kw_to_string(name: &Keyword) -> String {
     String::from_utf8_lossy(name.trim_ascii()).into_owned()
 }
@@ -315,48 +304,10 @@ fn process_cards(cards: &[Card]) -> Result<HashMap<String, Value>, Error> {
                 values.insert(
                     "XTENSION".to_owned(),
                     Value::String {
-                        value: String::from_utf8_lossy(x).into_owned(),
+                        value: (*x).into(),
                         comment: None,
                     },
                 );
-            }
-            Card::Comment(c) => {
-                if kw.is_some() {
-                    return Err(Error::StaticError("expected continuation, found comment"));
-                }
-                values
-                    .entry("COMMENT".to_owned())
-                    .and_modify(|s| {
-                        if let Value::String { value, .. } = s {
-                            value.push('\n');
-                            value.push_str(c);
-                        } else {
-                            unreachable!("COMMENT entry must be a Value::String")
-                        }
-                    })
-                    .or_insert(Value::String {
-                        value: c.to_owned(),
-                        comment: None,
-                    });
-            }
-            Card::History(h) => {
-                if kw.is_some() {
-                    return Err(Error::StaticError("expected continuation, found history"));
-                }
-                values
-                    .entry("HISTORY".to_owned())
-                    .and_modify(|s| {
-                        if let Value::String { value, .. } = s {
-                            value.push('\n');
-                            value.push_str(h);
-                        } else {
-                            unreachable!("HISTORY entry must be a Value::String")
-                        }
-                    })
-                    .or_insert(Value::String {
-                        value: h.to_owned(),
-                        comment: None,
-                    });
             }
             Card::End => {
                 if i + 1 == cards.len() {
@@ -365,8 +316,7 @@ fn process_cards(cards: &[Card]) -> Result<HashMap<String, Value>, Error> {
                     unreachable!("cards trailing after the END card")
                 }
             }
-            Card::Space => ( /* NOOP */),
-            Card::Undefined(_) => ( /* NOOP */),
+            _ => ( /* NOOP - TODO log debug */),
         }
     }
     Err(Error::StaticError("Missing END card"))
@@ -521,11 +471,11 @@ mod tests {
 
                 let mut expected = VecDeque::from(vec![
                     "BAYERIND", "BITCAMPX", "CALPHOT", "CCD-TEMP", "CD1_1", "CD1_2", "CD2_1",
-                    "CD2_2", "CDELT1", "CDELT2", "CDELTM1", "CDELTM2", "COMMENT", "COMPRESS",
+                    "CD2_2", "CDELT1", "CDELT2", "CDELTM1", "CDELTM2", /* "COMMENT",*/ "COMPRESS",
                     "CRPIX1", "CRPIX2", "CRVAL1", "CRVAL2", "CTYPE1", "CTYPE2", "CUNIT1",
                     "CUNIT2", "CVF", "DATAMAX", "DATAMIN", "DATE", "DATE-OBS", "DEC",
                     "DEWPOINT", "DIAMETER", "ERRFLUX", "EXPOSURE", "FILTERS", "FOCAL",
-                    "FOCUSPOS", "FOCUSTMP", "GAIN_ELE", "HISTORY", "HUMIDITY", "IMGTYPE",
+                    "FOCUSPOS", "FOCUSTMP", "GAIN_ELE", /* "HISTORY",*/ "HUMIDITY", "IMGTYPE",
                     "INSTRUME", "MAGREF", "MIRORX", "NAXIS", "NAXIS1", "NAXIS2", "OBJCTDEC",
                     "OBJCTRA", "OBSERVER", "OFFSET_E", "ORIGIN", "P3DSPHER", "PCXASTRO",
                     "PCYASTRO", "PDEC_REF", "PDIMPOL", "PIERSIDE", "PPLATESD", "PPXC", "PPYC",
