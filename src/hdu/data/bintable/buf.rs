@@ -3,7 +3,7 @@ use crate::hdu::data::{AsyncDataBufRead, stream::St};
 use crate::hdu::header::extension::bintable::{P, Q, ArrayDescriptor};
 
 use byteorder::{BigEndian, ByteOrder};
-use crate::hdu::header::extension::bintable::{BinTable, TFormBinaryTableType};
+use crate::hdu::header::extension::bintable::{BinTable, TFormType};
 use crate::hdu::DataRead;
 use crate::hdu::header::extension::Xtension;
 
@@ -138,59 +138,59 @@ where
             let field_bytes = &row_bytes[off_bytes_in_row..end_off_byte];
 
             let field = match tform {
-                TFormBinaryTableType::L { .. } => FieldTy::Logical(
+                TFormType::L { .. } => FieldTy::Logical(
                     field_bytes
                         .iter()
                         .map(|v| *v != 0)
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
                 ),
-                TFormBinaryTableType::B { .. } => {
+                TFormType::B { .. } => {
                     FieldTy::UnsignedByte(field_bytes.to_owned().into())
                 }
-                TFormBinaryTableType::A { .. } => {
+                TFormType::A { .. } => {
                     FieldTy::Character(field_bytes.to_owned().into())
                 }
-                TFormBinaryTableType::X { repeat_count } => FieldTy::Bit {
+                TFormType::X { repeat_count } => FieldTy::Bit {
                     bytes: field_bytes.to_owned().into(),
                     num_bits: *repeat_count,
                 },
-                TFormBinaryTableType::I { .. } => FieldTy::Short(
+                TFormType::I { .. } => FieldTy::Short(
                     field_bytes
                         .chunks(2)
                         .map(|v| BigEndian::read_i16(v))
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
                 ),
-                TFormBinaryTableType::J { .. } => FieldTy::Integer(
+                TFormType::J { .. } => FieldTy::Integer(
                     field_bytes
                         .chunks(4)
                         .map(|v| BigEndian::read_i32(v))
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
                 ),
-                TFormBinaryTableType::K { .. } => FieldTy::Long(
+                TFormType::K { .. } => FieldTy::Long(
                     field_bytes
                         .chunks(8)
                         .map(|v| BigEndian::read_i64(v))
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
                 ),
-                TFormBinaryTableType::E { .. } => FieldTy::Float(
+                TFormType::E { .. } => FieldTy::Float(
                     field_bytes
                         .chunks(4)
                         .map(|v| BigEndian::read_f32(v))
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
                 ),
-                TFormBinaryTableType::D { .. } => FieldTy::Double(
+                TFormType::D { .. } => FieldTy::Double(
                     field_bytes
                         .chunks(8)
                         .map(|v| BigEndian::read_f64(v))
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
                 ),
-                TFormBinaryTableType::P { ty, t_byte_size, .. } => {
+                TFormType::P { ty, t_byte_size, .. } => {
                     let (n_elems, byte_offset) = P::parse_array_location(field_bytes);
 
                     // seek to the heap location where the start of the array lies
@@ -214,7 +214,7 @@ where
                     FieldTy::parse_variable_array(array_raw_bytes.into(), *ty, &self.ctx)
                 },
 
-                TFormBinaryTableType::Q { ty, t_byte_size, .. } => {
+                TFormType::Q { ty, t_byte_size, .. } => {
                     let (n_elems, byte_offset) = Q::parse_array_location(field_bytes);
 
                     // seek to the heap location where the start of the array lies

@@ -41,7 +41,7 @@ pub struct BinTable {
     // Only the formats in Table 15, interpreted as Fortran (ISO 2004)
     // input formats and discussed in more detail in Sect. 7.2.5, are
     // permitted for encoding
-    pub(crate) tforms: Vec<TFormBinaryTableType>,
+    pub(crate) tforms: Vec<TFormType>,
 
     // The value field shall contain the number of
     // bytes that follow the table in the supplemental data area called
@@ -463,7 +463,7 @@ impl Xtension for BinTable {
 // More Xtension are defined in the original paper https://fits.gsfc.nasa.gov/standard40/fits_standard40aa-le.pdf
 // See Appendix F
 
-pub trait TFormType {
+pub trait TForm {
     /// Number of bit associated to the TFORM
     const BITS_SIZE: usize;
     /// Number of bytes needed to store the tform
@@ -475,7 +475,7 @@ pub trait TFormType {
 // Logical
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
 pub struct L;
-impl TFormType for L {
+impl TForm for L {
     const BITS_SIZE: usize = 8;
 
     type Ty = u8;
@@ -483,7 +483,7 @@ impl TFormType for L {
 // Bit
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
 pub struct X;
-impl TFormType for X {
+impl TForm for X {
     const BITS_SIZE: usize = 1;
 
     type Ty = bool;
@@ -491,7 +491,7 @@ impl TFormType for X {
 // Unsigned byte
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
 pub struct B;
-impl TFormType for B {
+impl TForm for B {
     const BITS_SIZE: usize = 8;
 
     type Ty = u8;
@@ -499,7 +499,7 @@ impl TFormType for B {
 // 16-bit integer
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
 pub struct I;
-impl TFormType for I {
+impl TForm for I {
     const BITS_SIZE: usize = 16;
 
     type Ty = i16;
@@ -507,7 +507,7 @@ impl TFormType for I {
 // 32-bit integer
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
 pub struct J;
-impl TFormType for J {
+impl TForm for J {
     const BITS_SIZE: usize = 32;
 
     type Ty = i32;
@@ -516,7 +516,7 @@ impl TFormType for J {
 // 64-bit integer
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
 pub struct K;
-impl TFormType for K {
+impl TForm for K {
     const BITS_SIZE: usize = 64;
 
     type Ty = i64;
@@ -524,7 +524,7 @@ impl TFormType for K {
 // Character
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
 pub struct A;
-impl TFormType for A {
+impl TForm for A {
     const BITS_SIZE: usize = 8;
 
     type Ty = char;
@@ -532,7 +532,7 @@ impl TFormType for A {
 // Single-precision floating point
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
 pub struct E;
-impl TFormType for E {
+impl TForm for E {
     const BITS_SIZE: usize = 32;
 
     type Ty = f32;
@@ -540,7 +540,7 @@ impl TFormType for E {
 // Double-precision floating point
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
 pub struct D;
-impl TFormType for D {
+impl TForm for D {
     const BITS_SIZE: usize = 64;
 
     type Ty = f64;
@@ -548,7 +548,7 @@ impl TFormType for D {
 // Single-precision complex
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
 pub struct C;
-impl TFormType for C {
+impl TForm for C {
     const BITS_SIZE: usize = 64;
 
     type Ty = (f32, f32);
@@ -556,13 +556,13 @@ impl TFormType for C {
 // Double-precision complex
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
 pub struct M;
-impl TFormType for M {
+impl TForm for M {
     const BITS_SIZE: usize = 128;
 
     type Ty = (f64, f64);
 }
 
-pub(crate) trait ArrayDescriptor: TFormType {
+pub(crate) trait ArrayDescriptor: TForm {
     /// From bytes of the field, returns a tuple containing
     /// * The number of elements in the array
     /// * The offset in bytes from the beginning of the HEAP to the first element of the array
@@ -572,7 +572,7 @@ pub(crate) trait ArrayDescriptor: TFormType {
 // Array Descriptor (32-bit)
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
 pub struct P;
-impl TFormType for P {
+impl TForm for P {
     const BITS_SIZE: usize = 64;
 
     type Ty = u64;
@@ -592,7 +592,7 @@ impl ArrayDescriptor for P {
 // Array Descriptor (64-bit)
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
 pub struct Q;
-impl TFormType for Q {
+impl TForm for Q {
     const BITS_SIZE: usize = 128;
 
     type Ty = u128;
@@ -611,7 +611,7 @@ impl ArrayDescriptor for Q {
 
 
 #[derive(PartialEq, Serialize, Clone, Copy, Debug)]
-pub enum TFormBinaryTableType {
+pub enum TFormType {
     /// Logical
     L {
         repeat_count: usize,
@@ -676,22 +676,22 @@ pub enum TFormBinaryTableType {
     }
 }
 
-impl TFormBinaryTableType {
+impl TFormType {
     pub(crate) fn num_bits_field(&self) -> usize {
         match self {
-            TFormBinaryTableType::L { repeat_count } => repeat_count * L::BITS_SIZE, // Logical
-            TFormBinaryTableType::X { repeat_count } => repeat_count * X::BITS_SIZE, // Bit
-            TFormBinaryTableType::B { repeat_count } => repeat_count * B::BITS_SIZE, // Unsigned byte
-            TFormBinaryTableType::I { repeat_count } => repeat_count * I::BITS_SIZE, // 16-bit integer
-            TFormBinaryTableType::J { repeat_count } => repeat_count * J::BITS_SIZE, // 32-bit integer
-            TFormBinaryTableType::K { repeat_count } => repeat_count * K::BITS_SIZE, // 64-bit integer
-            TFormBinaryTableType::A { repeat_count } => repeat_count * A::BITS_SIZE, // Character
-            TFormBinaryTableType::E { repeat_count } => repeat_count * E::BITS_SIZE, // Single-precision floating point
-            TFormBinaryTableType::D { repeat_count } => repeat_count * D::BITS_SIZE, // Double-precision floating point
-            TFormBinaryTableType::C { repeat_count } => repeat_count * C::BITS_SIZE, // Single-precision complex
-            TFormBinaryTableType::M { repeat_count } => repeat_count * M::BITS_SIZE, // Double-precision complex
-            TFormBinaryTableType::P { .. } => P::BITS_SIZE,                                  // Array Descriptor (32-bit)
-            TFormBinaryTableType::Q { .. } => Q::BITS_SIZE,                                  // Array Descriptor (64-bit)
+            TFormType::L { repeat_count } => repeat_count * L::BITS_SIZE, // Logical
+            TFormType::X { repeat_count } => repeat_count * X::BITS_SIZE, // Bit
+            TFormType::B { repeat_count } => repeat_count * B::BITS_SIZE, // Unsigned byte
+            TFormType::I { repeat_count } => repeat_count * I::BITS_SIZE, // 16-bit integer
+            TFormType::J { repeat_count } => repeat_count * J::BITS_SIZE, // 32-bit integer
+            TFormType::K { repeat_count } => repeat_count * K::BITS_SIZE, // 64-bit integer
+            TFormType::A { repeat_count } => repeat_count * A::BITS_SIZE, // Character
+            TFormType::E { repeat_count } => repeat_count * E::BITS_SIZE, // Single-precision floating point
+            TFormType::D { repeat_count } => repeat_count * D::BITS_SIZE, // Double-precision floating point
+            TFormType::C { repeat_count } => repeat_count * C::BITS_SIZE, // Single-precision complex
+            TFormType::M { repeat_count } => repeat_count * M::BITS_SIZE, // Double-precision complex
+            TFormType::P { .. } => P::BITS_SIZE,                                  // Array Descriptor (32-bit)
+            TFormType::Q { .. } => Q::BITS_SIZE,                                  // Array Descriptor (64-bit)
         }
     }
 
@@ -702,7 +702,7 @@ impl TFormBinaryTableType {
 
 #[cfg(test)]
 mod tests {
-    use super::{BinTable, TFormBinaryTableType};
+    use super::{BinTable, TFormType};
     use crate::{
         hdu::{header::Bitpix, HDU}, FITSFile,
     };
@@ -744,15 +744,15 @@ mod tests {
                 naxis2: 1,
                 tfields: 9,
                 tforms: vec![
-                    TFormBinaryTableType::A { repeat_count: 5 },
-                    TFormBinaryTableType::I { repeat_count: 1 },
-                    TFormBinaryTableType::E { repeat_count: 1 },
-                    TFormBinaryTableType::E { repeat_count: 1 },
-                    TFormBinaryTableType::E { repeat_count: 640 },
-                    TFormBinaryTableType::E { repeat_count: 640 },
-                    TFormBinaryTableType::E { repeat_count: 640 },
-                    TFormBinaryTableType::I { repeat_count: 640 },
-                    TFormBinaryTableType::E { repeat_count: 640 },
+                    TFormType::A { repeat_count: 5 },
+                    TFormType::I { repeat_count: 1 },
+                    TFormType::E { repeat_count: 1 },
+                    TFormType::E { repeat_count: 1 },
+                    TFormType::E { repeat_count: 640 },
+                    TFormType::E { repeat_count: 640 },
+                    TFormType::E { repeat_count: 640 },
+                    TFormType::I { repeat_count: 640 },
+                    TFormType::E { repeat_count: 640 },
                 ],
                 theap: 11535,
                 // Should be 0
