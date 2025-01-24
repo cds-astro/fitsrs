@@ -10,7 +10,8 @@ use futures::AsyncRead;
 use crate::card::Card;
 use crate::card::CardBuf;
 use crate::card::Value;
-use crate::hdu::data::DataRead;
+
+use crate::hdu::data::FitsRead;
 
 //use self::data::DataAsyncBufRead;
 use crate::error::Error;
@@ -103,7 +104,7 @@ impl HDU {
         num_bytes_read: &mut usize,
     ) -> Result<Self, Error>
     where
-        R: DataRead<'a, Image> + DataRead<'a, BinTable> + DataRead<'a, AsciiTable> + 'a,
+        R: FitsRead<'a, Image> + FitsRead<'a, BinTable> + FitsRead<'a, AsciiTable> + 'a,
     {
         let mut num_bytes_read = 0;
 
@@ -129,7 +130,7 @@ impl HDU {
 
     pub(crate) fn new_primary<'a, R>(reader: &mut R) -> Result<Self, Error>
     where
-        R: DataRead<'a, Image> + 'a,
+        R: FitsRead<'a, Image> + 'a,
     {
         let mut num_bytes_read = 0;
 

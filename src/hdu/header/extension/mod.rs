@@ -44,6 +44,7 @@ impl TryFrom<&str> for XtensionType {
 
 #[async_trait(?Send)]
 pub trait Xtension {
+    /// Return the total size in bytes of the data area
     fn get_num_bytes_data_block(&self) -> u64;
 
     // Parse the Xtension keywords

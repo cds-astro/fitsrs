@@ -5,10 +5,10 @@ use crate::hdu::header::extension::bintable::{P, Q, ArrayDescriptor};
 use byteorder::{BigEndian, ByteOrder};
 
 use crate::hdu::header::extension::bintable::{BinTable, TFormType};
-use crate::hdu::DataRead;
+use crate::hdu::FitsRead;
 use crate::hdu::header::extension::Xtension;
 use std::io::Cursor;
-
+/*
 use super::FieldTy;
 
 #[derive(Debug)]
@@ -16,10 +16,11 @@ pub struct RowBytesIt<'a> {
     // The bytes over the whole data block
     pub bytes: &'a [u8],
 
-    num_bytes_in_table: usize,
     num_bytes_in_row: usize,
 
+    num_rows: usize,
     idx_row: usize,
+
     position: usize,
 }
 
@@ -33,7 +34,7 @@ impl<'a> RowBytesIt<'a> {
         R: AsRef<[u8]> + 'a,
     {
         let num_bytes_in_row = ctx.naxis1 as usize;
-        let num_bytes_in_table: usize = ctx.get_num_bytes_data_block() as usize;
+        let num_rows = ctx.naxis2 as usize;
         let idx_row = 0;
 
         let r = reader.get_ref();
@@ -43,7 +44,7 @@ impl<'a> RowBytesIt<'a> {
         Self {
             bytes,
             position,
-            num_bytes_in_table,
+            num_rows,
             idx_row,
             num_bytes_in_row,
         }
@@ -61,13 +62,13 @@ impl<'a> Iterator for RowBytesIt<'a> {
     type Item = &'a [u8];
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.idx_row * self.num_bytes_in_row == self.num_bytes_in_table {
+        if self.idx_row == self.num_rows {
             None
         } else {
             // The cursor is always positioned at the beginning of the main table data.
             // i.e. nothing is read until all the data block has been read (with the heap)
             // once it is done the consume_until_hdu method will perform the read
-            let start_table_pos = self.position as usize;
+            let start_table_pos = self.position;
             let start_row_off = start_table_pos + self.idx_row * self.num_bytes_in_row;
             let end_row_off = start_row_off + self.num_bytes_in_row;
 
@@ -115,7 +116,7 @@ impl<'a> RowIt<'a> {
 use super::Row;
 impl<'a> Iterator for RowIt<'a> {
     // Return a vec of fields because to take into account the repeat count value for that field
-    type Item = Row<'a>;
+    type Item = Row<'a, &'a [u8]>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let row_bytes = self.row_bytes_it.next()?;
@@ -189,11 +190,12 @@ impl<'a> Iterator for RowIt<'a> {
                         + byte_offset as usize;
 
                     // as the reader is positioned at the beginning of the main data table
+                    let num_bytes = (n_elems as usize) * (*t_byte_size as usize);
                     let start_array_off = self.row_bytes_it.position + off;
-                    let end_array_off = start_array_off + (n_elems as usize) * (*t_byte_size as usize);
+                    let end_array_off = start_array_off + num_bytes;
                     let array_raw_bytes = &self.row_bytes_it.bytes[start_array_off..end_array_off];
 
-                    FieldTy::parse_variable_array(array_raw_bytes.into(), *ty, &self.ctx)
+                    FieldTy::parse_variable_array(array_raw_bytes, *ty, num_bytes as u64, &self.ctx)
                 },
                 TFormType::Q { ty, t_byte_size, .. } => {
                     let (n_elems, byte_offset) = Q::parse_array_location(field_bytes);
@@ -206,11 +208,12 @@ impl<'a> Iterator for RowIt<'a> {
                         + byte_offset as usize;
 
                     // as the reader is positioned at the beginning of the main data table
+                    let num_bytes = (n_elems as usize) * (*t_byte_size as usize);
                     let start_array_off = self.row_bytes_it.position + off;
-                    let end_array_off = start_array_off + (n_elems as usize) * (*t_byte_size as usize);
+                    let end_array_off = start_array_off + num_bytes;
                     let array_raw_bytes = &self.row_bytes_it.bytes[start_array_off..end_array_off];
 
-                    FieldTy::parse_variable_array(array_raw_bytes.into(), *ty, &self.ctx)
+                    FieldTy::parse_variable_array(array_raw_bytes, *ty, num_bytes as u64, &self.ctx)
                 },
             }
         }).collect::<Vec<_>>();
@@ -232,3 +235,4 @@ where
         RowIt::new(reader, ctx)
     }
 }
+*/

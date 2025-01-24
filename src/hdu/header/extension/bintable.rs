@@ -15,42 +15,56 @@ use crate::hdu::header::check_for_tfields;
 
 use super::Xtension;
 
+use log::warn;
+
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct BinTable {
     bitpix: Bitpix,
-    // Number of axis, Should be 2,
+    /// Number of axis, Should be 2,
     naxis: u64,
-    // A non-negative integer, giving the number of eight-bit bytes in each row of the
-    // table.
+    /// A non-negative integer, giving the number of eight-bit bytes in each row of the
+    /// table.
     pub(crate) naxis1: u64,
-    // A non-negative integer, giving the number of rows in the table
-    naxis2: u64,
-    // A non-negative integer representing the number of fields in each row.
-    // The maximum permissible value is 999.
-    tfields: usize,
+    /// A non-negative integer, giving the number of rows in the table
+    pub(crate) naxis2: u64,
+    /// A non-negative integer representing the number of fields in each row.
+    /// The maximum permissible value is 999.
+    pub(crate) tfields: usize,
 
-    // The value field of this keyword shall contain
-    // an integer providing the separation, in bytes, between the start
-    // of the main data table and the start of a supplemental data area
-    // called the heap. The default value, which is also the minimum
-    // allowed value, shall be the product of the values of NAXIS1 and
-    // NAXIS2. This keyword shall not be used if the value of PCOUNT
-    // is 0. The use sof this keyword is described in in Sect. 7.3.5.
+    /// The value field of this keyword shall contain
+    /// an integer providing the separation, in bytes, between the start
+    /// of the main data table and the start of a supplemental data area
+    /// called the heap. The default value, which is also the minimum
+    /// allowed value, shall be the product of the values of NAXIS1 and
+    /// NAXIS2. This keyword shall not be used if the value of PCOUNT
+    /// is 0. The use sof this keyword is described in in Sect. 7.3.5.
     pub(crate) theap: usize,
-    // Contain a character string describing the format in which Field n is encoded.
-    // Only the formats in Table 15, interpreted as Fortran (ISO 2004)
-    // input formats and discussed in more detail in Sect. 7.2.5, are
-    // permitted for encoding
+    /// Contain a character string describing the format in which Field n is encoded.
+    /// Only the formats in Table 15, interpreted as Fortran (ISO 2004)
+    /// input formats and discussed in more detail in Sect. 7.2.5, are
+    /// permitted for encoding
     pub(crate) tforms: Vec<TFormType>,
 
-    // The value field shall contain the number of
-    // bytes that follow the table in the supplemental data area called
-    // the heap.
-    pcount: u64,
-    // The value field shall contain the integer 1;
-    // the data blocks contain a single table.
-    gcount: u64,
+    /// TTYPEn keywords. The value field for this indexed keyword
+    /// shall contain a character string giving the name of Field n. It
+    /// is strongly recommended that every field of the table be assigned a unique, case-insensitive name with this keyword, and
+    /// it is recommended that the character string be composed only
+    /// of upper- and lower-case letters, digits, and the underscore (’ ’,
+    /// decimal 95, hexadecimal 5F) character. Use of other characters is
+    /// not recommended because it may be difficult to map the column
+    /// names into variables in some languages (e.g., any hyphens, ’*’
+    /// or ’+’ characters in the name may be confused with mathematical operators). String comparisons with the TTYPEn keyword
+    /// values should not be case sensitive (e.g., ’TIME’ and ’Time’
+    /// should be interpreted as the same name).
+    pub(crate) ttypes: Vec<Option<String>>, 
 
+    /// The value field shall contain the number of
+    /// bytes that follow the table in the supplemental data area called
+    /// the heap.
+    pcount: u64,
+    /// The value field shall contain the integer 1;
+    /// the data blocks contain a single table.
+    gcount: u64,
 
     /// ZIMAGE (required keyword) This keyword must have the logical value T. It indicates that the
     /// FITS binary table extension contains a compressed image and that logically this extension
@@ -122,8 +136,23 @@ pub(crate) enum ZCmpType {
 
 #[async_trait(?Send)]
 impl Xtension for BinTable {
+    /// The table header consists of one or more 2880-byte header
+    /// blocks with the last block indicated by the keyword END somewhere in the block. The main data table begins with the first data
+    /// block following the last header block and is NAXIS1 × NAXIS2
+    /// bytes in length. The zero-indexed byte offset to the start of
+    /// the heap, measured from the start of the main data table, may
+    /// be given by the THEAP keyword in the header. If this keyword is missing then the heap begins with the byte immediately
+    /// following main data table (i.e., the default value of THEAP is
+    /// NAXIS1 × NAXIS2). This default value is the minimum allowed
+    /// value for the THEAP keyword, because any smaller value would
+    /// imply that the heap and the main data table overlap. If the THEAP
+    /// keyword has a value larger than this default value, then there is
+    /// a gap between the end of the main data table and the start of
+    /// the heap. The total length in bytes of the supplemental data area
+    /// following the main data table (gap plus heap) is given by the
+    /// PCOUNT keyword in the table header.
     fn get_num_bytes_data_block(&self) -> u64 {
-        self.naxis1 * self.naxis2
+        self.naxis1 * self.naxis2 + self.pcount
     }
 
     fn parse(
@@ -308,6 +337,10 @@ impl Xtension for BinTable {
                 } else {
                     None
                 };
+
+                if ttype.is_none() {
+                    warn!("Field {:?} does not have a TTYPE name.", tform_kw);
+                }
 
                 let count = tform
                     .chars()

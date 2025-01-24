@@ -13,10 +13,10 @@ pub struct Fits<R> {
     start: bool,
     // Store the number of bytes that remains to read so that the current HDU data finishes
     // When getting the next HDU, we will first consume those bytes if there are some
-    num_remaining_bytes_in_cur_hdu: usize,
+    pos_start_cur_du: usize,
     // Keep track of the number of total bytes for the current HDU as we might
     // skip the trailing bytes to get to a multiple of 2880 bytes
-    num_bytes_in_cur_hdu: usize,
+    num_bytes_in_cur_du: usize,
     // If an error has been encountered, the HDU iterator ends
     error_parsing_encountered: bool,
     // The reader
@@ -41,18 +41,18 @@ impl<'a, R> Fits<R> {
     pub fn from_reader(reader: R) -> Self {
         Self {
             reader,
-            num_remaining_bytes_in_cur_hdu: 0,
-            num_bytes_in_cur_hdu: 0,
+            pos_start_cur_du: 0,
+            num_bytes_in_cur_du: 0,
             error_parsing_encountered: false,
             start: true,
         }
     }
 }
 use std::io::Seek;
-use hdu::data::DataRead;
+use hdu::data::FitsRead;
 impl<'a, R> Fits<R>
 where
-    R: DataRead<'a, Image> + DataRead<'a, AsciiTable> + DataRead<'a, BinTable> + 'a + Seek,
+    R: FitsRead<'a, Image> + FitsRead<'a, AsciiTable> + FitsRead<'a, BinTable> + 'a + Seek,
 {
     /// Targets the reader to the next HDU
     ///
@@ -62,52 +62,43 @@ where
         // Seek to the beginning of the next HDU.
         // The number of bytes to skip is the remaining bytes + 
         // an offset to get to a multiple of 2880 bytes
-        let mut num_bytes_to_skip = self.num_remaining_bytes_in_cur_hdu;
 
-        let offset_in_2880_block = self.num_bytes_in_cur_hdu % 2880;
+        // current seek position since the start of the stream
+        let cur_pos = self.reader.stream_position()? as usize;
+        let mut num_bytes_to_skip = self.num_bytes_in_cur_du - (cur_pos - self.pos_start_cur_du);
+
+        let offset_in_2880_block = self.num_bytes_in_cur_du % 2880;
         let is_aligned_on_block = offset_in_2880_block == 0;
         if !is_aligned_on_block {
             num_bytes_to_skip += (2880 - offset_in_2880_block) as usize;
         }
-        match self
+        self
             .reader
-            .seek_relative(num_bytes_to_skip as i64)
-            {
-                Err(e) => Err(Error::Io(e)),
-                Ok(()) => {
-                    // We totally consumed the HDU so we reset the counter for the next HDU
-                    self.num_remaining_bytes_in_cur_hdu = 0;
+            .seek_relative(num_bytes_to_skip as i64)?;
 
-                    Ok(())
-                }
-            }
+        Ok(())
     }
 
     // Retrieve the iterator or in memory data from the reader
     // This has the effect of consuming the HDU
-    pub fn get_data<X>(&'a mut self, hdu: HDU<X>) -> <R as DataRead<'a, X>>::Data
+    pub fn get_data<X>(&'a mut self, hdu: HDU<X>) -> <R as FitsRead<'a, X>>::Data
     where
         X: Xtension + Debug,
-        R: DataRead<'a, X> + 'a,
+        R: FitsRead<'a, X> + 'a,
     {
         // Unroll the internal fits parsing parameters to give it to the data reader
         let Self {
-            num_remaining_bytes_in_cur_hdu,
             reader,
             ..
         } = self;
         let xtension = hdu.header.get_xtension();
-        <R as DataRead<'a, X>>::new(
-            reader,
-            xtension,
-            num_remaining_bytes_in_cur_hdu,
-        )
+        self.read_data_unit(xtension)
     }
 }
 
 impl<'a, R> Iterator for Fits<R>
 where
-    R: DataRead<'a, Image> + DataRead<'a, AsciiTable> + DataRead<'a, BinTable> + Debug + 'a + Seek,
+    R: FitsRead<'a, Image> + FitsRead<'a, AsciiTable> + FitsRead<'a, BinTable> + Debug + 'a + Seek,
 {
     type Item = Result<hdu::HDU, Error>;
 
@@ -144,7 +135,7 @@ where
 
             match n {
                 Some(Ok(hdu)) => {
-                    self.num_bytes_in_cur_hdu = match &hdu {
+                    self.num_bytes_in_cur_du = match &hdu {
                         hdu::HDU::XImage(h) | hdu::HDU::Primary(h) => {
                             let xtension = h.get_header().get_xtension();
                             xtension.get_num_bytes_data_block() as usize
@@ -159,9 +150,13 @@ where
                         }
                     };
 
-                    self.num_remaining_bytes_in_cur_hdu = self.num_bytes_in_cur_hdu;
-
-                    Some(Ok(hdu))
+                    match self.reader.stream_position() {
+                        Err(e) => Some(Err(e.into())),
+                        Ok(pos) => {
+                            self.pos_start_cur_du = pos as usize;
+                            Some(Ok(hdu))
+                        }
+                    }
                 }
                 Some(Err(e)) => {
                     // an error has been found we return it and ends the iterator for future next calls
@@ -194,7 +189,7 @@ where
         cards: Vec<Card>,
     ) -> Result<Self, Error>
     where
-        R: DataRead<'a, X> + 'a,
+        R: FitsRead<'a, X> + 'a,
     {
         let header = Header::parse(cards)?;
         /* 2. Skip the next bytes to a new 2880 multiple of bytes

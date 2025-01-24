@@ -1,193 +1,258 @@
 use std::io::Read;
+use std::fmt::Debug;
+use std::io::Cursor;
+use flate2::read::GzDecoder;
 
 use byteorder::BigEndian;
 use serde::Serialize;
+use super::Bytes;
 
 use crate::{
     byteorder::ReadBytesExt,
-    hdu::header::{extension::image::Image, Bitpix},
 };
 
-use super::bintable::BigEndianIt;
+/*
+impl<'a, T> BigEndianByteIt<'a, T> {
+    fn from_bytes(bytes: Bytes<'a>) -> Self {
+        let limit = bytes.len();
+        Self(BigEndianIt::new(bytes, limit))
+    }
+}*/
+
+/*
+/// Impl a seek method that will call seek on the cursor of bytes.
+use std::io::{Seek, SeekFrom};
+impl<'a, T> BigEndianByteIt<'a, T>
+where
+    T: Value
+{
+    pub(crate) fn seek_to_value(&mut self, idx: usize) -> Result<T, Error> {
+        let num_bytes_per_type = std::mem::size_of::<T>() as u64;
+        let off_bytes = num_bytes_per_type * (idx as u64);
+        
+        let reader = self.reader();
+
+        reader.seek(SeekFrom::Start(off_bytes))?;
+
+        let v = T::read_be(reader);
+
+        reader.seek(-off_bytes - num_bytes_per_type)?;
+
+        v
+    }
+}*/
+
+use crate::hdu::Error;
+pub(crate) trait Value: Sized {
+    fn read_be<R: ReadBytesExt>(reader: &mut R) -> Result<Self, Error>;
+}
+impl Value for u8 {
+    fn read_be<R: ReadBytesExt>(reader: &mut R) -> Result<Self, Error> {
+        Ok(reader.read_u8()?)
+    }
+}
+impl Value for i16 {
+    fn read_be<R: ReadBytesExt>(reader: &mut R) -> Result<Self, Error> {
+        Ok(reader.read_i16::<BigEndian>()?)
+    }
+}
+impl Value for i32 {
+    fn read_be<R: ReadBytesExt>(reader: &mut R) -> Result<Self, Error> {
+        Ok(reader.read_i32::<BigEndian>()?)
+    }
+}
+impl Value for i64 {
+    fn read_be<R: ReadBytesExt>(reader: &mut R) -> Result<Self, Error> {
+        Ok(reader.read_i64::<BigEndian>()?)
+    }
+}
+impl Value for f32 {
+    fn read_be<R: ReadBytesExt>(reader: &mut R) -> Result<Self, Error> {
+        Ok(reader.read_f32::<BigEndian>()?)
+    }
+}
+impl Value for f64 {
+    fn read_be<R: ReadBytesExt>(reader: &mut R) -> Result<Self, Error> {
+        Ok(reader.read_f64::<BigEndian>()?)
+    }
+}
+
 
 #[derive(Debug)]
-pub enum Data<'a> {
-    U8(&'a [u8]),
-    I16(BigEndianIt<&'a [u8], i16>),
-    I32(BigEndianIt<&'a [u8], i32>),
-    I64(BigEndianIt<&'a [u8], i64>),
-    F32(BigEndianIt<&'a [u8], f32>),
-    F64(BigEndianIt<&'a [u8], f64>),
-}
-
-/// An iterator on the data array
-/// This is an enum whose content depends on the
-/// bitpix value found in the header part of the HDU
-///
-/// The data part is expressed as a `DataOwned` structure
-/// for non in-memory readers (typically BufReader) that ensures
-/// a file may not fit in memory
-#[derive(Serialize, Debug)]
-pub enum DataIter<'a, R> {
-    U8(It<'a, R, u8>),
-    I16(It<'a, R, i16>),
-    I32(It<'a, R, i32>),
-    I64(It<'a, R, i64>),
-    F32(It<'a, R, f32>),
-    F64(It<'a, R, f64>),
-}
-
-impl<'a, R> DataIter<'a, R> {
-    pub(crate) fn new(
-        ctx: &Image,
-        num_remaining_bytes_in_cur_hdu: &'a mut usize,
-        reader: &'a mut R,
-    ) -> Self {
-        let bitpix = ctx.get_bitpix();
-        match bitpix {
-            Bitpix::U8 => DataIter::U8(It::new(reader, num_remaining_bytes_in_cur_hdu)),
-            Bitpix::I16 => DataIter::I16(It::new(reader, num_remaining_bytes_in_cur_hdu)),
-            Bitpix::I32 => DataIter::I32(It::new(reader, num_remaining_bytes_in_cur_hdu)),
-            Bitpix::I64 => DataIter::I64(It::new(reader, num_remaining_bytes_in_cur_hdu)),
-            Bitpix::F32 => DataIter::F32(It::new(reader, num_remaining_bytes_in_cur_hdu)),
-            Bitpix::F64 => DataIter::F64(It::new(reader, num_remaining_bytes_in_cur_hdu)),
-        }
-    }
-}
-
-#[derive(Serialize, Debug)]
-pub struct It<'a, R, T> {
-    pub reader: &'a mut R,
-    pub num_remaining_bytes_in_cur_hdu: &'a mut usize,
-    phantom: std::marker::PhantomData<T>,
-}
-
-impl<'a, R, T> It<'a, R, T> {
-    pub fn new(reader: &'a mut R, num_remaining_bytes_in_cur_hdu: &'a mut usize) -> Self {
-        Self {
-            reader,
-            num_remaining_bytes_in_cur_hdu,
-            phantom: std::marker::PhantomData,
-        }
-    }
-}
-
-impl<'a, R> Iterator for It<'a, R, u8>
+pub enum EitherIt<I, J, T>
 where
-    R: Read,
+    I: IntoIterator<Item = T>,
+    <I as IntoIterator>::IntoIter: Debug,
+    J: IntoIterator<Item = T>,
+    <J as IntoIterator>::IntoIter: Debug,
+{
+    I {
+        i: <I as IntoIterator>::IntoIter,
+        _t: std::marker::PhantomData<T>
+    },
+    J {
+        j: <J as IntoIterator>::IntoIter,
+        _t: std::marker::PhantomData<T>
+    }
+}
+
+impl<I, J, T> EitherIt<I, J, T>
+where
+    I: IntoIterator<Item = T>,
+    <I as IntoIterator>::IntoIter: Debug,
+    J: IntoIterator<Item = T>,
+    <J as IntoIterator>::IntoIter: Debug,
+{
+    pub(crate) fn first(it1: I) -> Self {
+        EitherIt::I { i: it1.into_iter(), _t: std::marker::PhantomData }
+    }
+
+    pub(crate) fn second(it2: J) -> Self {
+        EitherIt::J { j: it2.into_iter(), _t: std::marker::PhantomData }
+    }
+}
+
+impl<I, J, T> Iterator for EitherIt<I, J, T>
+where
+    I: IntoIterator<Item = T>,
+    <I as IntoIterator>::IntoIter: Debug,
+    J: IntoIterator<Item = T>,
+    <J as IntoIterator>::IntoIter: Debug,
+{
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            EitherIt::I { i, .. } => i.next(),
+            EitherIt::J { j, .. } => j.next()
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct CastIt<I, T> {
+    it: I,
+    _t: std::marker::PhantomData<T>
+}
+
+impl<I, T> CastIt<I, T> {
+    pub(crate) fn new(it: I) -> Self {
+        Self {
+            it,
+            _t: std::marker::PhantomData
+        }
+    }
+}
+
+impl<I> Iterator for CastIt<I, u8>
+where
+    I: Iterator<Item = i32>
 {
     type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if *self.num_remaining_bytes_in_cur_hdu == 0 {
-            None
-        } else {
-            let item = self.reader.read_u8();
-
-            let num_bytes_item = std::mem::size_of::<Self::Item>();
-            *self.num_remaining_bytes_in_cur_hdu -= num_bytes_item;
-
-            item.ok()
-        }
+        self.it.next().map(|v| v as u8)
     }
 }
 
-impl<'a, R> Iterator for It<'a, R, i16>
+impl<I> Iterator for CastIt<I, i16>
 where
-    R: Read,
+    I: Iterator<Item = i32>
 {
     type Item = i16;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if *self.num_remaining_bytes_in_cur_hdu == 0 {
-            None
-        } else {
-            let item = self.reader.read_i16::<BigEndian>();
-
-            let num_bytes_item = std::mem::size_of::<Self::Item>();
-            *self.num_remaining_bytes_in_cur_hdu -= num_bytes_item;
-
-            item.ok()
-        }
+        self.it.next().map(|v| v as i16)
     }
 }
 
-impl<'a, R> Iterator for It<'a, R, i32>
+impl<I> Iterator for CastIt<I, i32>
 where
-    R: Read,
+    I: Iterator<Item = i32>
 {
     type Item = i32;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if *self.num_remaining_bytes_in_cur_hdu == 0 {
-            None
-        } else {
-            let item = self.reader.read_i32::<BigEndian>();
+        self.it.next()
+    }
+}
 
-            let num_bytes_item = std::mem::size_of::<Self::Item>();
-            *self.num_remaining_bytes_in_cur_hdu -= num_bytes_item;
+#[derive(Debug, Serialize)]
+pub struct BigEndianIt<R, T> {
+    /// The reader
+    reader: R,
+    /// A limit of number of the bytes to read from the reader
+    limit: usize,
+    /// Number of item read
+    cur_idx: usize,
+    /// The type of element read from the reader
+    _t: std::marker::PhantomData<T>
+}
 
-            item.ok()
+impl<R> BigEndianIt<R, u8>
+where
+    R: AsRef<[u8]>
+{
+    fn bytes(&self) -> &[u8] {
+        self.reader.as_ref()
+    }
+}
+
+impl<'a, R, T> BigEndianIt<R, T>
+where
+    R: Read
+{
+    pub fn new(reader: R, limit: u64) -> Self {
+        Self {
+            reader,
+            cur_idx: 0,
+            limit: limit as usize,
+            _t: std::marker::PhantomData,
         }
     }
 }
 
-impl<'a, R> Iterator for It<'a, R, i64>
+impl<'a, R, T> Iterator for BigEndianIt<R, T>
 where
     R: Read,
+    T: Value
 {
-    type Item = i64;
+    type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if *self.num_remaining_bytes_in_cur_hdu == 0 {
+        if self.limit == 0 {
             None
         } else {
-            let item = self.reader.read_i64::<BigEndian>();
+            let byte = T::read_be(&mut self.reader);
+            self.limit -= std::mem::size_of::<T>();
+            self.cur_idx += 1;
 
-            let num_bytes_item = std::mem::size_of::<Self::Item>();
-            *self.num_remaining_bytes_in_cur_hdu -= num_bytes_item;
-
-            item.ok()
+            byte.ok()
         }
     }
 }
 
-impl<'a, R> Iterator for It<'a, R, f32>
+use std::io::Seek;
+impl<'a, R, T> BigEndianIt<R, T>
 where
-    R: Read,
+    R: Read + Seek,
+    T: Value
 {
-    type Item = f32;
+    /// Returns the value of the item from a data iterator
+    /// 
+    /// This internally perform a seek on the inner reader to directly
+    /// target the value and it will only read it afterwards
+    /// This should be faster than reading the whole stream until the idx
+    fn read_value(&mut self, idx: usize) -> Result<T, Error> {
+        // Get the position of the reader since the start of the stream
+        let t_bytes = std::mem::size_of::<T>() as i64;
+        let off = (idx as i64 - self.cur_idx as i64) * t_bytes;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        if *self.num_remaining_bytes_in_cur_hdu == 0 {
-            None
-        } else {
-            let item = self.reader.read_f32::<BigEndian>();
+        self.reader.seek_relative(off)?;
+        let val = T::read_be(&mut self.reader);
+        self.reader.seek_relative(-off - t_bytes)?;
 
-            let num_bytes_item = std::mem::size_of::<Self::Item>();
-            *self.num_remaining_bytes_in_cur_hdu -= num_bytes_item;
-
-            item.ok()
-        }
+        val
     }
 }
 
-impl<'a, R> Iterator for It<'a, R, f64>
-where
-    R: Read,
-{
-    type Item = f64;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if *self.num_remaining_bytes_in_cur_hdu == 0 {
-            None
-        } else {
-            let item = self.reader.read_f64::<BigEndian>();
-
-            let num_bytes_item = std::mem::size_of::<Self::Item>();
-            *self.num_remaining_bytes_in_cur_hdu -= num_bytes_item;
-
-            item.ok()
-        }
-    }
-}

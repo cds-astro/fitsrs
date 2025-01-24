@@ -11,23 +11,25 @@ use std::marker::Unpin;
 use crate::error::Error;
 use crate::hdu::header::Xtension;
 
-pub use iter::DataIter;
 use std::io::Read;
 pub use stream::DataStream;
 
+use std::borrow::Cow;
+/// A type that can store a borrowed or owned slice of bytes
+pub(crate) type Bytes<'a> = Cow<'a, [u8]>;
 
-// reader must impl this
-pub trait DataRead<'a, X>: Read + Sized
+/// Special Read trait on top of the std Read trait
+/// 
+/// This defines methods targeted on reading Fits data units
+pub trait FitsRead<'a, X>: Read + Sized
 where
     X: Xtension,
 {
+    /// The type of the returned data.
+    /// Usually an iterator over the data
     type Data: Debug + 'a;
 
-    fn new(
-        reader: &'a mut Self,
-        ctx: &X,
-        num_remaining_bytes_in_cur_hdu: &'a mut usize,
-    ) -> Self::Data
+    fn read_data_unit(&mut self, ctx: &X) -> Self::Data
     where
         Self: Sized;
 }

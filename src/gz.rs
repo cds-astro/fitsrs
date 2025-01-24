@@ -1,8 +1,7 @@
 use flate2::read::GzDecoder;
 use std::io::Seek;
 use crate::hdu::data::bintable::buf::RowIt;
-use crate::hdu::data::iter::It;
-use crate::hdu::data::{DataIter, DataRead};
+use crate::hdu::data::FitsRead;
 use crate::hdu::header::extension::asciitable::AsciiTable;
 use crate::hdu::header::extension::bintable::BinTable;
 use crate::hdu::header::extension::image::Image;
@@ -29,7 +28,7 @@ where
 /// a seek can be done to get to the next hdu.
 /// 
 /// For gzipped file, the data has to be read block by block
-impl<R> Seek for GzReader<R>
+/*impl<R> Seek for GzReader<R>
 where
     R: Read + Seek,
 {
@@ -54,26 +53,26 @@ where
             GzReader::Reader(r) => r.seek(pos)
         }
     }
-}
+}*/
 
 use std::fmt::Debug;
 use std::io::Read;
 use std::io::BufReader;
 // We only impl DataRead on gzreaders that wraps a bufreader because in-memory cursors
 // do not "read" the data block. Instead the bytes are directly retrieved which prevent the GzDecoder to operate...
-impl<'a, R> DataRead<'a, Image> for GzReader<BufReader<R>>
+/*impl<'a, R> FitsRead<'a, Image> for GzReader<BufReader<R>>
 where
     R: Read + Debug + 'a,
 {
     type Data = DataIter<'a, Self>;
 
-    fn new(reader: &'a mut Self, ctx: &Image, num_remaining_bytes_in_cur_hdu: &'a mut usize) -> Self::Data {
-        DataIter::new(ctx, num_remaining_bytes_in_cur_hdu, reader)
+    fn new(reader: &'a mut Self, ctx: &Image) -> Self::Data {
+        DataIter::new(ctx, reader)
     }
 }
 
 
-impl<'a, R> DataRead<'a, BinTable> for GzReader<BufReader<R>>
+impl<'a, R> FitsRead<'a, BinTable> for GzReader<BufReader<R>>
 where
     R: Read + Debug + 'a
 {
@@ -82,26 +81,23 @@ where
     fn new(
         reader: &'a mut Self,
         ctx: &BinTable,
-        num_remaining_bytes_in_cur_hdu: &'a mut usize,
     ) -> Self::Data {
-        RowIt::new(reader, ctx, num_remaining_bytes_in_cur_hdu)
+        RowIt::new(reader, ctx)
     }
 }
-impl<'a, R> DataRead<'a, AsciiTable> for GzReader<BufReader<R>>
+impl<'a, R> FitsRead<'a, AsciiTable> for GzReader<BufReader<R>>
 where
     R: Read + Debug + 'a
 {
     type Data = It<'a, Self, u8>;
 
-    fn new(
-        reader: &'a mut Self,
+    fn read_data_unit(&mut self,
         _ctx: &AsciiTable,
-        num_remaining_bytes_in_cur_hdu: &'a mut usize,
     ) -> Self::Data {
-        It::new(reader, num_remaining_bytes_in_cur_hdu)
+        It::new(self)
     }
 }
-
+*/
 use std::io::SeekFrom;
 use crate::error::Error;
 impl<R> GzReader<R>

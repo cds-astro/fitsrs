@@ -53,11 +53,11 @@ mod tests {
     use crate::async_fits::AsyncFits;
     use crate::fits::Fits;
     use crate::hdu::data::bintable::{cursor, FieldTy, VariableArray};
-    use crate::hdu::data::{DataIter, DataStream};
+    use crate::hdu::data::{image::buf::DataIter, DataStream};
     use crate::hdu::AsyncHDU;
     use crate::FITSFile;
 
-    use crate::hdu::data::iter::Data;
+    use crate::hdu::data::image::cursor::Data;
     use crate::hdu::header::extension::Xtension;
     use crate::hdu::header::Bitpix;
 

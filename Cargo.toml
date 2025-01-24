@@ -24,6 +24,7 @@ futures = "0.3.31"
 async-trait = "0.1.66"
 quick-error = "2.0.1"
 flate2 = "1.0.35"
+log = "0.4"
 
 [features]
 # Tile compressed image stored in binary table convention https://fits.gsfc.nasa.gov/registry/tilecompression.html

@@ -3,23 +3,22 @@ use futures::AsyncReadExt;
 use std::fmt::Debug;
 use std::io::{BufReader, Cursor, Read};
 
-use super::iter::{It, Data};
+use super::iter::BigEndianIt;
 use super::{stream::St, AsyncDataBufRead};
 
 use crate::hdu::header::extension::asciitable::AsciiTable;
 use crate::hdu::header::extension::Xtension;
-use crate::hdu::DataRead;
-
-impl<'a, R> DataRead<'a, AsciiTable> for Cursor<R>
+use crate::hdu::data::FitsRead;
+/*
+impl<'a, R> FitsRead<'a, AsciiTable> for Cursor<R>
 where
     R: AsRef<[u8]> + Debug + 'a,
 {
-    type Data = Data<'a>;
+    type Data = &'a [u8];
 
     fn new(
         reader: &'a mut Self,
         ctx: &AsciiTable,
-        _num_remaining_bytes_in_cur_hdu: &'a mut usize,
     ) -> Self::Data {
         let num_bytes_of_data = ctx.get_num_bytes_data_block() as usize;
 
@@ -36,22 +35,23 @@ where
 
         debug_assert!(bytes.len() >= num_pixels);
 
-        Data::U8(bytes)
+        bytes
     }
 }
+*/
 
-impl<'a, R> DataRead<'a, AsciiTable> for BufReader<R>
+impl<'a, R> FitsRead<'a, AsciiTable> for R
 where
     R: Read + Debug + 'a,
 {
-    type Data = It<'a, Self, u8>;
+    type Data = BigEndianIt<&'a mut Self, u8>;
 
-    fn new(
-        reader: &'a mut Self,
-        _ctx: &AsciiTable,
-        num_remaining_bytes_in_cur_hdu: &'a mut usize,
+    fn read_data_unit(&mut self,
+        ctx: &AsciiTable,
     ) -> Self::Data {
-        It::new(reader, num_remaining_bytes_in_cur_hdu)
+        let limit = ctx.get_num_bytes_data_block() as u64;
+        
+        BigEndianIt::new(self, limit)
     }
 }
 
