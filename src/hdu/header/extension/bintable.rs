@@ -485,6 +485,7 @@ impl Xtension for BinTable {
             naxis2,
             tfields,
             tforms,
+            ttypes,
             pcount,
             gcount,
             theap,
@@ -588,63 +589,33 @@ impl TForm for C {
 }
 // Double-precision complex
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
-pub struct M;
+pub(crate) struct M;
 impl TForm for M {
     const BITS_SIZE: usize = 128;
 
     type Ty = (f64, f64);
 }
 
-pub(crate) trait ArrayDescriptor: TForm {
-    /// From bytes of the field, returns a tuple containing
-    /// * The number of elements in the array
-    /// * The offset in bytes from the beginning of the HEAP to the first element of the array
-    fn parse_array_location(field_bytes: &[u8]) -> (usize, usize);
-}
-
 // Array Descriptor (32-bit)
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
-pub struct P;
+pub(crate) struct P;
 impl TForm for P {
     const BITS_SIZE: usize = 64;
 
     type Ty = u64;
 }
 
-impl ArrayDescriptor for P {
-    fn parse_array_location(field_bytes: &[u8]) -> (usize, usize) {
-        // get the number of elements in the array
-        let n_elems = BigEndian::read_u32(&field_bytes[0..4]);
-        // byte offset starting from the beginning of the heap
-        let byte_offset = BigEndian::read_u32(&field_bytes[4..8]);
-
-        (n_elems as usize, byte_offset as usize)
-    }
-}
-
 // Array Descriptor (64-bit)
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
-pub struct Q;
+pub(crate)  struct Q;
 impl TForm for Q {
     const BITS_SIZE: usize = 128;
 
     type Ty = u128;
 }
 
-impl ArrayDescriptor for Q {
-    fn parse_array_location(field_bytes: &[u8]) -> (usize, usize) {
-        // get the number of elements in the array
-        let n_elems = BigEndian::read_u64(&field_bytes[0..8]);
-        // byte offset starting from the beginning of the heap
-        let byte_offset = BigEndian::read_u64(&field_bytes[8..16]);
-
-        (n_elems as usize, byte_offset as usize)
-    }
-}
-
-
 #[derive(PartialEq, Serialize, Clone, Copy, Debug)]
-pub enum TFormType {
+pub(crate) enum TFormType {
     /// Logical
     L {
         repeat_count: usize,
@@ -696,7 +667,7 @@ pub enum TFormType {
         /// max number of elements of type t
         e_max: u64,
         /// the type
-        ty: char,
+        ty: ArrayDescriptorTy,
     },
     // Array Descriptor (64-bit)
     Q {
@@ -705,8 +676,50 @@ pub enum TFormType {
         /// max number of elements of type t
         e_max: u64,
         /// the type
-        ty: char,
+        ty: ArrayDescriptorTy,
     }
+}
+
+#[derive(PartialEq, Serialize, Clone, Copy, Debug)]
+pub(crate) enum TileCompressedImageTy {
+    Gzip1U8,
+    Gzip1I16,
+    Gzip1I32,
+    RiceU8,
+    RiceI16,
+    RiceI32,
+}
+
+#[derive(PartialEq, Serialize, Clone, Copy, Debug)]
+pub(crate) enum VariableArrayTy {
+    /// Logical
+    L,
+    // Bit
+    X,
+    // Unsigned byte
+    B,
+    // 16-bit integer
+    I,
+    // 32-bit integer
+    J,
+    // 64-bit integer
+    K,
+    // Character
+    A,
+    // Single-precision floating point
+    E,
+    // Double-precision floating point
+    D,
+    // Single-precision complex
+    C,
+    // Double-precision complex
+    M,
+}
+
+#[derive(PartialEq, Serialize, Clone, Copy, Debug)]
+pub(crate) enum ArrayDescriptorTy {
+    TileCompressedImage(TileCompressedImageTy),
+    Default(VariableArrayTy)
 }
 
 impl TFormType {
@@ -776,6 +789,7 @@ mod tests {
                 naxis1: 11535,
                 naxis2: 1,
                 tfields: 9,
+                ttypes: vec![None; 9],
                 tforms: vec![
                     TFormType::A { repeat_count: 5 },
                     TFormType::I { repeat_count: 1 },

@@ -78,7 +78,21 @@ where
 
         Ok(())
     }
+}
 
+impl<'a, R> Fits<R> {
+    /// Get the byte index where the data for the current processed HDU is
+    /// 
+    /// At least one next call has to be done
+    pub fn get_position_data_unit(&self) -> usize {
+        self.pos_start_cur_du
+    }
+}
+
+impl<'a, R> Fits<R>
+where
+    R: FitsRead<'a, Image> + FitsRead<'a, AsciiTable> + FitsRead<'a, BinTable> + 'a,
+{
     // Retrieve the iterator or in memory data from the reader
     // This has the effect of consuming the HDU
     pub fn get_data<X>(&'a mut self, hdu: HDU<X>) -> <R as FitsRead<'a, X>>::Data
@@ -87,12 +101,8 @@ where
         R: FitsRead<'a, X> + 'a,
     {
         // Unroll the internal fits parsing parameters to give it to the data reader
-        let Self {
-            reader,
-            ..
-        } = self;
         let xtension = hdu.header.get_xtension();
-        self.read_data_unit(xtension)
+        self.reader.read_data_unit(xtension, self.pos_start_cur_du as u64)
     }
 }
 

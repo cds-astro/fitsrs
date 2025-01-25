@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
+
+use log::warn;
 use serde::Serialize;
 
 use crate::card::Cards;
@@ -138,116 +140,81 @@ impl Xtension for AsciiTable {
         // FIELDS
         let tfields = check_for_tfields(values)?;
 
-        // TBCOLS
-        let tbcols = (0..tfields)
-            .map(|idx_field| {
-                let idx_field = idx_field + 1;
-                let kw = format!("TBCOL{idx_field:?}");
-
-                values
-                    .get(&kw)
-                    .ok_or(Error::StaticError("TBCOLX card not found"))?
-                    .clone()
-                    .check_for_integer()
-                    .map(|tbcol| tbcol as u64)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
         // TFORMS
-        let tforms = (0..tfields)
-            .map(|idx_field| {
+        let (tbcols, tforms) = (0..self.tfields)
+            .filter_map(|idx_field| {
                 let idx_field = idx_field + 1;
-                let kw = format!("TFORM{idx_field:?}");
+                let tbcol = values.get(&format!("TBCOL{idx_field:?}")).map(|Value::Integer { value, .. }| *value);
+                let tform = values.get(&format!("TFORM{idx_field:?}")).map(|Value::String { value, .. }| *value);
 
-                let tform = values
-                    .get(&kw)
-                    .ok_or(Error::StaticError("TFORMX card not found"))?
-                    .clone()
-                    .check_for_string()?;
+                if tbcol.is_none() {
+                    warn!("Discard field {}", idx_field);
+                }
+
+
+                if tform.is_none() {
+                    warn!("Discard field {}", idx_field);
+                }
+
+                let tbcol = tbcol? as u64;
+                let tform = tform?;
 
                 let first_char = &tform[0..1];
-                match first_char {
+                let tform = match first_char {
                     "A" => {
                         let w = tform[1..]
                             .trim_end()
-                            .parse::<i32>()
-                            .map_err(|_| Error::StaticError("expected w after the "))?;
+                            .parse::<i32>().ok()?;
 
-                        Ok(TFormAsciiTable::Character { w: w as usize })
+                        TFormAsciiTable::Character { w: w as usize }
                     }
                     "I" => {
                         let w = tform[1..]
                             .trim_end()
-                            .parse::<i32>()
-                            .map_err(|_| Error::StaticError("expected w after the "))?;
+                            .parse::<i32>().ok()?;
 
-                        Ok(TFormAsciiTable::DecimalInteger { w: w as usize })
+                        TFormAsciiTable::DecimalInteger { w: w as usize }
                     }
                     "F" => {
                         let wd = tform[1..].trim_end().split('.').collect::<Vec<_>>();
 
-                        let w = wd[0].parse::<i32>().map_err(|_| {
-                            Error::StaticError(
-                                "TFORM E type: w part does not parse into an integer",
-                            )
-                        })?;
+                        let w = wd[0].parse::<i32>().ok()?;
+                        let d = wd[1].parse::<i32>().ok()?;
 
-                        let d = wd[1].parse::<i32>().map_err(|_| {
-                            Error::StaticError(
-                                "TFORM E type: d part does not parse into an integer",
-                            )
-                        })?;
-
-                        Ok(TFormAsciiTable::FloatingPointFixed {
+                        TFormAsciiTable::FloatingPointFixed {
                             w: w as usize,
                             d: d as usize,
-                        })
+                        }
                     }
                     "E" => {
                         let wd = tform[1..].trim_end().split('.').collect::<Vec<_>>();
 
-                        let w = wd[0].parse::<i32>().map_err(|_| {
-                            Error::StaticError(
-                                "TFORM E type: w part does not parse into an integer",
-                            )
-                        })?;
+                        let w = wd[0].parse::<i32>().ok()?;
+                        let d = wd[1].parse::<i32>().ok()?;
 
-                        let d = wd[1].parse::<i32>().map_err(|_| {
-                            Error::StaticError(
-                                "TFORM E type: d part does not parse into an integer",
-                            )
-                        })?;
-
-                        Ok(TFormAsciiTable::EFloatingPointExp {
+                        TFormAsciiTable::EFloatingPointExp {
                             w: w as usize,
                             d: d as usize,
-                        })
+                        }
                     }
                     "D" => {
                         let wd = tform[1..].trim_end().split('.').collect::<Vec<_>>();
 
-                        let w = wd[0].parse::<i32>().map_err(|_| {
-                            Error::StaticError(
-                                "TFORM E type: w part does not parse into an integer",
-                            )
-                        })?;
+                        let w = wd[0].parse::<i32>().ok()?;
+                        let d = wd[1].parse::<i32>().ok()?;
 
-                        let d = wd[1].parse::<i32>().map_err(|_| {
-                            Error::StaticError(
-                                "TFORM E type: d part does not parse into an integer",
-                            )
-                        })?;
-
-                        Ok(TFormAsciiTable::DFloatingPointExp {
+                        TFormAsciiTable::DFloatingPointExp {
                             w: w as usize,
                             d: d as usize,
-                        })
+                        }
                     }
-                    _ => Err(Error::StaticError("Ascii Table TFORM not recognized")),
-                }
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+                    _ => { return None; }
+                };
 
+                Some((tbcol, tform))
+            })
+            .unzip();
+  
         Ok(AsciiTable {
             bitpix,
             naxis,

@@ -47,6 +47,7 @@ pub use async_fits::AsyncFits;
 pub use file::FITSFile;
 pub use fits::Fits;
 pub use hdu::{AsyncHDU, HDU};
+pub use hdu::data::{ImageData, TableData};
 
 #[cfg(test)]
 mod tests {

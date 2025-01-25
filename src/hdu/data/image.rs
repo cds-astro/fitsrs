@@ -8,7 +8,8 @@ use futures::AsyncReadExt;
 use std::io::Read;
 use serde::Serialize;
 
-use super::super::{AsyncDataBufRead, DataStream};
+use super::super::AsyncDataBufRead;
+use super::DataStream;
 use crate::hdu::header::extension::image::Image;
 use crate::hdu::FitsRead;
 use std::fmt::Debug;
@@ -19,14 +20,15 @@ where
 {
     type Data = ImageData<&'a mut Self>;
 
-    fn read_data_unit(&mut self,
+    fn read_data_unit(&'a mut self,
         ctx: &Image,
+        _start_pos: u64,
     ) -> Self::Data {
         ImageData::new(ctx, self)
     }
 }
 
-use super::super::stream;
+use super::stream;
 #[async_trait(?Send)]
 impl<'a, R> AsyncDataBufRead<'a, Image> for futures::io::BufReader<R>
 where
@@ -80,10 +82,9 @@ pub enum ImageData<R> {
     F64(BigEndianIt<R, f64>),
 }
 
-use std::io::Seek;
 impl<R> ImageData<R>
 where
-    R: Read + Seek
+    R: Read
 {
     pub(crate) fn new(
         ctx: &Image,

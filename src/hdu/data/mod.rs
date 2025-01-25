@@ -4,6 +4,9 @@ pub mod image;
 pub mod iter;
 pub mod stream;
 
+pub use image::ImageData;
+pub use bintable::TableData;
+
 use std::fmt::Debug;
 
 use std::marker::Unpin;
@@ -13,10 +16,6 @@ use crate::hdu::header::Xtension;
 
 use std::io::Read;
 pub use stream::DataStream;
-
-use std::borrow::Cow;
-/// A type that can store a borrowed or owned slice of bytes
-pub(crate) type Bytes<'a> = Cow<'a, [u8]>;
 
 /// Special Read trait on top of the std Read trait
 /// 
@@ -29,7 +28,13 @@ where
     /// Usually an iterator over the data
     type Data: Debug + 'a;
 
-    fn read_data_unit(&mut self, ctx: &X) -> Self::Data
+    /// Read the data unit providing a special iteratior in function of the extension encountered
+    /// 
+    /// * Params
+    /// 
+    /// * ctx - The context of the extension
+    /// * start_pos - Information variable telling at which byte position the data starts
+    fn read_data_unit(&'a mut self, ctx: &X, start_pos: u64) -> Self::Data
     where
         Self: Sized;
 }

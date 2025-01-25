@@ -1,11 +1,11 @@
 use flate2::read::GzDecoder;
 use std::io::Seek;
-use crate::hdu::data::bintable::buf::RowIt;
+/*
 use crate::hdu::data::FitsRead;
 use crate::hdu::header::extension::asciitable::AsciiTable;
 use crate::hdu::header::extension::bintable::BinTable;
 use crate::hdu::header::extension::image::Image;
-
+*/
 #[derive(Debug)]
 pub enum GzReader<R> {
     GzReader(GzDecoder<R>),
@@ -57,7 +57,7 @@ where
 
 use std::fmt::Debug;
 use std::io::Read;
-use std::io::BufReader;
+
 // We only impl DataRead on gzreaders that wraps a bufreader because in-memory cursors
 // do not "read" the data block. Instead the bytes are directly retrieved which prevent the GzDecoder to operate...
 /*impl<'a, R> FitsRead<'a, Image> for GzReader<BufReader<R>>
