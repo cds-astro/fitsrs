@@ -32,6 +32,21 @@ where
     }
 }
 
+impl<R> Clone for Fits<R>
+where
+    R: Clone
+{
+    fn clone(&self) -> Self {
+        Self {
+            reader: self.reader.clone(),
+            error_parsing_encountered: self.error_parsing_encountered,
+            num_bytes_in_cur_du: self.num_bytes_in_cur_du,
+            pos_start_cur_du: self.pos_start_cur_du,
+            start: self.start
+        }
+    }
+}
+
 use crate::error::Error;
 
 impl<'a, R> Fits<R> {
