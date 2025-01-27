@@ -6,9 +6,12 @@ use crate::hdu::header::extension::asciitable::AsciiTable;
 use crate::hdu::header::extension::bintable::BinTable;
 use crate::hdu::header::extension::image::Image;
 */
+use std::io::Cursor;
 #[derive(Debug)]
 pub enum GzReader<R> {
-    GzReader(GzDecoder<R>),
+    /// If the the file refers to a gzip file then unzip it entirely and store it in-memory
+    /// This will later be read and seekable (thanks to Cursor)
+    GzReader(Cursor<Box<[u8]>>),
     Reader(R),
 }
 
@@ -28,32 +31,17 @@ where
 /// a seek can be done to get to the next hdu.
 /// 
 /// For gzipped file, the data has to be read block by block
-/*impl<R> Seek for GzReader<R>
+impl<R> Seek for GzReader<R>
 where
     R: Read + Seek,
 {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
         match self {
-            GzReader::GzReader(r) => {
-                match pos {
-                    SeekFrom::Current(mut off) if off > 0 => {
-                        let mut bbuf = [0_u8; 2880];
-                        while off > 0 {
-                            let bytes2read = 2880.min(off);
-                            let _ = r.read_exact(&mut bbuf[..bytes2read as usize])?;
-
-                            off -= bytes2read;
-                        }
-
-                        Ok(0)
-                    },
-                    _ => Err(std::io::ErrorKind::NotSeekable.into())
-                }
-            }
+            GzReader::GzReader(r) => r.seek(pos),
             GzReader::Reader(r) => r.seek(pos)
         }
     }
-}*/
+}
 
 use std::fmt::Debug;
 use std::io::Read;
@@ -106,11 +94,16 @@ where
 {
     /// Open a fits file from a path. Can be gzip-compressed
     pub fn new(reader: R) -> Result<Self, Error> {
-        let gz = GzDecoder::new(reader);
+        let mut gz = GzDecoder::new(reader);
 
         match gz.header() {
             // `path` points to a file that is gzip-compressed.
-            Some(_) => Ok(GzReader::GzReader(gz)),
+            Some(_) => {
+                let mut buf = vec![];
+                gz.read_to_end(&mut buf)?;
+
+                Ok(GzReader::GzReader(Cursor::new(buf.into_boxed_slice())))
+            }
             // `path` points to a plain text file.
             None => {
                 let mut r = gz.into_inner();

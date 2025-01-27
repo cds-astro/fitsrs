@@ -690,6 +690,12 @@ pub(crate) enum TileCompressedImageTy {
     RiceI32,
 }
 
+impl TileCompressedImageTy {
+    pub(crate) fn is_gzipped(&self) -> bool {
+        *self == TileCompressedImageTy::Gzip1U8 || *self == TileCompressedImageTy::Gzip1I16 || *self == TileCompressedImageTy::Gzip1I32
+    }
+}
+
 #[derive(PartialEq, Serialize, Clone, Copy, Debug)]
 pub(crate) enum VariableArrayTy {
     /// Logical
@@ -789,7 +795,6 @@ mod tests {
                 naxis1: 11535,
                 naxis2: 1,
                 tfields: 9,
-                ttypes: vec![None; 9],
                 tforms: vec![
                     TFormType::A { repeat_count: 5 },
                     TFormType::I { repeat_count: 1 },
@@ -801,6 +806,7 @@ mod tests {
                     TFormType::I { repeat_count: 640 },
                     TFormType::E { repeat_count: 640 },
                 ],
+                ttypes: vec![Some("APERTURE".to_owned()), Some("NPOINTS ".to_owned()), Some("WAVELENGTH".to_owned()), Some("DELTAW  ".to_owned()), Some("NET     ".to_owned()), Some("BACKGROUND".to_owned()), Some("SIGMA   ".to_owned()), Some("QUALITY ".to_owned()), Some("FLUX    ".to_owned())],
                 theap: 11535,
                 // Should be 0
                 pcount: 0,

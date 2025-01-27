@@ -3,26 +3,26 @@ use futures::AsyncReadExt;
 use std::fmt::Debug;
 use std::io::Read;
 
-use super::iter::BigEndianIt;
 use super::{stream::St, AsyncDataBufRead};
 
 use crate::hdu::header::extension::asciitable::AsciiTable;
 use crate::hdu::header::extension::Xtension;
 use crate::hdu::data::FitsRead;
 
+use std::io::{Take, Bytes};
 impl<'a, R> FitsRead<'a, AsciiTable> for R
 where
     R: Read + Debug + 'a,
 {
-    type Data = BigEndianIt<&'a mut Self, u8>;
+    type Data = Bytes<Take<&'a mut R>>;
 
     fn read_data_unit(&'a mut self,
         ctx: &AsciiTable,
         _start_pos: u64
     ) -> Self::Data {
-        let limit = ctx.get_num_bytes_data_block() as u64;
-        
-        BigEndianIt::new(self, limit)
+        let limit = ctx.get_num_bytes_data_block();
+
+        self.take(limit).bytes()
     }
 }
 

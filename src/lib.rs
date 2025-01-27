@@ -53,12 +53,10 @@ pub use hdu::data::{ImageData, TableData};
 mod tests {
     use crate::async_fits::AsyncFits;
     use crate::fits::Fits;
-    use crate::hdu::data::bintable::{cursor, FieldTy, VariableArray};
-    use crate::hdu::data::{image::buf::DataIter, DataStream};
+    use crate::hdu::data::DataStream;
     use crate::hdu::AsyncHDU;
-    use crate::FITSFile;
+    use crate::{FITSFile, ImageData};
 
-    use crate::hdu::data::image::cursor::Data;
     use crate::hdu::header::extension::Xtension;
     use crate::hdu::header::Bitpix;
 
@@ -156,7 +154,7 @@ mod tests {
             let num_pixels = header.get_xtension().get_naxisn(1).unwrap()
                 * header.get_xtension().get_naxisn(2).unwrap();
             match hdu_list.get_data(hdu) {
-                Data::F32(it) => {
+                ImageData::F32(it) => {
                     assert!(it.collect::<Vec<_>>().len() as u64 == num_pixels);
                 }
                 _ => unreachable!(),
@@ -182,7 +180,7 @@ mod tests {
             let num_pixels = header.get_xtension().get_naxisn(1).unwrap()
                 * header.get_xtension().get_naxisn(2).unwrap();
             match hdu_list.get_data(hdu) {
-                Data::I16(data) => {
+                ImageData::I16(data) => {
                     assert!(data.collect::<Vec<_>>().len() as u64 == num_pixels)
                 }
                 _ => unreachable!(),
@@ -255,27 +253,27 @@ mod tests {
             let num_pixels = (naxis1 * naxis2) as usize;
 
             match hdu_list.get_data(hdu) {
-                DataIter::I16(it) => {
+                ImageData::I16(it) => {
                     let data = it.collect::<Vec<_>>();
                     assert_eq!(data.len(), num_pixels);
                 }
-                DataIter::U8(it) => {
+                ImageData::U8(it) => {
                     let data = it.collect::<Vec<_>>();
                     assert_eq!(data.len(), num_pixels);
                 }
-                DataIter::I32(it) => {
+                ImageData::I32(it) => {
                     let data = it.collect::<Vec<_>>();
                     assert_eq!(data.len(), num_pixels);
                 }
-                DataIter::I64(it) => {
+                ImageData::I64(it) => {
                     let data = it.collect::<Vec<_>>();
                     assert_eq!(data.len(), num_pixels);
                 }
-                DataIter::F32(it) => {
+                ImageData::F32(it) => {
                     let data = it.collect::<Vec<_>>();
                     assert_eq!(data.len(), num_pixels);
                 }
-                DataIter::F64(it) => {
+                ImageData::F64(it) => {
                     let data = it.collect::<Vec<_>>();
                     assert_eq!(data.len(), num_pixels);
                 }
@@ -299,12 +297,33 @@ mod tests {
             let naxis1 = *xtension.get_naxisn(1).unwrap();
             let naxis2 = *xtension.get_naxisn(2).unwrap();
             match hdu_list.get_data(hdu) {
-                Data::F32(data) => {
+                ImageData::F32(data) => {
                     assert_eq!(data.collect::<Vec<_>>().len(), (naxis1 * naxis2) as usize);
                 }
                 _ => unreachable!(),
             }
         }
+    }
+
+    #[test]
+    fn test_fits_bintable() {
+        use std::fs::File;
+
+        let mut f = File::open("samples/vizier/II_278_table2v1.fits").unwrap();
+        let mut buf = Vec::new();
+        f.read_to_end(&mut buf).unwrap();
+
+        let reader = Cursor::new(&buf[..]);
+        let mut hdu_list = Fits::from_reader(reader);
+
+        while let Some(Ok(HDU::XBinaryTable(bintable))) = dbg!(hdu_list.next()) {
+            let _ = bintable.get_header().get_xtension();
+            let data = hdu_list.get_data(bintable).collect::<Vec<_>>();
+
+            dbg!(data);
+        }
+
+        assert!(true);
     }
 
     #[test_case("samples/misc/SN2923fxjA.fits.gz", 5415.0, 6386.0)]
@@ -321,7 +340,7 @@ mod tests {
                     let naxis2 = *xtension.get_naxisn(2).unwrap();
 
                     match hdu_list.get_data(hdu) {
-                        DataIter::F32(it) => {
+                        ImageData::F32(it) => {
                             let c = it.map(|v| (((v - min)/(max - min)) * 255.0) as u8).collect::<Vec<_>>();
 
                             let imgbuf = DynamicImage::ImageLuma8(
@@ -344,6 +363,8 @@ mod tests {
     fn open_tile_compressed_image(filename: &str) {
         use std::fs::File;
 
+        use crate::hdu::data::bintable::DataValue;
+
         let mut f = File::open(filename).unwrap();
         let mut buf = Vec::new();
         f.read_to_end(&mut buf).unwrap();
@@ -355,10 +376,11 @@ mod tests {
             match hdu {
                 HDU::XBinaryTable(hdu) => {
                     let pixels = hdu_list.get_data(hdu)
-                        .flat_map(|row| { 
-                            match row.into_iter().nth(0).unwrap() {
-                                FieldTy::VariableArray(VariableArray::I16(r)) => {
-                                    r
+                        .map(|value| {
+                            let value = value;
+                            match value {
+                                DataValue::Short { value, .. } => {
+                                    value
                                 }
                                 _ => unimplemented!()
                             }
@@ -403,12 +425,12 @@ mod tests {
 
                             let data = hdu_list.get_data(hdu);
                             match data {
-                                Data::U8(mem) => assert_eq!(num_pixels, mem.len()),
-                                Data::I16(it) => assert_eq!(num_pixels, it.collect::<Vec<_>>().len()),
-                                Data::I32(it) => assert_eq!(num_pixels, it.collect::<Vec<_>>().len()),
-                                Data::I64(it) => assert_eq!(num_pixels, it.collect::<Vec<_>>().len()),
-                                Data::F32(it) => assert_eq!(num_pixels, it.collect::<Vec<_>>().len()),
-                                Data::F64(it) => assert_eq!(num_pixels, it.collect::<Vec<_>>().len()),
+                                ImageData::U8(it) => assert_eq!(num_pixels, it.collect::<Vec<_>>().len()),
+                                ImageData::I16(it) => assert_eq!(num_pixels, it.collect::<Vec<_>>().len()),
+                                ImageData::I32(it) => assert_eq!(num_pixels, it.collect::<Vec<_>>().len()),
+                                ImageData::I64(it) => assert_eq!(num_pixels, it.collect::<Vec<_>>().len()),
+                                ImageData::F32(it) => assert_eq!(num_pixels, it.collect::<Vec<_>>().len()),
+                                ImageData::F64(it) => assert_eq!(num_pixels, it.collect::<Vec<_>>().len()),
                             }
                         }
                         _ => (),
@@ -424,10 +446,9 @@ mod tests {
                 }
                 HDU::XASCIITable(hdu) => {
                     let num_bytes = hdu.get_header().get_xtension().get_num_bytes_data_block();
-                    match hdu_list.get_data(hdu) {
-                        Data::U8(mem) => assert_eq!(num_bytes as usize, mem.len()),
-                        _ => unreachable!(),
-                    }
+                    let bytes = hdu_list.get_data(hdu);
+
+                    assert_eq!(num_bytes as usize, bytes.collect::<Vec<_>>().len());
                 }
             }
         }
@@ -453,27 +474,27 @@ mod tests {
                     let num_pixels = naxis2 * naxis1;
 
                     match hdu_list.get_data(hdu) {
-                        DataIter::U8(it) => {
+                        ImageData::U8(it) => {
                             let data = it.collect::<Vec<_>>();
                             assert_eq!(num_pixels as usize, data.len())
                         }
-                        DataIter::I16(it) => {
+                        ImageData::I16(it) => {
                             let data = it.collect::<Vec<_>>();
                             assert_eq!(num_pixels as usize, data.len())
                         }
-                        DataIter::I32(it) => {
+                        ImageData::I32(it) => {
                             let data = it.collect::<Vec<_>>();
                             assert_eq!(num_pixels as usize, data.len())
                         }
-                        DataIter::I64(it) => {
+                        ImageData::I64(it) => {
                             let data = it.collect::<Vec<_>>();
                             assert_eq!(num_pixels as usize, data.len())
                         }
-                        DataIter::F32(it) => {
+                        ImageData::F32(it) => {
                             let data = it.collect::<Vec<_>>();
                             assert_eq!(num_pixels as usize, data.len())
                         }
-                        DataIter::F64(it) => {
+                        ImageData::F64(it) => {
                             let data = it.collect::<Vec<_>>();
                             assert_eq!(num_pixels as usize, data.len())
                         }

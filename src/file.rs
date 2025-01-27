@@ -25,6 +25,7 @@ impl FITSFile {
         let bufreader = BufReader::new(f);
         // Decorate the reader with a gz decoder
         let reader = GzReader::new(bufreader)?;
+
         Ok(Fits::from_reader(reader))
     }
 }
