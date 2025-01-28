@@ -1,23 +1,18 @@
 use std::collections::HashMap;
-use std::io::Read;
 
 use async_trait::async_trait;
-use futures::AsyncRead;
 use serde::Serialize;
 
-use crate::card::Card;
 use crate::card::Value;
 use crate::error::Error;
-use crate::hdu::header::consume_next_card_async;
-use crate::hdu::header::parse_bitpix_card;
-use crate::hdu::header::parse_gcount_card;
-use crate::hdu::header::parse_naxis_card;
-use crate::hdu::header::parse_pcount_card;
+use crate::hdu::header::check_for_bitpix;
+use crate::hdu::header::check_for_gcount;
+use crate::hdu::header::check_for_naxis;
+use crate::hdu::header::check_for_naxisi;
+use crate::hdu::header::check_for_pcount;
+use crate::hdu::header::check_for_tfields;
 use crate::hdu::header::BitpixValue;
 use crate::hdu::header::Xtension;
-use crate::hdu::header::NAXIS_KW;
-use crate::hdu::primary::check_card_keyword;
-use crate::hdu::primary::consume_next_card;
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct AsciiTable {
@@ -106,29 +101,62 @@ impl Xtension for AsciiTable {
         self.naxis1 * self.naxis2
     }
 
-    fn update_with_parsed_header(&mut self, cards: &HashMap<String,Value>) -> Result<(), Error> {
+    fn parse(
+        values: &HashMap<String, Value>,
+    ) -> Result<Self, Error> {
+        // BITPIX
+        let bitpix = check_for_bitpix(values)?;
+        if bitpix != BitpixValue::U8 {
+            return Err(Error::StaticError("Ascii Table HDU must have a BITPIX = 8"));
+        }
+
+        // NAXIS
+        let naxis = check_for_naxis(values)?;
+        if naxis != 2 {
+            return Err(Error::StaticError("Ascii Table HDU must have NAXIS = 2"));
+        }
+
+        // NAXIS1
+        let naxis1 = check_for_naxisi(values, 1)? as u64;
+        let naxis2 = check_for_naxisi(values, 2)? as u64;
+
+        // PCOUNT
+        let pcount = check_for_pcount(values)?;
+        if pcount != 0 {
+            return Err(Error::StaticError("Ascii Table HDU must have PCOUNT = 0"));
+        }
+
+        // GCOUNT
+        let gcount = check_for_gcount(values)?;
+        if gcount != 1 {
+            return Err(Error::StaticError("Ascii Table HDU must have GCOUNT = 1"));
+        }
+
+        // FIELDS
+        let tfields = check_for_tfields(values)?;
+
         // TBCOLS
-        self.tbcols = (0..self.tfields)
+        let tbcols = (0..tfields)
             .map(|idx_field| {
                 let idx_field = idx_field + 1;
                 let kw = format!("TBCOL{idx_field:?}");
 
-                cards
+                values
                     .get(&kw)
                     .ok_or(Error::StaticError("TBCOLX card not found"))?
                     .clone()
-                    .check_for_float()
+                    .check_for_integer()
                     .map(|tbcol| tbcol as u64)
             })
             .collect::<Result<Vec<_>, _>>()?;
 
         // TFORMS
-        self.tforms = (0..self.tfields)
+        let tforms = (0..tfields)
             .map(|idx_field| {
                 let idx_field = idx_field + 1;
                 let kw = format!("TFORM{idx_field:?}");
 
-                let tform = cards
+                let tform = values
                     .get(&kw)
                     .ok_or(Error::StaticError("TFORMX card not found"))?
                     .clone()
@@ -216,122 +244,6 @@ impl Xtension for AsciiTable {
                 }
             })
             .collect::<Result<Vec<_>, _>>()?;
-
-        Ok(())
-    }
-
-    fn parse<R: Read>(
-        reader: &mut R,
-        num_bytes_read: &mut usize,
-        card_80_bytes_buf: &mut [u8; 80],
-        _cards: &mut Vec<Card>,
-    ) -> Result<Self, Error> {
-        // BITPIX
-        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let bitpix = parse_bitpix_card(card_80_bytes_buf)?;
-        if bitpix != BitpixValue::U8 {
-            return Err(Error::StaticError("Ascii Table HDU must have a BITPIX = 8"));
-        }
-
-        // NAXIS
-        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let naxis = parse_naxis_card(card_80_bytes_buf)?;
-
-        if naxis != 2 {
-            return Err(Error::StaticError("Ascii Table HDU must have NAXIS = 2"));
-        }
-        // NAXIS1
-        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let naxis1 = check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_float()? as u64;
-        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let naxis2 = check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_float()? as u64;
-
-        // PCOUNT
-        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let pcount = parse_pcount_card(card_80_bytes_buf)?;
-        if pcount != 0 {
-            return Err(Error::StaticError("Ascii Table HDU must have PCOUNT = 0"));
-        }
-
-        // GCOUNT
-        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let gcount = parse_gcount_card(card_80_bytes_buf)?;
-        if gcount != 1 {
-            return Err(Error::StaticError("Ascii Table HDU must have GCOUNT = 1"));
-        }
-
-        // FIELDS
-        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let tfields =
-            check_card_keyword(card_80_bytes_buf, b"TFIELDS ")?.check_for_float()? as usize;
-
-        let tbcols = vec![];
-        let tforms = vec![];
-
-        Ok(AsciiTable {
-            bitpix,
-            naxis,
-            naxis1,
-            naxis2,
-            tbcols,
-            tfields,
-            tforms,
-            pcount,
-            gcount,
-        })
-    }
-
-    async fn parse_async<R>(
-        reader: &mut R,
-        num_bytes_read: &mut usize,
-        card_80_bytes_buf: &mut [u8; 80],
-        _cards: &mut Vec<Card>,
-    ) -> Result<Self, Error>
-    where
-        R: AsyncRead + std::marker::Unpin,
-        Self: Sized,
-    {
-        // BITPIX
-        consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
-        let bitpix = parse_bitpix_card(card_80_bytes_buf)?;
-        if bitpix != BitpixValue::U8 {
-            return Err(Error::StaticError("Ascii Table HDU must have a BITPIX = 8"));
-        }
-
-        // NAXIS
-        consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
-        let naxis = parse_naxis_card(card_80_bytes_buf)?;
-
-        if naxis != 2 {
-            return Err(Error::StaticError("Ascii Table HDU must have NAXIS = 2"));
-        }
-        // NAXIS1
-        consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
-        let naxis1 = check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_float()? as u64;
-        consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
-        let naxis2 = check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_float()? as u64;
-
-        // PCOUNT
-        consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
-        let pcount = parse_pcount_card(card_80_bytes_buf)?;
-        if pcount != 0 {
-            return Err(Error::StaticError("Ascii Table HDU must have PCOUNT = 0"));
-        }
-
-        // GCOUNT
-        consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
-        let gcount = parse_gcount_card(card_80_bytes_buf)?;
-        if gcount != 1 {
-            return Err(Error::StaticError("Ascii Table HDU must have GCOUNT = 1"));
-        }
-
-        // FIELDS
-        consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
-        let tfields =
-            check_card_keyword(card_80_bytes_buf, b"TFIELDS ")?.check_for_float()? as usize;
-
-        let tbcols = vec![];
-        let tforms = vec![];
 
         Ok(AsciiTable {
             bitpix,

@@ -1,25 +1,21 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::io::Read;
 
 use async_trait::async_trait;
-use futures::AsyncRead;
 use serde::Serialize;
 
-use crate::card::Card;
 use crate::error::Error;
-use crate::hdu::header::consume_next_card_async;
-use crate::hdu::header::parse_bitpix_card;
-use crate::hdu::header::parse_gcount_card;
-use crate::hdu::header::parse_naxis_card;
-use crate::hdu::header::parse_pcount_card;
 use crate::hdu::header::BitpixValue;
-use crate::hdu::header::Xtension;
-use crate::hdu::header::NAXIS_KW;
-use crate::hdu::primary::check_card_keyword;
-use crate::hdu::primary::consume_next_card;
+use crate::hdu::header::check_for_bitpix;
+use crate::hdu::header::check_for_gcount;
+use crate::hdu::header::check_for_naxis;
+use crate::hdu::header::check_for_naxisi;
 
 use crate::card::Value;
+use crate::hdu::header::check_for_pcount;
+use crate::hdu::header::check_for_tfields;
+
+use super::Xtension;
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct BinTable {
@@ -51,14 +47,47 @@ impl Xtension for BinTable {
         self.naxis1 * self.naxis2
     }
 
-    fn update_with_parsed_header(&mut self, cards: &HashMap<String, Value>) -> Result<(), Error> {
+    fn parse(
+        values: &HashMap<String, Value>,
+    ) -> Result<Self, Error> {
+        // BITPIX
+        let bitpix = check_for_bitpix(values)?;
+        if bitpix != BitpixValue::U8 {
+            return Err(Error::StaticError(
+                "Binary Table HDU must have a BITPIX = 8",
+            ));
+        }
+
+        // NAXIS
+        let naxis = check_for_naxis(values)?;
+        if naxis != 2 {
+            return Err(Error::StaticError("Binary Table HDU must have NAXIS = 2"));
+        }
+
+        // NAXIS1
+        let naxis1 = check_for_naxisi(values, 1)? as u64;
+        // NAXIS2
+        let naxis2 = check_for_naxisi(values, 2)? as u64;
+
+
+        // PCOUNT
+        let pcount = check_for_pcount(values)?;
+
+        // GCOUNT
+        let gcount = check_for_gcount(values)?;
+        if gcount != 1 {
+            return Err(Error::StaticError("Ascii Table HDU must have GCOUNT = 1"));
+        }
+
+        // FIELDS
+        let tfields = check_for_tfields(values)?;
         // TFORMS
-        self.tforms = (0..self.tfields)
+        let tforms = (0..tfields)
             .map(|idx_field| {
                 let idx_field = idx_field + 1;
                 let kw = format!("TFORM{idx_field:?}");
 
-                let card_value = cards
+                let card_value = values
                     .get(&kw)
                     .ok_or(Error::StaticError("TFIELDS idx does not map any TFORM!"))?
                     .clone()
@@ -92,126 +121,12 @@ impl Xtension for BinTable {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        let num_bits_per_row: u64 = self.tforms.iter().map(|tform| tform.num_bits_field()).sum();
+        let num_bits_per_row: u64 = tforms.iter().map(|tform| tform.num_bits_field()).sum();
 
         let num_bytes_per_row = num_bits_per_row >> 3;
-        if num_bytes_per_row != self.naxis1 {
+        if num_bytes_per_row != naxis1 {
             return Err(Error::StaticError("BinTable NAXIS1 and TFORMS does not give the same amount of bytes the table should have per row."));
         }
-
-        Ok(())
-    }
-
-    fn parse<R: Read>(
-        reader: &mut R,
-        num_bytes_read: &mut usize,
-        card_80_bytes_buf: &mut [u8; 80],
-        _cards: &mut Vec<Card>,
-    ) -> Result<Self, Error> {
-        // BITPIX
-        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let bitpix = parse_bitpix_card(card_80_bytes_buf)?;
-        if bitpix != BitpixValue::U8 {
-            return Err(Error::StaticError(
-                "Binary Table HDU must have a BITPIX = 8",
-            ));
-        }
-
-        // NAXIS
-        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let naxis = parse_naxis_card(card_80_bytes_buf)?;
-        if naxis != 2 {
-            return Err(Error::StaticError("Binary Table HDU must have NAXIS = 2"));
-        }
-
-        // NAXIS1
-        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let naxis1 = check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_float()? as u64;
-        // NAXIS2
-        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let naxis2 = check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_float()? as u64;
-
-        // PCOUNT
-        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let pcount = parse_pcount_card(card_80_bytes_buf)?;
-
-        // GCOUNT
-        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let gcount = parse_gcount_card(card_80_bytes_buf)?;
-        if gcount != 1 {
-            return Err(Error::StaticError("Ascii Table HDU must have GCOUNT = 1"));
-        }
-
-        // FIELDS
-        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let tfields =
-            check_card_keyword(card_80_bytes_buf, b"TFIELDS ")?.check_for_float()? as usize;
-
-        let tforms = vec![];
-
-        Ok(BinTable {
-            bitpix,
-            naxis,
-            naxis1,
-            naxis2,
-            tfields,
-            tforms,
-            pcount,
-            gcount,
-        })
-    }
-
-    async fn parse_async<R>(
-        reader: &mut R,
-        num_bytes_read: &mut usize,
-        card_80_bytes_buf: &mut [u8; 80],
-        _cards: &mut Vec<Card>,
-    ) -> Result<Self, Error>
-    where
-        R: AsyncRead + std::marker::Unpin,
-        Self: Sized,
-    {
-        // BITPIX
-        consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
-        let bitpix = parse_bitpix_card(card_80_bytes_buf)?;
-        if bitpix != BitpixValue::U8 {
-            return Err(Error::StaticError(
-                "Binary Table HDU must have a BITPIX = 8",
-            ));
-        }
-
-        // NAXIS
-        consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
-        let naxis = parse_naxis_card(card_80_bytes_buf)?;
-        if naxis != 2 {
-            return Err(Error::StaticError("Binary Table HDU must have NAXIS = 2"));
-        }
-
-        // NAXIS1
-        consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
-        let naxis1 = check_card_keyword(card_80_bytes_buf, NAXIS_KW[0])?.check_for_float()? as u64;
-
-        // NAXIS2
-        consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
-        let naxis2 = check_card_keyword(card_80_bytes_buf, NAXIS_KW[1])?.check_for_float()? as u64;
-
-        // PCOUNT
-        consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
-        let pcount = parse_pcount_card(card_80_bytes_buf)?;
-
-        // GCOUNT
-        consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
-        let gcount = parse_gcount_card(card_80_bytes_buf)?;
-        if gcount != 1 {
-            return Err(Error::StaticError("Ascii Table HDU must have GCOUNT = 1"));
-        }
-
-        // FIELDS
-        consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
-        let tfields =
-            check_card_keyword(card_80_bytes_buf, b"TFIELDS ")?.check_for_float()? as usize;
-
-        let tforms = vec![];
 
         Ok(BinTable {
             bitpix,

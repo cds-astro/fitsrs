@@ -224,7 +224,7 @@ mod tests {
         let reader = Cursor::new(&buf[..]);
         let hdu_list = Fits::from_reader(reader);
         let mut correctly_opened = true;
-        for hdu in hdu_list {
+        for hdu in dbg!(hdu_list) {
             match hdu {
                 Err(_) => {
                     correctly_opened = false;

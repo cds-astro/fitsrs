@@ -3,6 +3,7 @@ use std::pin::Pin;
 use futures::{Future, Stream};
 use serde::Serialize;
 
+use crate::card::Card;
 use crate::hdu;
 use crate::hdu::data::AsyncDataBufRead;
 use crate::hdu::header::extension::asciitable::AsciiTable;
@@ -194,16 +195,17 @@ impl<X> AsyncHDU<X>
 where
     X: Xtension + std::fmt::Debug,
 {
+    
     pub async fn new<'a, R>(
         reader: &mut R,
         num_bytes_read: &mut usize,
-        card_80_bytes_buf: &mut [u8; 80],
+        cards: Vec<Card>,
     ) -> Result<Self, Error>
     where
         R: AsyncDataBufRead<'a, X> + 'a,
     {
         /* 1. Parse the header first */
-        let header = Header::parse_async(reader, num_bytes_read, card_80_bytes_buf).await?;
+        let header = Header::parse(cards)?;
         /* 2. Skip the next bytes to a new 2880 multiple of bytes
         This is where the data block should start */
         let is_remaining_bytes = ((*num_bytes_read) % 2880) > 0;

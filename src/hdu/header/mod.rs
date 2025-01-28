@@ -2,7 +2,7 @@
 //!
 //! A header basically consists of a list a 80 long characters CARDS
 //! Each CARD is a dictionnary tuple-like of the (key, value) form.
-use futures::{AsyncBufRead, AsyncRead, AsyncReadExt};
+use futures::{AsyncRead, AsyncReadExt};
 use serde::Serialize;
 
 pub mod extension;
@@ -45,10 +45,6 @@ pub async fn consume_next_card_async<'a, R: AsyncRead + std::marker::Unpin>(
     Ok(())
 }
 
-fn kw_to_string(name: &Keyword) -> String {
-    String::from_utf8_lossy(name.trim_ascii()).into_owned()
-}
-
 pub fn check_card_keyword(card: &[u8; 80], keyword: &[u8; 8]) -> Result<card::Value, Error> {
     if card[..8] == keyword[..] {
         if let Card::Value { value, .. } = Card::try_from(card)? {
@@ -65,33 +61,63 @@ pub fn check_card_keyword(card: &[u8; 80], keyword: &[u8; 8]) -> Result<card::Va
     }
 }
 
-/* Parse mandatory keywords */
-fn parse_bitpix_card(card: &[u8; 80]) -> Result<BitpixValue, Error> {
-    let bitpix = check_card_keyword(card, b"BITPIX  ")?.check_for_float()? as i32;
-    match bitpix {
-        8 => Ok(BitpixValue::U8),
-        16 => Ok(BitpixValue::I16),
-        32 => Ok(BitpixValue::I32),
-        64 => Ok(BitpixValue::I64),
-        -32 => Ok(BitpixValue::F32),
-        -64 => Ok(BitpixValue::F64),
-        _ => Err(Error::BitpixBadValue),
+/* Mandatory keywords parsing */
+fn check_for_bitpix(values: &HashMap<String, Value>) -> Result<BitpixValue, Error> {
+    if let Some(Value::Integer { value, .. }) = values.get("BITPIX") {
+        match value {
+            8 => Ok(BitpixValue::U8),
+            16 => Ok(BitpixValue::I16),
+            32 => Ok(BitpixValue::I32),
+            64 => Ok(BitpixValue::I64),
+            -32 => Ok(BitpixValue::F32),
+            -64 => Ok(BitpixValue::F64),
+            _ => Err(Error::BitpixBadValue),
+        }
+    } else {
+        Err(Error::FailFindingKeyword("BITPIX".to_owned()))
     }
 }
-fn parse_naxis_card(card: &[u8; 80]) -> Result<usize, Error> {
-    let naxis = check_card_keyword(card, b"NAXIS   ")?.check_for_float()?;
 
-    Ok(naxis as usize)
+fn check_for_naxis(values: &HashMap<String, Value>) -> Result<usize, Error> {
+    if let Some(Value::Integer { value, .. }) = values.get("NAXIS") {
+        Ok(*value as usize)
+    } else {
+        Err(Error::FailFindingKeyword("NAXIS".to_owned()))
+    }
 }
 
-const NAXIS_KW: [&[u8; 8]; 6] = [
-    b"NAXIS1  ",
-    b"NAXIS2  ",
-    b"NAXIS3  ",
-    b"NAXIS4  ",
-    b"NAXIS5  ",
-    b"NAXIS6  ",
-];
+fn check_for_naxisi(values: &HashMap<String, Value>, i: usize) -> Result<usize, Error> {
+    let naxisi = format!("NAXIS{:?}", i);
+    if let Some(Value::Integer { value, .. }) = values.get(&naxisi) {
+        Ok(*value as usize)
+    } else {
+        Err(Error::FailFindingKeyword(naxisi))
+    }
+}
+
+fn check_for_gcount(values: &HashMap<String, Value>) -> Result<usize, Error> {
+    if let Some(Value::Integer { value, .. }) = values.get("GCOUNT") {
+        Ok(*value as usize)
+    } else {
+        Err(Error::FailFindingKeyword("GCOUNT".to_owned()))
+    }
+}
+
+fn check_for_pcount(values: &HashMap<String, Value>) -> Result<usize, Error> {
+    if let Some(Value::Integer { value, .. }) = values.get("PCOUNT") {
+        Ok(*value as usize)
+    } else {
+        Err(Error::FailFindingKeyword("PCOUNT".to_owned()))
+    }
+}
+
+fn check_for_tfields(values: &HashMap<String, Value>) -> Result<usize, Error> {
+    if let Some(Value::Integer { value, .. }) = values.get("TFIELDS") {
+        Ok(*value as usize)
+    } else {
+        Err(Error::FailFindingKeyword("TFIELDS".to_owned()))
+    }
+}
 
 #[derive(Debug, PartialEq, Serialize, Clone, Copy)]
 pub enum BitpixValue {
@@ -120,73 +146,13 @@ impl<X> Header<X>
 where
     X: Xtension + std::fmt::Debug,
 {
-    pub(crate) fn parse<R: Read>(
-        reader: &mut R,
-        num_bytes_read: &mut usize,
-        card_80_bytes_buf: &mut [u8; 80],
+    pub(crate) fn parse(
+        cards: Vec<Card>,
     ) -> Result<Self, Error> {
-        let mut cards = Vec::new();
-
-        /* Consume mandatory keywords */
-        let mut xtension: X =
-            Xtension::parse(reader, num_bytes_read, card_80_bytes_buf, &mut cards)?;
-
-        /* Consume next non mandatory keywords until `END` is reached */
-        loop {
-            consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-            if let Ok(card) = Card::try_from(&*card_80_bytes_buf) {
-                cards.push(card);
-                if Some(&Card::End) == cards.last() {
-                    break;
-                }
-            } else {
-                // FIXME log warning
-                // preserve the unparsable header
-                let card = Card::Undefined(String::from_utf8_lossy(card_80_bytes_buf).into_owned());
-                cards.push(card);
-            }
-        }
-
         let values = process_cards(&cards)?;
-        xtension.update_with_parsed_header(&values)?;
-        Ok(Self {
-            cards,
-            values,
-            xtension,
-        })
-    }
 
-    pub(crate) async fn parse_async<'a, R>(
-        reader: &mut R,
-        num_bytes_read: &mut usize,
-        card_80_bytes_buf: &mut [u8; 80],
-    ) -> Result<Self, Error>
-    where
-        R: AsyncBufRead + std::marker::Unpin,
-    {
-        let mut cards = Vec::new();
+        let xtension: X = Xtension::parse(&values)?;
 
-        /* Consume mandatory keywords */
-        let mut xtension: X =
-            Xtension::parse_async(reader, num_bytes_read, card_80_bytes_buf, &mut cards).await?;
-
-        loop {
-            consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
-            if let Ok(card) = Card::try_from(&*card_80_bytes_buf) {
-                cards.push(card);
-                if Some(&Card::End) == cards.last() {
-                    break;
-                }
-            } else {
-                // FIXME log warning
-                // preserve the unparsable header
-                let card = Card::Undefined(String::from_utf8_lossy(card_80_bytes_buf).into_owned());
-                cards.push(card);
-            }
-        }
-
-        let values = process_cards(&cards)?;
-        xtension.update_with_parsed_header(&values)?;
         Ok(Self {
             cards,
             values,
@@ -234,14 +200,14 @@ where
         self.values.keys()
     }
 
-    pub fn cards(&self) -> impl Iterator<Item = &Card> + use<'_, X> {
+    pub fn cards(&self) -> impl Iterator<Item = &Card> + '_ {
         self.cards.iter()
     }
 
     /// Return an iterator over the processing history of the header, i.e. all
     /// [cards](Card) using the `HISTORY` keyword.
     ///
-    pub fn history(&self) -> impl Iterator<Item = &String> + use<'_, X> {
+    pub fn history(&self) -> impl Iterator<Item = &String> + '_ {
         self.cards.iter().filter_map(move |c|
             if let Card::History(string) = c {
                 Some(string)
@@ -255,7 +221,7 @@ where
     /// or blank (eight spaces) keyword.
     ///
     /// Note that comments on [Card::Value] cards are part of the [value](Value).
-    pub fn comments(&self) -> impl Iterator<Item = &String> + use<'_, X> {
+    pub fn comments(&self) -> impl Iterator<Item = &String> + '_ {
         self.cards.iter().filter_map(move |c|
             if let Card::Comment(string) = c {
                 Some(string)
@@ -322,18 +288,6 @@ fn process_cards(cards: &[Card]) -> Result<HashMap<String, Value>, Error> {
     Err(Error::StaticError("Missing END card"))
 }
 
-fn parse_pcount_card(card: &[u8; 80]) -> Result<usize, Error> {
-    let pcount = check_card_keyword(card, b"PCOUNT  ")?.check_for_float()?;
-
-    Ok(pcount as usize)
-}
-
-fn parse_gcount_card(card: &[u8; 80]) -> Result<usize, Error> {
-    let gcount = check_card_keyword(card, b"GCOUNT  ")?.check_for_float()?;
-
-    Ok(gcount as usize)
-}
-
 #[cfg(test)]
 mod tests {
 
@@ -392,28 +346,26 @@ mod tests {
         if let HDU::Primary(hdu) = hdu {
             let mut cards = hdu.get_header().cards();
             // FIXME ensure that SIMPLE is added to header cards
-            // assert_eq!(cards.next(), Some(&Card::Value {
-            //     name: "SIMPLE".to_owned(),
-            //     value: Value::Logical {
-            //         value: true,
-            //         comment: Some(" this is a FITS file".to_owned())
-            //     }
-            // }));
+            assert_eq!(cards.next(), Some(&Card::Value {
+                name: "SIMPLE".to_owned(),
+                value: Value::Logical {
+                    value: true,
+                    comment: Some(" this is a fake FITS file".to_owned())
+                }
+            }));
             // FIXME ensure that BITPIX is added to header cards
-            // assert_eq!(cards.next(), Some(&Card::Value {
-            //     name: "BITPIX".to_owned(),
-            //     value: Value::Integer {
-            //         value: 8,
-            //         comment: Some(" byte sized numbers".to_owned())
-            //     }
-            // }));
+            assert_eq!(dbg!(cards.next()), Some(&Card::Value {
+                name: "BITPIX".to_owned(),
+                value: Value::Integer {
+                    value: 8,
+                    comment: Some(" byte sized numbers".to_owned())
+                }
+            }));
             assert_eq!(cards.next(), Some(&Card::Value {
                 name: "NAXIS".to_owned(),
                 value: Value::Integer {
                     value: 0,
-                    // FIXME ensure that the a NAXIS comment is preserved
-                    // comment: Some(" no data arrays".to_owned())
-                    comment: None
+                    comment: Some(" no data arrays".to_owned())
                 }
             }));
             assert_eq!(cards.next(), Some(&Card::Comment("some contextual comment on the header".to_owned())));

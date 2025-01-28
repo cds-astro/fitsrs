@@ -1,4 +1,4 @@
-use std::{any::{Any, TypeId}, char::REPLACEMENT_CHARACTER, convert::TryFrom};
+use std::{char::REPLACEMENT_CHARACTER, convert::TryFrom};
 
 use crate::{error::Error, hdu::header::extension::XtensionType};
 /// Holds eight bytes of ASCII characters, i.e. the length of a FITS compliant keyword.
@@ -203,14 +203,15 @@ fn parse_value(buf: &[u8]) -> Result<Value, Error> {
 fn parse_number(v: String, c: Option<String>) -> Result<Value, Error> {
     if v.is_empty() {
         Ok(Value::Undefined) // FITSv4, section 4.1.2.3
-    } else if let Ok(val) = v.parse::<f64>() {
-        Ok(Value::Float {
+    } else if let Ok(val) = v.parse::<i64>() {
+        // First parse integer
+        Ok(Value::Integer {
             value: val,
             comment: c,
         })
-    } else if let Ok(val) = v.parse::<i64>() {
-        // when will parsing for f64 ever fail and i64 succeed?
-        Ok(Value::Integer {
+    } else if let Ok(val) = v.parse::<f64>() {
+        // If it fails try parsing a float
+        Ok(Value::Float {
             value: val,
             comment: c,
         })
@@ -609,8 +610,8 @@ mod tests {
     fn number_values() -> Result<(), Error> {
         assert_eq!(
             parse_number("42".to_owned(), None),
-            Ok(Value::Float {
-                value: 42f64,
+            Ok(Value::Integer {
+                value: 42,
                 comment: None
             })
         );
