@@ -332,7 +332,7 @@ mod tests {
     // These tests have been manually created thanks to this command on the fits files:
     // strings  samples/fits.gsfc.nasa.gov/HST_HRS.fits | fold -80 | grep "TBCOL" | tr -s ' ' | cut -d ' ' -f 3
     #[test]
-    fn test_bintable_extension() {
+    fn test_fits_bintable_extension() {
         compare_bintable_ext(
             "samples/fits.gsfc.nasa.gov/IUE_LWP.fits",
             BinTable {

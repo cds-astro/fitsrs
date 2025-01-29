@@ -527,12 +527,10 @@ mod tests {
     }
 
     #[test]
-    fn test_keywords_iter() {
+    fn test_fits_keywords_iter() {
         let f = File::open("samples/misc/SN2923fxjA.fits").unwrap();
-        let bytes: Result<Vec<_>, _> = f.bytes().collect();
-        let buf = bytes.unwrap();
 
-        let reader = Cursor::new(&buf[..]);
+        let reader = std::io::BufReader::new(f);
         let mut hdu_list = Fits::from_reader(reader);
 
         let hdu = hdu_list.next().unwrap().unwrap();
@@ -541,13 +539,14 @@ mod tests {
                 let mut actuals = hdu.get_header().keywords().collect::<Vec<_>>();
                 actuals.sort_unstable();
 
+                /* COMMENT and HISTORY are not part of the cards having values which is what returns keywords */
                 let mut expected = VecDeque::from(vec![
-                    "BAYERIND", "BITCAMPX", "CALPHOT", "CCD-TEMP", "CD1_1", "CD1_2", "CD2_1",
-                    "CD2_2", "CDELT1", "CDELT2", "CDELTM1", "CDELTM2", /* "COMMENT",*/ "COMPRESS",
+                    "BAYERIND", "BITCAMPX", "BITPIX", "CALPHOT", "CCD-TEMP", "CD1_1", "CD1_2", "CD2_1",
+                    "CD2_2", "CDELT1", "CDELT2", "CDELTM1", "CDELTM2"/*,  "COMMENT" */, "COMPRESS",
                     "CRPIX1", "CRPIX2", "CRVAL1", "CRVAL2", "CTYPE1", "CTYPE2", "CUNIT1",
                     "CUNIT2", "CVF", "DATAMAX", "DATAMIN", "DATE", "DATE-OBS", "DEC",
                     "DEWPOINT", "DIAMETER", "ERRFLUX", "EXPOSURE", "FILTERS", "FOCAL",
-                    "FOCUSPOS", "FOCUSTMP", "GAIN_ELE", /* "HISTORY",*/ "HUMIDITY", "IMGTYPE",
+                    "FOCUSPOS", "FOCUSTMP", "GAIN_ELE", /*"HISTORY", */ "HUMIDITY", "IMGTYPE",
                     "INSTRUME", "MAGREF", "MIRORX", "NAXIS", "NAXIS1", "NAXIS2", "OBJCTDEC",
                     "OBJCTRA", "OBSERVER", "OFFSET_E", "ORIGIN", "P3DSPHER", "PCXASTRO",
                     "PCYASTRO", "PDEC_REF", "PDIMPOL", "PIERSIDE", "PPLATESD", "PPXC", "PPYC",
@@ -574,7 +573,7 @@ mod tests {
                     "PSOLY22", "PSOLY23", "PSOLY24", "PSOLY25", "PSOLY26", "PSOLY27",
                     "PSOLY28", "PSOLY29", "PSOLY3", "PSOLY30", "PSOLY31", "PSOLY32", "PSOLY33",
                     "PSOLY34", "PSOLY35", "PSOLY36", "PSOLY4", "PSOLY5", "PSOLY6", "PSOLY7",
-                    "PSOLY8", "PSOLY9", "PSSX", "PSSY", "RA", "READOUTT", "REFFLUX", "SITELAT",
+                    "PSOLY8", "PSOLY9", "PSSX", "PSSY", "RA", "READOUTT", "REFFLUX", "SIMPLE", "SITELAT",
                     "SITELONG", "STACKNB", "STARCNT", "SWCREATE", "TELESCOP", "TEMPEXT", "UT",
                     "WINDIR", "WINSPEED", "X1", "X2", "XPIXELSZ", "XPIXSZ", "Y1", "Y2",
                     "YPIXELSZ", "YPIXSZ"
