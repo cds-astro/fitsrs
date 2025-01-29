@@ -1,7 +1,7 @@
 //! Module implementing the header part of a HDU
 //!
-//! A header basically consists of a list a 80 long characters CARDS
-//! Each CARD is a dictionnary tuple-like of the (key, value) form.
+//! A header consists of a list a of [cards](Card) where each card is a line of
+//! 80 ASCII characters.
 use futures::{AsyncRead, AsyncReadExt};
 use serde::Serialize;
 
@@ -16,7 +16,7 @@ use std::io::Read;
 
 use crate::{
     card::{self, *},
-    error::Error,
+    error::Error, fits::HDU,
 };
 
 pub fn consume_next_card<R: Read>(
@@ -129,14 +129,18 @@ pub enum BitpixValue {
     F64 = -64,
 }
 
+/// The header part of an [HDU].
 #[derive(Debug, PartialEq, Serialize)]
 pub struct Header<X> {
-    /// All cards as found in the header.
+    /// All cards in the order they appear in the header.
     cards: Vec<Card>,
-    /// The value of all cards that represent a value mapped by keyword `name``.
+    /// The value of all cards that represent a [Card::Value] mapped by keyword
+    /// `name`.
     ///
-    /// * A keyword `name` is a trimmed string and not the eight-byte keyword buffer used on the [Card].
-    /// * If a keyword appears more than once in the header, the value of the last [Card] is returned
+    /// * A keyword `name` is a trimmed string and not the eight-byte keyword
+    ///   buffer used on the [Card].
+    /// * If contrary to the FITS standard, a keyword appears more than once in
+    ///   the header, the value of the last [Card::Value] is returned.
     values: HashMap<String, Value>,
     /// Mandatory keywords for fits ext parsing.
     xtension: X,
@@ -160,7 +164,7 @@ where
         })
     }
 
-    /// Get the gcount value given by the "PCOUNT" card
+    /// Get the gcount value given by the `PCOUNT` card
     pub fn get_xtension(&self) -> &X {
         &self.xtension
     }
@@ -171,9 +175,9 @@ where
         self.values.get(key)
     }
 
-    /// Get the value a specific card and try to parse the value
-    /// Returns an error if the asking type does not match the true inner type of
-    /// the value got
+    /// Get the value a specific card and try to parse the value. Returns an
+    /// error if the asking type does not match the true inner type of the value.
+    ///
     /// # Params
     /// * `key` - The key of a card
     pub fn get_parsed<T>(&self, key: &str) -> Option<Result<T, Error>>
@@ -187,16 +191,19 @@ where
         })
     }
 
+    /// Return an iterator over all keywords representing a FITS [Card::Value]
+    /// in the FITS header.
     pub fn keywords(&self) -> Keys<String, Value> {
         self.values.keys()
     }
 
+    /// Return an iterator over all [cards](Card) in the FITS header.
     pub fn cards(&self) -> impl Iterator<Item = &Card> + '_ {
         self.cards.iter()
     }
 
     /// Return an iterator over the processing history of the header, i.e. all
-    /// [cards](Card) using the `HISTORY` keyword.
+    /// [cards](Card) with the `HISTORY` keyword.
     ///
     pub fn history(&self) -> impl Iterator<Item = &String> + '_ {
         self.cards.iter().filter_map(move |c|
@@ -208,19 +215,6 @@ where
         )
     }
 
-    /// Return all header level comments, i.e. [cards](Card) using the `COMMENT`
-    /// or blank (eight spaces) keyword.
-    ///
-    /// Note that comments on [Card::Value] cards are part of the [value](Value).
-    pub fn comments(&self) -> impl Iterator<Item = &String> + '_ {
-        self.cards.iter().filter_map(move |c|
-            if let Card::Comment(string) = c {
-                Some(string)
-            } else {
-                None
-            }
-        )
-    }
 }
 
 fn process_cards(cards: &[Card]) -> Result<HashMap<String, Value>, Error> {
@@ -273,7 +267,8 @@ fn process_cards(cards: &[Card]) -> Result<HashMap<String, Value>, Error> {
                     unreachable!("cards trailing after the END card")
                 }
             }
-            _ => ( /* NOOP - TODO log debug */),
+            // TODO log skipped card at debug level
+            _ => ( /* NOOP */),
         }
     }
     Err(Error::StaticError("Missing END card"))
@@ -388,12 +383,6 @@ mod tests {
             assert_eq!(cards.next(), None);
 
             let header = hdu.get_header();
-
-            let mut comments = header.comments();
-            assert_eq!(comments.next(), Some(&"some contextual comment on the header".to_string()));
-            assert_eq!(comments.next(), Some(&"... over two lines".to_string()));
-            assert_eq!(comments.next(), Some(&"comment on the history?".to_string()));
-            assert_eq!(comments.next(), None);
 
             let mut history = header.history();
             assert_eq!(history.next(), Some(&"this was processed manually using vscode".to_string()));

@@ -16,7 +16,7 @@ pub enum Card {
         name: String,
         value: Value,
     },
-    /// Continuation of a long-string with CONTINUE in the keyword field of the card.
+    /// Continuation of a long-string with `CONTINUE`` in the keyword field of the card.
     Continuation {
         string: Option<String>,
         comment: Option<String>,
@@ -52,8 +52,9 @@ impl Card {
         }
     }
 
-    /// Append a [Card::Continuation] to this [Card] if it is *string* [Card::Keyword]
-    /// and if it is [continued][Self::continued()], else panics.
+    /// Append a [Card::Continuation] to this [Card] if it is a [Card::Value] of
+    /// type [Value::String] and if the string is
+    /// [continued][Self::continued()], else panics.
     /// ```
     ///     # use fitsrs::card:: { Card, Value };
     ///     # use std::convert::TryFrom;

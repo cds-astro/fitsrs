@@ -29,6 +29,7 @@ use crate::async_fits;
 use crate::fits;
 use crate::hdu::primary::consume_next_card;
 
+/// An enueration of the supported FITS Header Data Unit types.
 #[derive(Debug, PartialEq)]
 pub enum HDU {
     Primary(fits::HDU<Image>),
