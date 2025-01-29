@@ -105,7 +105,7 @@ impl HDU {
 
         let cards = consume_cards(reader, &mut num_bytes_read)?;
         let mut num_bytes_read = dbg!(num_bytes_read);
-        // Check only the if the first card. Even if not FITS valid we could accept
+        // Check only the the first card. Even if not FITS valid we could accept
         // it if its xtension card is down in the header.
         match &cards[0] {
             Card::Xtension{ x: XtensionType::Image, .. } => Ok(HDU::XImage(
@@ -132,10 +132,15 @@ impl HDU {
         let cards = consume_cards(reader, &mut num_bytes_read)?;
 
         // Check for SIMPLE keyword
-        let _name: String = "SIMPLE".to_owned();
-        if let Card::Value { name: _name, value: Logical { value: true, .. }, .. } = &cards[0] {
-            Ok(HDU::Primary(fits::HDU::<Image>::new(reader, &mut num_bytes_read, cards)?))
+        if let Card::Value { name, value: Logical { value: true, .. }, .. } = &cards[0] {
+            if name == "SIMPLE" {
+                Ok(HDU::Primary(fits::HDU::<Image>::new(reader, &mut num_bytes_read, cards)?))
+            } else {
+                // TODO log the card to stderr
+                Err(Error::DynamicError(format!("Expected the `SIMPLE` keyword, found `{name}`")))
+            }
         } else {
+            // TODO log the card to stderr
             Err(Error::StaticError("not a FITSv4 file"))
         }
     }

@@ -314,6 +314,31 @@ mod tests {
     }
 
     #[test]
+    fn primary_hdu_without_without_simple_keyword() -> Result<(), Error> {
+        let data = mock_fits_data([
+            b"WRONGKW =                    T / this is a fake FITS file                       ",
+            b"BITPIX  =                    8 / byte sized numbers                             ",
+            b"NAXIS   =                    0 / no data arrays                                 ",
+            b"COMMENT some contextual comment on the header                                   ",
+            b"COMMENT ... over two lines                                                      ",
+            b"HISTORY this was processed manually using vscode                                ",
+            b"COMMENT comment on the history?                                                 ",
+            b"HISTORY did some more processing...                                             ",
+            b"END                                                                             "
+        ]);
+        let reader = Cursor::new(data);
+        let mut fits = Fits::from_reader(reader);
+        let hdu = fits
+            .next()
+            .expect("Should contain a primary HDU")
+            ;
+        if let Err(Error::DynamicError(e)) = hdu {
+            assert_eq!(e, "Invalid FITS file: expected `SIMPLE` keyword in first card, found `WRONGKW`")
+        }
+        Ok(())
+    }
+
+    #[test]
     fn primary_hdu_with_no_data() -> Result<(), Error> {
         let data = mock_fits_data([
             b"SIMPLE  =                    T / this is a fake FITS file                       ",
