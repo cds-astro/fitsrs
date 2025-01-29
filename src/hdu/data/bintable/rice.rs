@@ -1,22 +1,454 @@
+//! This code is a port in Rust of CFITSIO's ricecomp.c
+//! 
+//! The original code can be found here: https://github.com/HEASARC/cfitsio/blob/develop/ricecomp.c#L1
+//! The port tends to provide a rust idiomatic RICE decoder reader that can operate on top of
+//! another reader coming for example from a web stream, a file, a memory-map.
+
+/*
+ * nonzero_count is lookup table giving number of bits in 8-bit values not including
+ * leading zeros used in fits_rdecomp, fits_rdecomp_short and fits_rdecomp_byte
+ */
+const NONZERO_COUNT: [i32; 256] = [
+    0, 
+    1, 
+    2, 2, 
+    3, 3, 3, 3, 
+    4, 4, 4, 4, 4, 4, 4, 4, 
+    5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 
+    6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 
+    6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 
+    7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 
+    7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 
+    7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 
+    7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 
+    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 
+    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 
+    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 
+    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 
+    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 
+    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 
+    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 
+    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8];
+
+#[derive(Debug)]
+enum RICEState {
+    /// First bytes are not encoded
+    Start,
+    /// FS entry value
+    FS {
+        nbits: i32,
+        b: u32,
+        i: i32,
+        lastpix: i32
+    },
+    /// Low entropy case, values are equal
+    LowEntropyDecoding {
+        i: i32,
+        lastpix: i32,
+        imax: i32,
+        b: u32,
+        nbits: i32
+    },
+    /// High entropy case, difference of adjacent pixels
+    HighEntropyDecoding {
+        nbits: i32,
+        b: u32,
+        i: i32,
+        lastpix: i32,
+        imax: i32
+    },
+    /// RICE decoding
+    RICEDecoding {
+        nbits: i32,
+        b: u32,
+        i: i32,
+        lastpix: i32,
+        fs: i32,
+        imax: i32
+    },
+}
+
+const FSBITS: i32 = 5;
+const FSMAX: i32 = 25;
+const BBITS: i32 = 1 << FSBITS;
+
 #[derive(Debug)]
 pub(crate) struct RICEDecoder<R> {
-    pub reader: R
+    pub reader: R,
+
+    state: RICEState,
+    nblock: i32,
+}
+
+impl<R> RICEDecoder<R> {
+    /// Init a RICE decoder decorator on a reader
+    /// This does nothing
+    /// 
+    /// # Params
+    /// 
+    /// * `reader` - The reader to decode
+    /// * `nblock` - coding block size, usually 32 is given
+    pub(crate) fn new(reader: R, nblock: i32) -> Self {
+        Self {
+            reader,
+            state: RICEState::Start,
+            nblock,
+        }
+    } 
 }
 
 use std::io::Read;
+
+use byteorder::ReadBytesExt;
 impl<R> Read for RICEDecoder<R>
 where
     R: Read
 {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.reader.read(buf)
-    }
-}
+        // a counter of the num bytes read through that read call
+        let mut j = 0;
+        loop {
+            match self.state {
+                RICEState::Start => {
+                    let mut lastpix = (self.reader.read_u8()? << 24) as i32;
+                    lastpix = lastpix | ((self.reader.read_u8()? << 16) as i32);
+                    lastpix = lastpix | ((self.reader.read_u8()? << 8) as i32);
+                    lastpix = lastpix | (self.reader.read_u8()? as i32);
 
-impl<R> RICEDecoder<R> {
-    pub fn new(reader: R) -> Self {
-        Self {
-            reader
+                    let b = self.reader.read_u8()? as u32;		    /* bit buffer			*/
+                    let nbits = 8;		                            /* number of bits remaining in b	*/
+                    let i = 0;
+                    self.state = RICEState::FS { nbits, b, i, lastpix };
+                },
+                RICEState::FS { mut nbits, mut b, i, lastpix } => {
+                    /* get the FS value from first fsbits */
+                    nbits -= FSBITS;
+                    while nbits < 0 {
+                        b = (b<<8) | (self.reader.read_u8()? as u32);
+                        nbits += 8;
+                    }
+                    let fs = ((b >> nbits) - 1) as i32;
+
+                    b &= (1<<nbits)-1;
+                    /* loop over the next block */
+                    let imax = i + self.nblock;
+                    
+                    self.state = if fs < 0 {
+                        RICEState::LowEntropyDecoding { i, lastpix, imax, b, nbits }
+                    } else if fs == FSMAX {
+                        RICEState::HighEntropyDecoding { i, b, nbits, lastpix, imax }
+                    } else {
+                        RICEState::RICEDecoding { i, nbits, b, fs, lastpix, imax }
+                    }
+                },
+                RICEState::LowEntropyDecoding { b, nbits, mut i, lastpix, imax } => {
+                    /* low-entropy case, all zero differences */
+                    while j < buf.len() && i < imax {
+                        buf[j..(j+4)].copy_from_slice(&lastpix.to_ne_bytes());
+
+                        j += 4;
+                        i += 1;
+                    }
+
+                    let buf_filled = j == buf.len();
+
+                    if i == imax {
+                        // We processed all the block, we need to recompute a FS
+                        self.state = RICEState::FS { nbits, b, i, lastpix }
+                    }
+
+                    if buf_filled {
+                        return Ok(j);
+                    }
+                },
+                RICEState::HighEntropyDecoding { nbits, mut b, mut i, mut lastpix, imax } => {
+                    while j < buf.len() && i < imax {
+                        let mut k = BBITS - nbits;
+                        let mut diff = b<<k;
+
+                        k -= 8;
+                        while k >= 0 {
+                            b = self.reader.read_u8()? as u32;
+                            diff |= b<<k;
+
+                            k -= 8;
+                        }
+                        if nbits > 0 {
+                            b = self.reader.read_u8()? as u32;
+                            diff |= b>>(-k);
+                            b &= (1<<nbits)-1;
+                        } else {
+                            b = 0;
+                        }
+                        /*
+                            * undo mapping and differencing
+                            * Note that some of these operations will overflow the
+                            * unsigned int arithmetic -- that's OK, it all works
+                            * out to give the right answers in the output file.
+                            */
+                        if (diff & 1) == 0 {
+                            diff = diff>>1;
+                        } else {
+                            diff = !(diff>>1);
+                        }
+                        
+                        let curpix = (diff as i32) + lastpix;
+                        buf[j..(j+4)].copy_from_slice(&curpix.to_ne_bytes());
+                        lastpix = curpix;
+
+                        i += 1;
+                        j += 4;
+                    }
+
+                    let buf_filled = j == buf.len();
+
+                    if i == imax {
+                        // We processed all the block, we need to recompute a FS
+                        self.state = RICEState::FS { nbits, b, i, lastpix }
+                    }
+
+                    if buf_filled {
+                        return Ok(j);
+                    }
+                },
+                RICEState::RICEDecoding { mut nbits, mut b, mut i, mut lastpix, fs, imax } => {
+                    while j < buf.len() && i < imax {
+                        /* count number of leading zeros */
+                        while b == 0 {
+                            nbits += 8;
+                            b = self.reader.read_u8()? as u32;
+                        }
+                        let nzero = nbits - NONZERO_COUNT[b as usize];
+                        nbits -= nzero+1;
+                        /* flip the leading one-bit */
+                        b ^= 1<<nbits;
+                        /* get the FS trailing bits */
+                        nbits -= fs;
+                        while nbits < 0 {
+                            b = (b<<8) | (self.reader.read_u8()? as u32);
+                            nbits += 8;
+                        }
+                        let mut diff = ((nzero as u32)<<fs) | (b>>nbits);
+                        b &= (1<<nbits)-1;
+
+                        /* undo mapping and differencing */
+                        if (diff & 1) == 0 {
+                            diff = diff>>1;
+                        } else {
+                            diff = !(diff>>1);
+                        }
+                        let curpix = (diff as i32) + lastpix;
+                        buf[j..(j+4)].copy_from_slice(&curpix.to_ne_bytes());
+                        lastpix = curpix;
+
+                        i += 1;
+                        j += 4;
+                    }
+
+                    let buf_filled = j == buf.len();
+
+                    if i == imax {
+                        // We processed all the block, we need to recompute a FS
+                        self.state = RICEState::FS { nbits, b, i, lastpix }
+                    }
+
+                    if buf_filled {
+                        return Ok(j);
+                    }
+                }
+            }
         }
     }
 }
+
+// /*---------------------------------------------------------------------------*/
+// /*----------------------------------------------------------*/
+// /*                                                          */
+// /*    START OF SOURCE FILE ORIGINALLY CALLED rdecomp.c      */
+// /*                                                          */
+// /*----------------------------------------------------------*/
+
+// /* @(#) rdecomp.c 1.4 99/03/01 12:38:41 */
+// /* rdecomp.c	Decompress image line using
+//  *		(1) Difference of adjacent pixels
+//  *		(2) Rice algorithm coding
+//  *
+//  * Returns 0 on success or 1 on failure
+//  */
+
+// /*    moved these 'includes' to the beginning of the file (WDP)
+// #include <stdio.h>
+// #include <stdlib.h>
+// */
+
+// /*---------------------------------------------------------------------------*/
+// /* this routine used to be called 'rdecomp'  (WDP)  */
+
+// int fits_rdecomp (unsigned char *c,		/* input buffer			*/
+//     int clen,			/* length of input		*/
+//     unsigned int array[],	/* output array			*/
+//     int nx,			/* number of output pixels	*/
+//     int nblock)		/* coding block size		*/
+// {
+//     /* int bsize;  */
+//     int i, k, imax;
+//     int nbits, nzero, fs;
+//     unsigned char *cend, bytevalue;
+//     unsigned int b, diff, lastpix;
+//     int fsmax, fsbits, bbits;
+//     extern const int nonzero_count[];
+
+//     /*
+//     * Original size of each pixel (bsize, bytes) and coding block
+//     * size (nblock, pixels)
+//     * Could make bsize a parameter to allow more efficient
+//     * compression of short & byte images.
+//     */
+//     /*    bsize = 4; */
+
+//     /*    nblock = 32; now an input parameter */
+//     /*
+//     * From bsize derive:
+//     * FSBITS = # bits required to store FS
+//     * FSMAX = maximum value for FS
+//     * BBITS = bits/pixel for direct coding
+//     */
+
+//     /*
+//     switch (bsize) {
+//     case 1:
+//     fsbits = 3;
+//     fsmax = 6;
+//     break;
+//     case 2:
+//     fsbits = 4;
+//     fsmax = 14;
+//     break;
+//     case 4:
+//     fsbits = 5;
+//     fsmax = 25;
+//     break;
+//     default:
+//     ffpmsg("rdecomp: bsize must be 1, 2, or 4 bytes");
+//     return 1;
+//     }
+//     */
+
+//     /* move out of switch block, to tweak performance */
+//     fsbits = 5;
+//     fsmax = 25;
+
+//     bbits = 1<<fsbits;
+
+//     /*
+//     * Decode in blocks of nblock pixels
+//     */
+
+//     /* first 4 bytes of input buffer contain the value of the first */
+//     /* 4 byte integer value, without any encoding */
+
+//     lastpix = 0;
+//     bytevalue = c[0];
+//     lastpix = lastpix | (bytevalue<<24);
+//     bytevalue = c[1];
+//     lastpix = lastpix | (bytevalue<<16);
+//     bytevalue = c[2];
+//     lastpix = lastpix | (bytevalue<<8);
+//     bytevalue = c[3];
+//     lastpix = lastpix | bytevalue;
+
+//     c += 4;  
+//     cend = c + clen - 4;
+
+//     b = *c++;		    /* bit buffer			*/
+//     nbits = 8;		    /* number of bits remaining in b	*/
+//     for (i = 0; i<nx; ) {
+//         /* get the FS value from first fsbits */
+//         nbits -= fsbits;
+//         while (nbits < 0) {
+//             b = (b<<8) | (*c++);
+//             nbits += 8;
+//         }
+//         fs = (b >> nbits) - 1;
+
+//         b &= (1<<nbits)-1;
+//         /* loop over the next block */
+//         imax = i + nblock;
+//         if (imax > nx) imax = nx;
+//         if (fs<0) {
+//             /* low-entropy case, all zero differences */
+//             for ( ; i<imax; i++) array[i] = lastpix;
+//         } else if (fs==fsmax) {
+//             /* high-entropy case, directly coded pixel values */
+//             for ( ; i<imax; i++) {
+//                 k = bbits - nbits;
+//                 diff = b<<k;
+//                 for (k -= 8; k >= 0; k -= 8) {
+//                     b = *c++;
+//                     diff |= b<<k;
+//                 }
+//                 if (nbits>0) {
+//                     b = *c++;
+//                     diff |= b>>(-k);
+//                     b &= (1<<nbits)-1;
+//                 } else {
+//                     b = 0;
+//                 }
+//                 /*
+//                     * undo mapping and differencing
+//                     * Note that some of these operations will overflow the
+//                     * unsigned int arithmetic -- that's OK, it all works
+//                     * out to give the right answers in the output file.
+//                     */
+//                 if ((diff & 1) == 0) {
+//                     diff = diff>>1;
+//                 } else {
+//                     diff = ~(diff>>1);
+//                 }
+//                 array[i] = diff+lastpix;
+//                 lastpix = array[i];
+//             }
+//         } else {
+//             /* normal case, Rice coding */
+//             for ( ; i<imax; i++) {
+//                 /* count number of leading zeros */
+//                 while (b == 0) {
+//                     nbits += 8;
+//                     b = *c++;
+//                 }
+//                 nzero = nbits - nonzero_count[b];
+//                 nbits -= nzero+1;
+//                 /* flip the leading one-bit */
+//                 b ^= 1<<nbits;
+//                 /* get the FS trailing bits */
+//                 nbits -= fs;
+//                 while (nbits < 0) {
+//                     b = (b<<8) | (*c++);
+//                     nbits += 8;
+//                 }
+//                 diff = (nzero<<fs) | (b>>nbits);
+//                 b &= (1<<nbits)-1;
+
+//                 /* undo mapping and differencing */
+//                 if ((diff & 1) == 0) {
+//                     diff = diff>>1;
+//                 } else {
+//                     diff = ~(diff>>1);
+//                 }
+//                 array[i] = diff+lastpix;
+//                 lastpix = array[i];
+//             }
+//         }
+//         if (c > cend) {
+//             ffpmsg("decompression error: hit end of compressed byte stream");
+//             return 1;
+//         }
+//     }
+//     if (c < cend) {
+//         ffpmsg("decompression warning: unused bytes at end of compressed buffer");
+//     }
+//     return 0;
+// }
+// /*---------------------------------------------------------------------------*/
+// /* this routine used to be called 'rdecomp'  (WDP)  */
+

@@ -363,7 +363,7 @@ where
                     // RICE compression
                     // Unsigned byte
                     ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::RiceU8) => {
-                        let mut rice = RICEDecoder::new(&mut self.reader);
+                        let mut rice = RICEDecoder::new(&mut self.reader, 32);
                         let v = rice.read_u8().ok()?;
 
                         *num_bytes_to_read -= B::BYTES_SIZE as u64;
@@ -371,7 +371,7 @@ where
                     }
                     // 16-bit integer
                     ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::RiceI16) => {
-                        let mut rice = RICEDecoder::new(&mut self.reader);
+                        let mut rice = RICEDecoder::new(&mut self.reader, 32);
                         let v = rice.read_i16::<BigEndian>().ok()?;
 
                         *num_bytes_to_read -= I::BYTES_SIZE as u64;
@@ -379,7 +379,7 @@ where
                     }
                     // 32-bit integer
                     ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::RiceI32) => {
-                        let mut rice = RICEDecoder::new(&mut self.reader);
+                        let mut rice = RICEDecoder::new(&mut self.reader, 32);
                         let v = rice.read_i32::<BigEndian>().ok()?;
 
                         *num_bytes_to_read -= J::BYTES_SIZE as u64;
