@@ -152,6 +152,8 @@ impl TryFrom<&CardBuf> for Card {
                         value: parse_value(&buf[10..])?,
                     })
                 } else {
+                    // FIXME add a warn here to tell the user this may be a case from a convention that we
+                    // do not support (e.g. the HIERARCH convention)
                     Ok(Card::Undefined(String::from_utf8_lossy(buf).into_owned()))
                 }
             }

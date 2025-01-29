@@ -336,7 +336,6 @@ mod tests {
         assert!(matches!(hdu, HDU::Primary(_)));
         if let HDU::Primary(hdu) = hdu {
             let mut cards = hdu.get_header().cards();
-            // FIXME ensure that SIMPLE is added to header cards
             assert_eq!(cards.next(), Some(&Card::Value {
                 name: "SIMPLE".to_owned(),
                 value: Value::Logical {
@@ -344,7 +343,6 @@ mod tests {
                     comment: Some(" this is a fake FITS file".to_owned())
                 }
             }));
-            // FIXME ensure that BITPIX is added to header cards
             assert_eq!(dbg!(cards.next()), Some(&Card::Value {
                 name: "BITPIX".to_owned(),
                 value: Value::Integer {
