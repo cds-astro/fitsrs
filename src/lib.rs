@@ -358,7 +358,6 @@ mod tests {
         }
     }
 
-    #[cfg(feature="tci")]
     #[test_case("samples/fits.gsfc.nasa.gov/m13_gzip.fits")]
     fn open_tile_compressed_image(filename: &str) {
         use std::fs::File;

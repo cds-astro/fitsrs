@@ -26,10 +26,6 @@ quick-error = "2.0.1"
 flate2 = "1.0.35"
 log = "0.4"
 
-[features]
-# Tile compressed image stored in binary table convention https://fits.gsfc.nasa.gov/registry/tilecompression.html
-tci = []
-
 [dev-dependencies]
 test-case = "3.0.0"
 tokio = { version = "1.26.0", features = ["rt", "macros"]}
