@@ -328,7 +328,7 @@ mod tests {
             .expect("Should contain a primary HDU")
             ;
         if let Err(Error::DynamicError(e)) = hdu {
-            assert_eq!(e, "Invalid FITS file: expected `SIMPLE` keyword in first card, found `WRONGKW`")
+            assert_eq!(e, "Invalid FITS file: expected `SIMPLE` keyword in first card, found `WRONGKW`");
             Ok(())
         } else {
             panic!("parsing should fail with a keyword error")

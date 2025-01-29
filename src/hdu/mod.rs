@@ -137,7 +137,9 @@ impl HDU {
                 Ok(HDU::Primary(fits::HDU::<Image>::new(reader, &mut num_bytes_read, cards)?))
             } else {
                 // TODO log the card to stderr
-                Err(Error::DynamicError(format!("Expected the `SIMPLE` keyword, found `{name}`")))
+                Err(Error::DynamicError(format!(
+                    "Invalid FITS file: expected `SIMPLE` keyword in first card, found `{name}`"
+                )))
             }
         } else {
             // TODO log the card to stderr
