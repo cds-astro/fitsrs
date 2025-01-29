@@ -314,16 +314,11 @@ mod tests {
     }
 
     #[test]
-    fn primary_hdu_without_without_simple_keyword() -> Result<(), Error> {
+    fn primary_hdu_without_simple_keyword() -> Result<(), Error> {
         let data = mock_fits_data([
             b"WRONGKW =                    T / this is a fake FITS file                       ",
             b"BITPIX  =                    8 / byte sized numbers                             ",
             b"NAXIS   =                    0 / no data arrays                                 ",
-            b"COMMENT some contextual comment on the header                                   ",
-            b"COMMENT ... over two lines                                                      ",
-            b"HISTORY this was processed manually using vscode                                ",
-            b"COMMENT comment on the history?                                                 ",
-            b"HISTORY did some more processing...                                             ",
             b"END                                                                             "
         ]);
         let reader = Cursor::new(data);
@@ -334,8 +329,10 @@ mod tests {
             ;
         if let Err(Error::DynamicError(e)) = hdu {
             assert_eq!(e, "Invalid FITS file: expected `SIMPLE` keyword in first card, found `WRONGKW`")
+            Ok(())
+        } else {
+            panic!("parsing should fail with a keyword error")
         }
-        Ok(())
     }
 
     #[test]
