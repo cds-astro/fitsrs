@@ -29,7 +29,7 @@ use crate::async_fits;
 use crate::fits;
 use crate::hdu::primary::consume_next_card;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum HDU {
     Primary(fits::HDU<Image>),
     XImage(fits::HDU<Image>),
@@ -47,7 +47,10 @@ where
 
     /* Consume cards until `END` is reached */
     loop {
-        consume_next_card(reader, &mut card_80_bytes_buf, num_bytes_read)?;
+        consume_next_card(reader, &mut card_80_bytes_buf, num_bytes_read)
+            // Precise the error that we did not encounter the END stopping card
+            .map_err(|_| Error::StaticError("Fail reading the header without encountering the END card"))?;
+
         if let Ok(card) = Card::try_from(&card_80_bytes_buf) {
             cards.push(card);
             if Some(&Card::End) == cards.last() {
@@ -73,7 +76,9 @@ where
 
     /* Consume cards until `END` is reached */
     loop {
-        consume_next_card_async(reader, &mut card_80_bytes_buf, num_bytes_read).await?;
+        consume_next_card_async(reader, &mut card_80_bytes_buf, num_bytes_read).await
+            // Precise the error that we did not encounter the END stopping card
+            .map_err(|_| Error::StaticError("Fail reading the header without encountering the END card"))?;
         if let Ok(card) = Card::try_from(&card_80_bytes_buf) {
             cards.push(card);
             if Some(&Card::End) == cards.last() {

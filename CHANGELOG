@@ -5,6 +5,8 @@
 Features:
 
 - BREAKING API change. Provide an iterator over the HDU list
+- #16: Parsing of comments, history, continued, card as enum.
+- BREAKING API change. `get` method on the Header object now takes a `&str` instead of a `[u8; 8]` slice.
 
 Bugfixes:
 

@@ -167,15 +167,8 @@ where
 
     /// Get the value of a card, returns `None` if the card is not
     /// found or is not a value card.
-    pub fn get(&self, key: &Keyword) -> Option<&Value> {
-        let kw = String::from_utf8_lossy(key);
-        self.values.get(kw.trim())
-    }
-
-    /// Get the value for a value card, returns `None` if the keyword is not
-    /// found or if the card is not a value card.
-    pub fn value(&self, keyword: &str) -> Option<&Value> {
-        self.values.get(keyword)
+    pub fn get(&self, key: &str) -> Option<&Value> {
+        self.values.get(key)
     }
 
     /// Get the value a specific card and try to parse the value
@@ -183,15 +176,13 @@ where
     /// the value got
     /// # Params
     /// * `key` - The key of a card
-    pub fn get_parsed<T>(&self, key: &[u8; 8]) -> Option<Result<T, Error>>
+    pub fn get_parsed<T>(&self, key: &str) -> Option<Result<T, Error>>
     where
         T: CardValue,
     {
-        self.get(key).map(|card| {
-            let value = card.clone();
+        self.get(key).map(|value| {
             <T as CardValue>::parse(value.clone()).map_err(|_| {
-                let card = String::from_utf8_lossy(key);
-                Error::FailTypeCardParsing(card.to_string(), std::any::type_name::<T>().to_string())
+                Error::FailTypeCardParsing(key.to_string(), std::any::type_name::<T>().to_string())
             })
         })
     }
@@ -389,6 +380,138 @@ mod tests {
             assert_eq!(history.next(), Some(&"did some more processing...".to_string()));
             assert_eq!(history.next(), None);
 
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn end_card_not_found() {
+        let data = mock_fits_data([
+            b"SIMPLE  =                    T / Standard FITS Format                           ",
+            b"BITPIX  =                    8 / Character data                                 ",
+            b"NAXIS   =                    0 / No Image --- just extension(s)                 ",
+            b"EXTEND  =                    T / There are standard extensions                  ",
+        ]);
+        let reader = Cursor::new(data);
+        let mut fits = Fits::from_reader(reader);
+        let hdu = fits
+            .next()
+            .expect("Should contain a primary HDU");
+
+        assert_eq!(Err(Error::StaticError("END card not found")), hdu);
+        // As the primary hdu parsing failed (EOF reached), next call to fits should result in None
+        assert_eq!(fits.next(), None);
+    }
+
+    #[test]
+    fn blank_interpreted_as_comments() -> Result<(), Error> {
+        let data = mock_fits_data([
+            b"SIMPLE  =                    T / Standard FITS Format                           ",
+            b"BITPIX  =                    8 / Character data                                 ",
+            b"NAXIS   =                    0 / No Image --- just extension(s)                 ",
+            b"EXTEND  =                    T / There are standard extensions                  ",
+            b"ORIGIN  = 'xml2fits_v1.95'     / Converted from XML-Astrores to FITS            ",
+            b"                        e-mail: question@simbad.u-strasbg.fr                    ",
+            b"LONGSTRN= 'OGIP 1.0'           / Long string convention (&/CONTINUE) may be used",
+            b"DATE    = '2018-04-12'         / Written on 2018-04-12:13:25:09 (GMT)           ",
+            b"                            by: apache@vizier.u-strasbg.fr                      ",
+            b"        **********************************************************              ",
+            b"            EXCERPT from catalogues stored in VizieR (CDS)                      ",
+            b"                        with the following conditions:                          ",
+            b"        **********************************************************              ",
+            b"                                                                                ",
+            b"        VizieR Astronomical Server vizier.u-strasbg.fr                          ",
+            b"        Date: 2018-04-12T13:25:09 [V1.99+ (14-Oct-2013)]                        ",
+            b"        In case of problem, please report to: cds-question@unistra.fr           ",
+            b"                                                                                ",
+            b"INFO    = 'votable-version=1.99+ (14-Oct-2013)' / #                             ",
+            b"INFO    = '-ref=VIZ5acf5dfe7d66' / #                                            ",
+            b"INFO    = '-out.max=50'        / #                                              ",
+            b"END                                                                             "
+        ]);
+        let reader = Cursor::new(data);
+        let mut fits = Fits::from_reader(reader);
+        let hdu = fits
+            .next()
+            .expect("Should contain a primary HDU")
+            .unwrap()
+            ;
+        assert!(matches!(hdu, HDU::Primary(_)));
+        if let HDU::Primary(hdu) = hdu {
+            let mut cards = hdu.get_header().cards();
+            assert_eq!(cards.next(), Some(&Card::Value {
+                name: "SIMPLE".to_owned(),
+                value: Value::Logical {
+                    value: true,
+                    comment: Some(" Standard FITS Format".to_owned())
+                }
+            }));
+            assert_eq!(dbg!(cards.next()), Some(&Card::Value {
+                name: "BITPIX".to_owned(),
+                value: Value::Integer {
+                    value: 8,
+                    comment: Some(" Character data".to_owned())
+                }
+            }));
+            assert_eq!(cards.next(), Some(&Card::Value {
+                name: "NAXIS".to_owned(),
+                value: Value::Integer {
+                    value: 0,
+                    comment: Some(" No Image --- just extension(s)".to_owned())
+                }
+            }));
+            assert_eq!(cards.next(), Some(&Card::Value {
+                name: "EXTEND".to_owned(),
+                value: Value::Logical {
+                    value: true,
+                    comment: Some(" There are standard extensions".to_owned())
+                }
+            }));
+            assert_eq!(cards.next(), Some(&Card::Value {
+                name: "ORIGIN".to_owned(),
+                value: Value::String {
+                    value: "xml2fits_v1.95".to_owned(),
+                    comment: Some(" Converted from XML-Astrores to FITS".to_owned())
+                }
+            }));
+            assert_eq!(cards.next(), Some(&Card::Comment("                e-mail: question@simbad.u-strasbg.fr".to_string())));
+            assert_eq!(cards.next(), Some(&Card::Value {
+                name: "LONGSTRN".to_owned(),
+                value: Value::String {
+                    value: "OGIP 1.0".to_owned(),
+                    comment: Some(" Long string convention (&/CONTINUE) may be used".to_owned())
+                }
+            }));
+
+            assert_eq!(cards.next(), Some(&Card::Value {
+                name: "DATE".to_owned(),
+                value: Value::String {
+                    value: "2018-04-12".to_owned(),
+                    comment: Some(" Written on 2018-04-12:13:25:09 (GMT)".to_owned())
+                }
+            }));
+            /*b"                            by: apache@vizier.u-strasbg.fr                      ",
+            b"        **********************************************************              ",
+            b"            EXCERPT from catalogues stored in VizieR (CDS)                      ",
+            b"                        with the following conditions:                          ",
+            b"        **********************************************************              ",
+            b"                                                                                ",
+            b"        VizieR Astronomical Server vizier.u-strasbg.fr                          ",
+            b"        Date: 2018-04-12T13:25:09 [V1.99+ (14-Oct-2013)]                        ",
+            b"        In case of problem, please report to: cds-question@unistra.fr           ",
+            b"                                                                                ",*/
+            assert_eq!(cards.next(), Some(&Card::Comment("                    by: apache@vizier.u-strasbg.fr".to_string())));
+            assert_eq!(cards.next(), Some(&Card::Comment("**********************************************************".to_string())));
+            assert_eq!(cards.next(), Some(&Card::Comment("    EXCERPT from catalogues stored in VizieR (CDS)".to_string())));
+            assert_eq!(cards.next(), Some(&Card::Comment("                with the following conditions:".to_string())));
+            assert_eq!(cards.next(), Some(&Card::Comment("**********************************************************".to_string())));
+
+            assert_eq!(cards.next(), Some(&Card::Space));
+
+            assert_eq!(cards.next(), Some(&Card::Comment("VizieR Astronomical Server vizier.u-strasbg.fr".to_string())));
+            assert_eq!(cards.next(), Some(&Card::Comment("Date: 2018-04-12T13:25:09 [V1.99+ (14-Oct-2013)]".to_string())));
+            assert_eq!(cards.next(), Some(&Card::Comment("In case of problem, please report to: cds-question@unistra.fr".to_string())));
         }
 
         Ok(())

@@ -141,7 +141,7 @@ where
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct HDU<X>
 where
     X: Xtension,

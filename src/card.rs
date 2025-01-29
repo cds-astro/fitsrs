@@ -139,9 +139,9 @@ impl TryFrom<&CardBuf> for Card {
     fn try_from(buf: &CardBuf) -> Result<Self, Self::Error> {
         let kw = std::str::from_utf8(buf[..8].trim_ascii())?;
         match kw {
-            "" => parse_empty_keyword_card(buf),
-            "COMMENT" => Ok(Card::Comment(parse_comment_text(&buf[8..])?)),
-            "HISTORY" => Ok(Card::History(parse_comment_text(&buf[8..])?)),
+            "" => Ok(parse_empty_keyword_card(buf)),
+            "COMMENT" => Ok(Card::Comment(parse_comment_text(&buf[8..]))),
+            "HISTORY" => Ok(Card::History(parse_comment_text(&buf[8..]))),
             "CONTINUE" => parse_continuation(buf),
             "XTENSION" => parse_extension(buf),
             "END" => Ok(Card::End),
@@ -354,7 +354,7 @@ fn parse_continuation(buf: &[u8; 80]) -> Result<Card, Error> {
     Ok(Card::Continuation { string, comment })
 }
 
-fn parse_comment_text(buf: &[u8]) -> Result<String, Error> {
+fn parse_comment_text(buf: &[u8]) -> String {
     let mut comment = String::new();
     buf.iter()
         .map(|b| match b {
@@ -365,18 +365,18 @@ fn parse_comment_text(buf: &[u8]) -> Result<String, Error> {
         })
         .for_each(|ch| comment.push(ch))
         ;
-    Ok(comment.trim_ascii_end().to_owned())
+    comment.trim_ascii_end().to_owned()
 }
 
 /// Returns a [Card::Comment] if the card contains text, else [Card::Space].
 ///
 /// FITSv4, section 4.4.2.4. Commentary keywords, last two paragraphs.
-fn parse_empty_keyword_card(buf: &[u8; 80]) -> Result<Card, Error> {
-    let c = parse_comment_text(&buf[8..])?;
+fn parse_empty_keyword_card(buf: &[u8; 80]) -> Card {
+    let c = parse_comment_text(&buf[8..]);
     if c.is_empty() {
-        Ok(Card::Space)
+        Card::Space
     } else {
-        Ok(Card::Comment(c.to_owned()))
+        Card::Comment(c.to_owned())
     }
 }
 
@@ -766,17 +766,16 @@ mod tests {
     }
 
     #[test]
-    fn empty_keyword_card() -> Result<(),Error> {
+    fn empty_keyword_card() {
 
         let r = b"        empty header comment with an illegal \t tab and \n newline                ";
         assert_eq!(
-            parse_empty_keyword_card(r)?,
+            parse_empty_keyword_card(r),
             Card::Comment("empty header comment with an illegal � tab and � newline".to_owned()),
         );
 
         let r = b"                                                                                ";
-        assert_eq!(parse_empty_keyword_card(r)?, Card::Space);
-        Ok(())
+        assert_eq!(parse_empty_keyword_card(r), Card::Space);
     }
 
     #[test]
