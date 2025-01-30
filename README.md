@@ -43,6 +43,13 @@ To Do list
 * [X] Support of multiple HDU, fits extensions (in progress, only the header is parsed)
 * [ ] WCS parsing, see [wcsrs](https://github.com/cds-astro/wcs-rs)
 
+License
+-------
+
+fitsrs has the double the MIT/Apache-2.0 license.
+
+It uses code adapted from the famous [CFITSIO](https://github.com/HEASARC/cfitsio/blob/main/licenses/License.txt) library.Especially the RICE compression/decompression source code has been ported from the original cfitsio [code](https://github.com/HEASARC/cfitsio/blob/main/ricecomp.c) to Rust.
+
 Example
 ----------
 

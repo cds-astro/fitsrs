@@ -16,7 +16,7 @@ use std::io::Read;
 
 use crate::{
     card::{self, *},
-    error::Error, fits::HDU,
+    error::Error,
 };
 
 pub fn consume_next_card<R: Read>(
@@ -60,15 +60,15 @@ pub fn check_card_keyword(card: &[u8; 80], keyword: &[u8; 8]) -> Result<card::Va
 }
 
 /* Mandatory keywords parsing */
-fn check_for_bitpix(values: &HashMap<String, Value>) -> Result<BitpixValue, Error> {
+fn check_for_bitpix(values: &HashMap<String, Value>) -> Result<Bitpix, Error> {
     if let Some(Value::Integer { value, .. }) = values.get("BITPIX") {
         match value {
-            8 => Ok(BitpixValue::U8),
-            16 => Ok(BitpixValue::I16),
-            32 => Ok(BitpixValue::I32),
-            64 => Ok(BitpixValue::I64),
-            -32 => Ok(BitpixValue::F32),
-            -64 => Ok(BitpixValue::F64),
+            8 => Ok(Bitpix::U8),
+            16 => Ok(Bitpix::I16),
+            32 => Ok(Bitpix::I32),
+            64 => Ok(Bitpix::I64),
+            -32 => Ok(Bitpix::F32),
+            -64 => Ok(Bitpix::F64),
             _ => Err(Error::BitpixBadValue),
         }
     } else {
@@ -76,9 +76,9 @@ fn check_for_bitpix(values: &HashMap<String, Value>) -> Result<BitpixValue, Erro
     }
 }
 
-fn check_for_naxis(values: &HashMap<String, Value>) -> Result<usize, Error> {
+fn check_for_naxis(values: &HashMap<String, Value>) -> Result<u64, Error> {
     if let Some(Value::Integer { value, .. }) = values.get("NAXIS") {
-        Ok(*value as usize)
+        Ok(*value as u64)
     } else {
         Err(Error::FailFindingKeyword("NAXIS".to_owned()))
     }
@@ -93,17 +93,17 @@ fn check_for_naxisi(values: &HashMap<String, Value>, i: usize) -> Result<usize, 
     }
 }
 
-fn check_for_gcount(values: &HashMap<String, Value>) -> Result<usize, Error> {
+fn check_for_gcount(values: &HashMap<String, Value>) -> Result<u64, Error> {
     if let Some(Value::Integer { value, .. }) = values.get("GCOUNT") {
-        Ok(*value as usize)
+        Ok(*value as u64)
     } else {
         Err(Error::FailFindingKeyword("GCOUNT".to_owned()))
     }
 }
 
-fn check_for_pcount(values: &HashMap<String, Value>) -> Result<usize, Error> {
+fn check_for_pcount(values: &HashMap<String, Value>) -> Result<u64, Error> {
     if let Some(Value::Integer { value, .. }) = values.get("PCOUNT") {
-        Ok(*value as usize)
+        Ok(*value as u64)
     } else {
         Err(Error::FailFindingKeyword("PCOUNT".to_owned()))
     }
@@ -125,6 +125,12 @@ pub enum Bitpix {
     I64 = 64,
     F32 = -32,
     F64 = -64,
+}
+
+impl Bitpix {
+    pub fn byte_size(&self) -> usize {
+        ((*self as i8).abs() as usize) >> 3
+    }
 }
 
 /// The header part of an [HDU].
@@ -284,7 +290,6 @@ mod tests {
     use std::fs::File;
 
     use std::io::Cursor;
-    use std::io::Read;
 
     use super::check_card_keyword;
     // use Iterator;

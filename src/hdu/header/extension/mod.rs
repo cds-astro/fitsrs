@@ -6,8 +6,6 @@ use std::convert::TryFrom;
 
 use async_trait::async_trait;
 use serde::Serialize;
-use log::warn;
-
 
 use crate::card::Value;
 use crate::error::Error;
@@ -56,23 +54,4 @@ pub trait Xtension {
     ) -> Result<Self, Error>
     where
         Self: Sized;
-}
-
-// Utilitary method that try to parse a card and raise a warning if it not
-// found or if its parsing failed
-fn parse_card<T>(k: &str, cards: &Cards) -> Option<T>
-where 
-    T: CardValue
-{
-    let card_value = cards
-        .get_parsed::<T>(k)
-        .transpose()
-        .ok()
-        .flatten();
-
-    if card_value.is_none() {
-        warn!("{} keyword not found or the parsing failed", k)
-    }
-
-    card_value
 }

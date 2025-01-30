@@ -9,7 +9,7 @@ pub type CardBuf = [u8; 80];
 use serde::Serialize;
 
 /// Enum representing the variants of a single 80 character line in the header.
-#[derive(PartialEq, Debug, Serialize)]
+#[derive(PartialEq, Debug, Serialize, Clone)]
 pub enum Card {
     /// A keyword card with a value and optional comment.
     Value {

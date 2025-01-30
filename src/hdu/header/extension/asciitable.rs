@@ -5,7 +5,6 @@ use async_trait::async_trait;
 use log::warn;
 use serde::Serialize;
 
-use crate::card::Cards;
 use crate::card::Value;
 use crate::error::Error;
 
@@ -111,7 +110,7 @@ impl Xtension for AsciiTable {
     ) -> Result<Self, Error> {
         // BITPIX
         let bitpix = check_for_bitpix(values)?;
-        if bitpix != BitpixValue::U8 {
+        if bitpix != Bitpix::U8 {
             return Err(Error::StaticError("Ascii Table HDU must have a BITPIX = 8"));
         }
 
@@ -141,11 +140,20 @@ impl Xtension for AsciiTable {
         let tfields = check_for_tfields(values)?;
 
         // TFORMS
-        let (tbcols, tforms) = (0..self.tfields)
+        let (tbcols, tforms) = (0..tfields)
             .filter_map(|idx_field| {
                 let idx_field = idx_field + 1;
-                let tbcol = values.get(&format!("TBCOL{idx_field:?}")).map(|Value::Integer { value, .. }| *value);
-                let tform = values.get(&format!("TFORM{idx_field:?}")).map(|Value::String { value, .. }| *value);
+                let tbcol = if let Some(Value::Integer { value, .. }) = values.get(&format!("TBCOL{idx_field:?}")) {
+                    Some(value.to_owned())
+                } else {
+                    None
+                };
+
+                let tform = if let Some(Value::String { value, .. }) = values.get(&format!("TFORM{idx_field:?}")) {
+                    Some(value.to_owned())
+                } else {
+                    None
+                };
 
                 if tbcol.is_none() {
                     warn!("Discard field {}", idx_field);

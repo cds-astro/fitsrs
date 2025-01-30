@@ -106,21 +106,18 @@ impl HDU {
     where
         R: FitsRead<'a, Image> + FitsRead<'a, BinTable> + FitsRead<'a, AsciiTable> + 'a,
     {
-        let mut num_bytes_read = 0;
-
-        let cards = consume_cards(reader, &mut num_bytes_read)?;
-        let mut num_bytes_read = dbg!(num_bytes_read);
+        let cards = consume_cards(reader, num_bytes_read)?;
         // Check only the the first card. Even if not FITS valid we could accept
         // it if its xtension card is down in the header.
         match &cards[0] {
             Card::Xtension{ x: XtensionType::Image, .. } => Ok(HDU::XImage(
-                fits::HDU::<Image>::new(reader, &mut num_bytes_read, cards)?
+                fits::HDU::<Image>::new(reader, num_bytes_read, cards)?
             )),
             Card::Xtension{ x: XtensionType::BinTable, .. } => Ok(HDU::XBinaryTable(
-                fits::HDU::<BinTable>::new(reader, &mut num_bytes_read, cards)?
+                fits::HDU::<BinTable>::new(reader, num_bytes_read, cards)?
             )),
             Card::Xtension{ x: XtensionType::AsciiTable, .. } => Ok(HDU::XASCIITable(
-                fits::HDU::<AsciiTable>::new(reader, &mut num_bytes_read, cards)?
+                fits::HDU::<AsciiTable>::new(reader, num_bytes_read, cards)?
             )),
             _ => {
                 Err(Error::StaticError("XTENSION card has not been found in the header"))

@@ -319,13 +319,13 @@ impl Xtension for BinTable {
         };
 
         // TFORMS
-        let (tforms, ttypes) = (0..tfields)
+        let (tforms, ttypes): (Vec<_>, Vec<_>) = (0..tfields)
             .filter_map(|idx_field| {
                 let idx_field = idx_field + 1;
                 // discard the tform if it was not found and raise a warning
                 let tform_kw = format!("TFORM{idx_field}");
                 let tform = if let Some(Value::String{value, ..}) = values.get(&tform_kw) {
-                    Some(*value)
+                    Some(value.to_owned())
                 } else {
                     warn!("{} has not been found. It will be discarded", &tform_kw);
 
@@ -333,7 +333,7 @@ impl Xtension for BinTable {
                 }?;
                 // try to find a ttype (optional keyword)
                 let ttype = if let Some(Value::String{value, ..}) = values.get(&format!("TTYPE{idx_field}")) {
-                    Some(*value)
+                    Some(value.to_owned())
                 } else {
                     None
                 };
@@ -688,12 +688,6 @@ pub(crate) enum TileCompressedImageTy {
     RiceU8,
     RiceI16,
     RiceI32,
-}
-
-impl TileCompressedImageTy {
-    pub(crate) fn is_gzipped(&self) -> bool {
-        *self == TileCompressedImageTy::Gzip1U8 || *self == TileCompressedImageTy::Gzip1I16 || *self == TileCompressedImageTy::Gzip1I32
-    }
 }
 
 #[derive(PartialEq, Serialize, Clone, Copy, Debug)]

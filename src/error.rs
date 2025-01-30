@@ -1,7 +1,5 @@
-use crate::card::Value;
-
 quick_error! {
-    #[derive(Debug)]
+    #[derive(Debug, PartialEq)]
     pub enum Error {
         /// General error case
         StaticError(message: &'static str) {
@@ -22,8 +20,8 @@ quick_error! {
         FailFindingKeyword(keyword: String) {
             display("{} keyword has not been found.", keyword)
         }
-        ValueBadParsing(value: Value) {
-            display("{:?} value could not be parsed correctly", value)
+        ValueBadParsing {
+            display("A value could not be parsed correctly")
         }
         FailTypeCardParsing(card: String, t: String) {
             display("{} card is not of type {}", card, t)
@@ -35,8 +33,12 @@ quick_error! {
             from(std::str::Utf8Error)
             display("Fail to parse a keyword as a utf8 string")
         }
-        Io(err: std::io::Error) {
-            from()
+        /// IO error wrapping the std::io::Error
+        Io(kind: std::io::ErrorKind) {
+            // to be able to derive from PartialEq just above
+            // as std::io::Error does not impl PartialEq I decided
+            // to only store its error kind which is sufficiant for our use
+            from(err: std::io::Error) -> (err.kind())
         }
     }
 }

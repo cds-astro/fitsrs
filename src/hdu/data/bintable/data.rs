@@ -79,7 +79,7 @@ pub struct TableData<R> {
     start_pos: u64,
 
     /// buffer for storing uncompressed data from GZIP
-    buf: Vec<u32>
+    buf: Vec<u8>
 }
 
 impl<R> TableData<Cursor<R>>
@@ -139,12 +139,15 @@ impl<R> TableData<R> {
         // This buffer is only used if tile compressed image in the gzip compression is to be found
         let mut buf = vec![];
 
-        if let Some(TileCompressedImage { z_tilen, .. }) = &ctx.z_image {
-            let n_elems_max = dbg!(z_tilen.iter().fold(1, |mut tile_size, z_tilei| {
+        // Allocation of a buffer at init of the iterator that is the size of the biggest tiles we can found
+        // on the tile compressed image. This is simply given by the ZTILEi keyword.
+        // Some tiles found on the border of the image can be smaller
+        if let Some(TileCompressedImage { z_tilen, z_bitpix, .. }) = &ctx.z_image {
+            let n_elems_max = z_tilen.iter().fold(1, |mut tile_size, z_tilei| {
                 tile_size *= *z_tilei;
                 tile_size
-            }));
-            buf.resize(n_elems_max, 0);
+            });
+            buf.resize(n_elems_max * z_bitpix.byte_size(), 0);
         }
 
         Self {
@@ -279,7 +282,8 @@ where
 
                 // In case this variable length column refers to a tile compressed image
                 if let (ArrayDescriptorTy::TileCompressedImage(tci), Some(TileCompressedImage { z_tilen, z_bitpix, .. })) = (ty, &self.ctx.z_image) {
-                    // todo, compute the real number of values in the tile in function of the row idx
+                    // FIXME, compute the real number of values in the tile in function of the idx of the row currently processed
+                    // Tiles on the border of the total images can be smaller!
                     let n_elems_max = z_tilen.iter().fold(1, |mut tile_size, z_tilei| {
                         tile_size *= *z_tilei;
                         tile_size
@@ -287,9 +291,23 @@ where
                     n_elems = n_elems_max as u64;
                     t_byte_size = (*z_bitpix as i8).abs() as u64 / 8;
 
-                    if tci.is_gzipped() {
-                        let mut gz = GzDecoder::new(&mut self.reader);
-                        gz.read_u32_into::<BigEndian>(&mut self.buf[..])?;
+                    match tci {
+                        TileCompressedImageTy::Gzip1U8 | TileCompressedImageTy::Gzip1I16 | TileCompressedImageTy::Gzip1I32 => {
+                            let mut gz = GzDecoder::new(&mut self.reader);
+                            gz.read_exact(&mut self.buf[..])?;
+                        },
+                        TileCompressedImageTy::RiceU8 => {
+                            let mut rice = RICEDecoder::<_, u8>::new(&mut self.reader, 32);
+                            rice.read_exact(&mut self.buf[..])?;
+                        }
+                        TileCompressedImageTy::RiceI16 => {
+                            let mut rice = RICEDecoder::<_, i16>::new(&mut self.reader, 32);
+                            rice.read_exact(&mut self.buf[..])?;
+                        }
+                        TileCompressedImageTy::RiceI32 => {
+                            let mut rice = RICEDecoder::<_, i32>::new(&mut self.reader, 32);
+                            rice.read_exact(&mut self.buf[..])?;
+                        }
                     }
                 }
 
@@ -341,49 +359,49 @@ where
 
                 // idx of the elem in the heap area
                 let idx = (*n_elems - (*num_bytes_to_read) / (*t_byte_size)) as usize;
-                let v = self.buf[idx];
 
                 let value = match *ty {
                     // GZIP compression
                     // Unsigned byte
                     ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip1U8) => {
                         *num_bytes_to_read -= B::BYTES_SIZE as u64;
-                        DataValue::UnsignedByte { value: v as u8, column: ColumnId::Index(col_idx), idx  }
+                        let value = self.buf[idx];
+                        DataValue::UnsignedByte { value, column: ColumnId::Index(col_idx), idx  }
                     }
                     // 16-bit integer
                     ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip1I16) => {
                         *num_bytes_to_read -= I::BYTES_SIZE as u64;
-                        DataValue::Short { value: v as i16, column: ColumnId::Index(col_idx), idx  }
+                        let off = idx * I::BYTES_SIZE;
+                        let value = i16::from_be_bytes([self.buf[off], self.buf[off + 1]]);
+                        DataValue::Short { value, column: ColumnId::Index(col_idx), idx  }
                     }
                     // 32-bit integer
                     ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip1I32) => {
                         *num_bytes_to_read -= J::BYTES_SIZE as u64;
-                        DataValue::Integer { value: v as i32, column: ColumnId::Index(col_idx), idx  }
+                        let off = idx * J::BYTES_SIZE;
+                        let value = i32::from_be_bytes([self.buf[off], self.buf[off + 1], self.buf[off + 2], self.buf[off + 3]]);
+                        DataValue::Integer { value, column: ColumnId::Index(col_idx), idx  }
                     }
                     // RICE compression
                     // Unsigned byte
                     ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::RiceU8) => {
-                        let mut rice = RICEDecoder::new(&mut self.reader, 32);
-                        let v = rice.read_u8().ok()?;
-
                         *num_bytes_to_read -= B::BYTES_SIZE as u64;
-                        DataValue::UnsignedByte { value: v, column: ColumnId::Index(col_idx), idx  }
+                        let value = self.buf[idx];
+                        DataValue::UnsignedByte { value, column: ColumnId::Index(col_idx), idx  }
                     }
                     // 16-bit integer
                     ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::RiceI16) => {
-                        let mut rice = RICEDecoder::new(&mut self.reader, 32);
-                        let v = rice.read_i16::<BigEndian>().ok()?;
-
                         *num_bytes_to_read -= I::BYTES_SIZE as u64;
-                        DataValue::Short { value: v, column: ColumnId::Index(col_idx), idx  }
+                        let off = idx * I::BYTES_SIZE;
+                        let value = i16::from_be_bytes([self.buf[off], self.buf[off + 1]]);
+                        DataValue::Short { value, column: ColumnId::Index(col_idx), idx  }
                     }
                     // 32-bit integer
                     ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::RiceI32) => {
-                        let mut rice = RICEDecoder::new(&mut self.reader, 32);
-                        let v = rice.read_i32::<BigEndian>().ok()?;
-
                         *num_bytes_to_read -= J::BYTES_SIZE as u64;
-                        DataValue::Integer { value: v, column: ColumnId::Index(col_idx), idx  }
+                        let off = idx * J::BYTES_SIZE;
+                        let value = i32::from_be_bytes([self.buf[off], self.buf[off + 1], self.buf[off + 2], self.buf[off + 3]]);
+                        DataValue::Integer { value, column: ColumnId::Index(col_idx), idx  }
                     }
                     // No compressed data
                     ArrayDescriptorTy::Default(va_ty) => {

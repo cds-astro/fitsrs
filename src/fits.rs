@@ -139,10 +139,10 @@ where
                         let mut num_bytes_read = 0;
                         match hdu::HDU::new_xtension(&mut self.reader, &mut num_bytes_read) {
                                 Ok(hdu) => Some(Ok(hdu)),
-                                Err(Error::Io(e))
+                                Err(Error::Io(kind))
                                     // an EOF has been encountered but the number of bytes read is 0
                                     // this is valid since we have terminated the previous HDU
-                                    if e.kind() == std::io::ErrorKind::UnexpectedEof && num_bytes_read == 0 => {
+                                    if kind == std::io::ErrorKind::UnexpectedEof && num_bytes_read == 0 => {
                                         None
                                     },
                                 Err(e) => Some(Err(e))
