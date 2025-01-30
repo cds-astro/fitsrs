@@ -1,8 +1,13 @@
+
 quick_error! {
     #[derive(Debug, PartialEq)]
     pub enum Error {
         /// General error case
         StaticError(message: &'static str) {
+            from()
+            display("{}", message)
+        }
+        DynamicError(message: String) {
             from()
             display("{}", message)
         }

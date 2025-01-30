@@ -1,21 +1,13 @@
 use std::collections::HashMap;
-use std::io::Read;
-
 use async_trait::async_trait;
-use futures::AsyncRead;
 use serde::Serialize;
 
-use crate::card::Keyword;
 use crate::card::Value;
 use crate::error::Error;
-use crate::hdu::header::consume_next_card_async;
-use crate::hdu::header::parse_bitpix_card;
-use crate::hdu::header::parse_naxis_card;
+use crate::hdu::header::check_for_bitpix;
+use crate::hdu::header::check_for_naxis;
 use crate::hdu::header::BitpixValue;
 use crate::hdu::header::Xtension;
-use crate::hdu::header::NAXIS_KW;
-use crate::hdu::primary::check_card_keyword;
-use crate::hdu::primary::consume_next_card;
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct Image {
@@ -61,77 +53,24 @@ impl Xtension for Image {
         num_bits >> 3
     }
 
-    fn update_with_parsed_header(&mut self, _cards: &HashMap<[u8; 8], Value>) -> Result<(), Error> {
-        Ok(())
-    }
-
-    fn parse<R: Read>(
-        reader: &mut R,
-        num_bytes_read: &mut usize,
-        card_80_bytes_buf: &mut [u8; 80],
-        cards: &mut HashMap<Keyword, Value>,
+    fn parse(
+        values: &HashMap<String, Value>
     ) -> Result<Self, Error> {
         // BITPIX
-        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let bitpix = parse_bitpix_card(card_80_bytes_buf)?;
+        let bitpix = check_for_bitpix(dbg!(values))?;
         // NAXIS
-        consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-        let naxis = parse_naxis_card(card_80_bytes_buf)?;
+        let naxis = check_for_naxis(values)?;
         // The size of each NAXIS
         let naxisn = (0..naxis)
-            .map(|idx_axis| {
-                consume_next_card(reader, card_80_bytes_buf, num_bytes_read)?;
-                check_card_keyword(card_80_bytes_buf, NAXIS_KW[idx_axis])?
-                    .check_for_float()
-                    .map(|size| size as u64)
+            .map(|naxis_i| {
+                let naxis = format!("NAXIS{}", (naxis_i + 1));
+                if let Some(Value::Integer { value, .. }) = values.get(&naxis) {
+                    Ok(*value as u64)
+                } else {
+                    Err(Error::FailFindingKeyword(naxis))
+                }
             })
             .collect::<Result<Vec<_>, _>>()?;
-
-        for (i, &naxisi) in naxisn.iter().enumerate() {
-            cards.insert(*NAXIS_KW[i], Value::Integer(naxisi as i64));
-        }
-
-        cards.insert(*b"NAXIS   ", Value::Integer(naxis as i64));
-
-        Ok(Image {
-            bitpix,
-            naxis,
-            naxisn,
-        })
-    }
-
-    async fn parse_async<R>(
-        reader: &mut R,
-        num_bytes_read: &mut usize,
-        card_80_bytes_buf: &mut [u8; 80],
-        cards: &mut HashMap<Keyword, Value>,
-    ) -> Result<Self, Error>
-    where
-        R: AsyncRead + std::marker::Unpin,
-        Self: Sized,
-    {
-        // BITPIX
-        consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
-        let bitpix = parse_bitpix_card(card_80_bytes_buf)?;
-        // NAXIS
-        consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
-        let naxis = parse_naxis_card(card_80_bytes_buf)?;
-        // The size of each NAXIS
-        let mut naxisn = vec![];
-        for naxis_kw in NAXIS_KW.iter().take(naxis) {
-            consume_next_card_async(reader, card_80_bytes_buf, num_bytes_read).await?;
-            let naxis_len = check_card_keyword(card_80_bytes_buf, naxis_kw)?
-                .check_for_float()
-                .map(|size| size as u64)?;
-
-            naxisn.push(naxis_len);
-        }
-
-        for (i, &naxisi) in naxisn.iter().enumerate() {
-            cards.insert(*NAXIS_KW[i], Value::Integer(naxisi as i64));
-        }
-
-        cards.insert(*b"NAXIS   ", Value::Integer(naxis as i64));
 
         Ok(Image {
             bitpix,

@@ -16,11 +16,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-      with:
-        lfs: true
-    - name: Checkout LFS objects
-      run: git lfs checkout
     - name: Build
       run: cargo build --verbose
+    # only run tests that does not involve fits files because they are not located in the repo anymore
+    # the (--lib) argument only execute tests from the library and not the doctest (which open a file not in the repo)
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --lib --verbose -- --skip "test_fits"

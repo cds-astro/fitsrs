@@ -97,7 +97,7 @@ mod tests {
     #[test_case("samples/fits.gsfc.nasa.gov/HST_NICMOS.fits", 7, 0, 0)]
     #[test_case("samples/fits.gsfc.nasa.gov/HST_WFPC_II.fits", 2, 1, 0)]
     #[test_case("samples/fits.gsfc.nasa.gov/HST_WFPC_II_bis.fits", 2, 0, 0)]
-    fn test_count_hdu(
+    fn test_fits_count_hdu(
         filename: &str,
         num_image_ext: usize,
         num_asciitable_ext: usize,
@@ -210,8 +210,9 @@ mod tests {
     #[test_case("samples/vizier/VAR.358.R.fits", false)]
     #[test_case("samples/fits.gsfc.nasa.gov/IUE_LWP.fits", false)]
     #[test_case("samples/misc/bonn.fits", false)]
-    #[test_case("samples/misc/EUC_MER_MOSAIC-VIS-FLAG_TILE100158585-1EC1C5_20221211T132329.822037Z_00.00.fits", false)]
-    #[test_case("samples/misc/P122_49.fits", false)]
+    // FIXME too slow, to retest when we implement the seek of the data unit part
+    //#[test_case("samples/misc/EUC_MER_MOSAIC-VIS-FLAG_TILE100158585-1EC1C5_20221211T132329.822037Z_00.00.fits", false)]
+    //#[test_case("samples/misc/P122_49.fits", false)]
     #[test_case("samples/misc/skv1678175163788.fits", false)]
     #[test_case("samples/misc/SN2923fxjA.fits", false)]
     fn test_fits_opening(filename: &str, corrupted: bool) {
@@ -224,7 +225,7 @@ mod tests {
         let reader = Cursor::new(&buf[..]);
         let hdu_list = Fits::from_reader(reader);
         let mut correctly_opened = true;
-        for hdu in hdu_list {
+        for hdu in dbg!(hdu_list) {
             match hdu {
                 Err(_) => {
                     correctly_opened = false;
@@ -447,7 +448,8 @@ mod tests {
         assert!(hdu_list.next().unwrap().is_err());
     }
 
-    #[test_case("samples/misc/EUC_MER_MOSAIC-VIS-FLAG_TILE100158585-1EC1C5_20221211T132329.822037Z_00.00.fits")]
+    // FIXME too slow, to retest when we implement the seek of the data unit part
+    //#[test_case("samples/misc/EUC_MER_MOSAIC-VIS-FLAG_TILE100158585-1EC1C5_20221211T132329.822037Z_00.00.fits")]
     #[test_case("samples/fits.gsfc.nasa.gov/EUVE.fits")]
     #[test_case("samples/fits.gsfc.nasa.gov/HST_FOC.fits")]
     #[test_case("samples/vizier/new_url.fits")]

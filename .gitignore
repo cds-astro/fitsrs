@@ -7,3 +7,4 @@ fitswasm/target
 fitswasm/pkg
 fits-rs-test-files.tar*
 .DS_Store
+samples

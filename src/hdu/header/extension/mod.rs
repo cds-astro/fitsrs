@@ -2,31 +2,43 @@ pub mod asciitable;
 pub mod bintable;
 pub mod image;
 
-use std::io::Read;
+use std::convert::TryFrom;
 
 use async_trait::async_trait;
-use futures::AsyncRead;
+use serde::Serialize;
 
-use crate::card::{Keyword, Value};
+use crate::card::Value;
 use crate::error::Error;
-use crate::hdu::primary::check_card_keyword;
 
 use std::collections::HashMap;
 
-#[derive(Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Serialize)]
 pub enum XtensionType {
     Image,
     BinTable,
     AsciiTable,
 }
 
-pub fn parse_xtension_card(card: &[u8; 80]) -> Result<XtensionType, Error> {
-    let xtension = check_card_keyword(card, b"XTENSION")?.check_for_string()?;
-    match xtension.as_bytes() {
-        b"IMAGE   " | b"IUEIMAGE" => Ok(XtensionType::Image),
-        b"TABLE   " => Ok(XtensionType::AsciiTable),
-        b"BINTABLE" => Ok(XtensionType::BinTable),
-        _ => Err(Error::NotSupportedXtensionType(xtension)),
+impl From<XtensionType> for String {
+    fn from(val: XtensionType) -> Self {
+        match val {
+            XtensionType::Image => "IMAGE".to_owned(),
+            XtensionType::BinTable => "BINTABLE".to_owned(),
+            XtensionType::AsciiTable => "TABLE".to_owned(),
+        }
+    }
+}
+
+impl TryFrom<&str> for XtensionType {
+    type Error = Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "IMAGE" | "IUEIMAGE" => Ok(XtensionType::Image),
+            "TABLE" => Ok(XtensionType::AsciiTable),
+            "BINTABLE" => Ok(XtensionType::BinTable),
+            _ => Err(Error::NotSupportedXtensionType(value.to_owned())),
+        }
     }
 }
 
@@ -34,27 +46,13 @@ pub fn parse_xtension_card(card: &[u8; 80]) -> Result<XtensionType, Error> {
 pub trait Xtension {
     fn get_num_bytes_data_block(&self) -> u64;
 
-    fn update_with_parsed_header(&mut self, cards: &HashMap<[u8; 8], Value>) -> Result<(), Error>;
+    //fn update_with_parsed_header(&mut self, cards: &HashMap<String, Value>) -> Result<(), Error>;
 
     // Parse the Xtension keywords
     // During the parsing, some checks will be made
-    fn parse<R: Read>(
-        reader: &mut R,
-        num_bytes_read: &mut usize,
-        card_80_bytes_buf: &mut [u8; 80],
-        cards: &mut HashMap<Keyword, Value>,
+    fn parse(
+        values: &HashMap<String, Value>
     ) -> Result<Self, Error>
     where
         Self: Sized;
-
-    // Async equivalent method
-    async fn parse_async<R>(
-        reader: &mut R,
-        num_bytes_read: &mut usize,
-        card_80_bytes_buf: &mut [u8; 80],
-        cards: &mut HashMap<Keyword, Value>,
-    ) -> Result<Self, Error>
-    where
-        Self: Sized,
-        R: AsyncRead + std::marker::Unpin;
 }
