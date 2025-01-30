@@ -8,8 +8,7 @@
 //! use std::fs::File;
 //! use std::io::BufReader;
 //!
-//! use fitsrs::{Fits, HDU};
-//! use fitsrs::hdu::data::DataIter;
+//! use fitsrs::{Fits, HDU, ImageData};
 //!
 //! let f = File::open("samples/fits.gsfc.nasa.gov/HST_FOC.fits").unwrap();
 //! let reader = BufReader::new(f);
@@ -20,7 +19,7 @@
 //!     let naxis1 = *xtension.get_naxisn(1).unwrap() as usize;
 //!     let naxis2 = *xtension.get_naxisn(2).unwrap() as usize;
 //!
-//!     if let DataIter::F32(it) = hdu_list.get_data(hdu) {
+//!     if let ImageData::F32(it) = hdu_list.get_data(hdu) {
 //!         let data = it.collect::<Vec<_>>();
 //!         assert_eq!(data.len(), naxis1 * naxis2);
 //!     } else {
@@ -107,13 +106,7 @@ mod tests {
         num_asciitable_ext: usize,
         num_bintable_ext: usize,
     ) {
-        let f = File::open(filename).unwrap();
-        //let bytes: Result<Vec<_>, _> = f.bytes().collect();
-        //let buf = bytes.unwrap();
-
-        //let reader = Cursor::new(&buf[..]);
-        //let mut hdu_list = Fits::from_reader(reader);
-        let mut hdu_list = Fits::from_reader(BufReader::new(f));
+        let mut hdu_list = FITSFile::open(filename).unwrap();
 
         let mut n_image_ext = 1; // because the primary hdu is an image
         let mut n_bintable_ext = 0;
@@ -215,25 +208,24 @@ mod tests {
     #[test_case("samples/vizier/VAR.358.R.fits", false)]
     #[test_case("samples/fits.gsfc.nasa.gov/IUE_LWP.fits", false)]
     #[test_case("samples/misc/bonn.fits", false)]
-    // FIXME too slow, to retest when we implement the seek of the data unit part
-    //#[test_case("samples/misc/EUC_MER_MOSAIC-VIS-FLAG_TILE100158585-1EC1C5_20221211T132329.822037Z_00.00.fits", false)]
-    //#[test_case("samples/misc/P122_49.fits", false)]
+    #[test_case("samples/misc/EUC_MER_MOSAIC-VIS-FLAG_TILE100158585-1EC1C5_20221211T132329.822037Z_00.00.fits", false)]
+    #[test_case("samples/misc/P122_49.fits", false)]
     #[test_case("samples/misc/skv1678175163788.fits", false)]
     #[test_case("samples/misc/SN2923fxjA.fits", false)]
-    fn test_fits_opening(filename: &str, corrupted: bool) {
+    fn test_fits_opening(filename: &str, ground_truth: bool) {
         let hdu_list = FITSFile::open(filename).expect("Can find fits file");
 
-        let mut correctly_opened = true;
+        let mut corrupted = false;
         for hdu in hdu_list {
             match hdu {
                 Err(_) => {
-                    correctly_opened = false;
+                    corrupted = true;
                 }
                 _ => (),
             }
         }
 
-        assert_eq!(!corrupted, correctly_opened);
+        assert_eq!(ground_truth, corrupted);
     }
 
     #[test]
@@ -328,7 +320,7 @@ mod tests {
 
     #[test_case("samples/misc/SN2923fxjA.fits.gz", 5415.0, 6386.0)]
     #[test_case("samples/misc/SN2923fxjA.fits", 5415.0, 6386.0)]
-    fn open_external_gzipped_file(filename: &str, min: f32, max: f32) {
+    fn test_fits_open_external_gzipped_file(filename: &str, min: f32, max: f32) {
         let mut hdu_list = FITSFile::open(filename).unwrap();
         use std::iter::Iterator;
 
@@ -359,7 +351,7 @@ mod tests {
     }
 
     #[test_case("samples/fits.gsfc.nasa.gov/m13_gzip.fits")]
-    fn open_tile_compressed_image(filename: &str) {
+    fn test_fits_open_tile_compressed_image(filename: &str) {
         use std::fs::File;
 
         use crate::hdu::data::bintable::DataValue;

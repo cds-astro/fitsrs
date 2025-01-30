@@ -410,7 +410,7 @@ mod tests {
             .next()
             .expect("Should contain a primary HDU");
 
-        assert_eq!(Err(Error::StaticError("Fail reading the header without encountering the END card")), hdu);
+        assert_eq!(Err(Error::Io(std::io::ErrorKind::UnexpectedEof)), hdu);
         // As the primary hdu parsing failed (EOF reached), next call to fits should result in None
         assert_eq!(fits.next(), None);
     }

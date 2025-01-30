@@ -800,7 +800,7 @@ mod tests {
                     TFormType::I { repeat_count: 640 },
                     TFormType::E { repeat_count: 640 },
                 ],
-                ttypes: vec![Some("APERTURE".to_owned()), Some("NPOINTS ".to_owned()), Some("WAVELENGTH".to_owned()), Some("DELTAW  ".to_owned()), Some("NET     ".to_owned()), Some("BACKGROUND".to_owned()), Some("SIGMA   ".to_owned()), Some("QUALITY ".to_owned()), Some("FLUX    ".to_owned())],
+                ttypes: vec![Some("APERTURE".to_owned()), Some("NPOINTS".to_owned()), Some("WAVELENGTH".to_owned()), Some("DELTAW".to_owned()), Some("NET".to_owned()), Some("BACKGROUND".to_owned()), Some("SIGMA".to_owned()), Some("QUALITY".to_owned()), Some("FLUX".to_owned())],
                 theap: 11535,
                 // Should be 0
                 pcount: 0,

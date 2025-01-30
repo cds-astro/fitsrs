@@ -29,7 +29,7 @@ use crate::hdu::Value::Logical;
 use crate::async_fits;
 use crate::fits;
 use crate::hdu::primary::consume_next_card;
-
+use log::error;
 /// An enueration of the supported FITS Header Data Unit types.
 #[derive(Debug, PartialEq)]
 pub enum HDU {
@@ -51,7 +51,11 @@ where
     loop {
         consume_next_card(reader, &mut card_80_bytes_buf, num_bytes_read)
             // Precise the error that we did not encounter the END stopping card
-            .map_err(|_| Error::StaticError("Fail reading the header without encountering the END card"))?;
+            .map_err(|e| {
+                error!("Fail reading the header without encountering the END card");
+
+                e
+            })?;
 
         if let Ok(card) = Card::try_from(&card_80_bytes_buf) {
             cards.push(card);

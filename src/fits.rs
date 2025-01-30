@@ -142,7 +142,7 @@ where
                                 Err(Error::Io(kind))
                                     // an EOF has been encountered but the number of bytes read is 0
                                     // this is valid since we have terminated the previous HDU
-                                    if kind == std::io::ErrorKind::UnexpectedEof && num_bytes_read == 0 => {
+                                    if dbg!(kind) == std::io::ErrorKind::UnexpectedEof && num_bytes_read == 0 => {
                                         None
                                     },
                                 Err(e) => Some(Err(e))
@@ -216,6 +216,7 @@ where
     where
         R: FitsRead<'a, X> + 'a,
     {
+        /* 1. Parse the header first */
         let header = Header::parse(cards)?;
         /* 2. Skip the next bytes to a new 2880 multiple of bytes
         This is where the data block should start */
@@ -232,6 +233,8 @@ where
 
             *num_bytes_read += num_off_bytes;
         }
+
+        // Data block
 
         Ok(Self { header })
     }

@@ -53,77 +53,10 @@ It uses code adapted from the famous [CFITSIO](https://github.com/HEASARC/cfitsi
 Example
 ----------
 
-For files that can fit in memory
-
 ```rust
 use std::fs::File;
 use std::io::Cursor;
-use std::io::Read;
-use fitsrs::{Fits, HDU};
-use fitsrs::{hdu::header::Xtension, hdu::data::Data};
-
-let mut f = File::open("samples/fits.gsfc.nasa.gov/EUVE.fits").unwrap();
-
-let mut buf = Vec::new();
-f.read_to_end(&mut buf).unwrap();
-let reader = Cursor::new(&buf[..]);
-
-let mut hdu_list = Fits::from_reader(reader);
-
-// Access the HDU extensions
-while let Some(Ok(hdu)) = hdu_list.next() {
-    match hdu {
-        HDU::Primary(_) => (),
-        HDU::XImage(hdu) => {
-            let xtension = hdu.get_header().get_xtension();
-
-            let naxis1 = *xtension.get_naxisn(1).unwrap() as usize;
-            let naxis2 = *xtension.get_naxisn(2).unwrap() as usize;
-
-            let num_pixels = naxis2 * naxis1;
-
-            match hdu.get_data(&mut hdu_list) {
-                Data::U8(mem) => assert_eq!(num_pixels, mem.len()),
-                Data::I16(mem) => assert_eq!(num_pixels, mem.len()),
-                Data::I32(mem) => assert_eq!(num_pixels, mem.len()),
-                Data::I64(mem) => assert_eq!(num_pixels, mem.len()),
-                Data::F32(mem) => assert_eq!(num_pixels, mem.len()),
-                Data::F64(mem) => assert_eq!(num_pixels, mem.len()),
-            }
-        },
-        HDU::XBinaryTable(hdu) => {
-            let num_bytes = hdu.get_header()
-                .get_xtension()
-                .get_num_bytes_data_block();
-
-            match hdu.get_data(&mut hdu_list) {
-                Data::U8(mem) => assert_eq!(num_bytes as usize, mem.len()),
-                _ => unreachable!()
-            }
-        },
-        HDU::XASCIITable(hdu) => {
-            let num_bytes = hdu.get_header()
-                .get_xtension()
-                .get_num_bytes_data_block();
-
-            match hdu.get_data(&mut hdu_list) {
-                Data::U8(mem) => assert_eq!(num_bytes as usize, mem.len()),
-                _ => unreachable!()
-            }
-        },
-    }
-}
-```
-
-For BufReader
-
-```rust
-use std::fs::File;
-use std::io::Cursor;
-use fitsrs::hdu::HDU;
-use fitsrs::hdu::data::DataIter;
-use fitsrs::fits::Fits;
-use fitsrs::hdu::header::Xtension;
+use fitsrs::{Fits, ImageData, HDU, hdu::header::Xtension};
 
 use std::io::{BufReader, Read};
 
@@ -144,28 +77,28 @@ while let Some(Ok(hdu)) = hdu_list.next() {
 
             let num_pixels = (naxis2 * naxis1) as usize;
 
-            match hdu.get_data(&mut hdu_list) {
-                DataIter::U8(it) => {
+            match hdu_list.get_data(hdu) {
+                ImageData::U8(it) => {
                     let data = it.collect::<Vec<_>>();
                     assert_eq!(num_pixels, data.len())
                 },
-                DataIter::I16(it) => {
+                ImageData::I16(it) => {
                     let data = it.collect::<Vec<_>>();
                     assert_eq!(num_pixels, data.len())
                 },
-                DataIter::I32(it) => {
+                ImageData::I32(it) => {
                     let data = it.collect::<Vec<_>>();
                     assert_eq!(num_pixels, data.len())
                 },
-                DataIter::I64(it) => {
+                ImageData::I64(it) => {
                     let data = it.collect::<Vec<_>>();
                     assert_eq!(num_pixels, data.len())
                 },
-                DataIter::F32(it) => {
+                ImageData::F32(it) => {
                     let data = it.collect::<Vec<_>>();
                     assert_eq!(num_pixels, data.len())
                 },
-                DataIter::F64(it) => {
+                ImageData::F64(it) => {
                     let data = it.collect::<Vec<_>>();
                     assert_eq!(num_pixels, data.len())
                 },
@@ -176,8 +109,9 @@ while let Some(Ok(hdu)) = hdu_list.next() {
                 .get_xtension()
                 .get_num_bytes_data_block();
 
-            let it_bytes = hdu.get_data(&mut hdu_list);
-            let data = it_bytes.collect::<Vec<_>>();
+            let data = hdu_list.get_data(hdu)
+                .collect::<Vec<_>>();
+
             assert_eq!(num_bytes as usize, data.len());
         },
         HDU::XASCIITable(hdu) => {
@@ -185,8 +119,9 @@ while let Some(Ok(hdu)) = hdu_list.next() {
                 .get_xtension()
                 .get_num_bytes_data_block();
 
-            let it_bytes = hdu.get_data(&mut hdu_list);
-            let data = it_bytes.collect::<Vec<_>>();
+            let data = hdu_list.get_data(hdu)
+                .collect::<Vec<_>>();
+
             assert_eq!(num_bytes as usize, data.len());
         },
     }
