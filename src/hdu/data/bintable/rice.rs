@@ -231,7 +231,7 @@ where
                 } => {
                     /* low-entropy case, all zero differences */
                     while j < buf.len() && i < imax {
-                        buf[j..(j + T::size_of())].copy_from_slice(&lastpix.to_ne_bytes());
+                        buf[j..(j + T::size_of())].copy_from_slice(&lastpix.to_ne_bytes()[..T::size_of()]);
 
                         j += T::size_of();
                         i += 1;
@@ -290,7 +290,7 @@ where
                         }
 
                         let curpix = (diff as i32) + lastpix;
-                        buf[j..(j + T::size_of())].copy_from_slice(&curpix.to_ne_bytes());
+                        buf[j..(j + T::size_of())].copy_from_slice(&curpix.to_ne_bytes()[..T::size_of()]);
                         lastpix = curpix;
 
                         i += 1;
@@ -346,7 +346,7 @@ where
                             diff = !(diff >> 1);
                         }
                         let curpix = (diff as i32) + lastpix;
-                        buf[j..(j + T::size_of())].copy_from_slice(&curpix.to_ne_bytes());
+                        buf[j..(j + T::size_of())].copy_from_slice(&curpix.to_ne_bytes()[..T::size_of()]);
                         lastpix = curpix;
 
                         i += 1;

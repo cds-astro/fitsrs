@@ -352,6 +352,7 @@ mod tests {
         }
     }
 
+    #[test_case("samples/fits.gsfc.nasa.gov/m13_rice.fits")]
     #[test_case("samples/fits.gsfc.nasa.gov/m13_gzip.fits")]
     fn test_fits_open_tile_compressed_image(filename: &str) {
         use std::fs::File;
@@ -368,7 +369,7 @@ mod tests {
         while let Some(Ok(hdu)) = hdu_list.next() {
             match hdu {
                 HDU::XBinaryTable(hdu) => {
-                    let pixels = hdu_list.get_data(hdu)
+                    let mut pixels = hdu_list.get_data(hdu)
                         .map(|value| {
                             let value = value;
                             match value {
