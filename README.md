@@ -34,10 +34,10 @@ To Do list
 ----------
 
 * [X] Support single typed data block (i.e. image type data)
-* [X] Single HDU parsing, header and data units 
+* [X] Single HDU parsing, header and data units
 * [X] Support big fits file parsing that may not fit in memory (iterator usage)
 * [X] Async reading (experimental and not tested)
-* [ ] Keep CARD comment
+* [X] Keep CARD comment
 * [ ] Support compressed fits files (https://fits.gsfc.nasa.gov/registry/tilecompression.html)
 * [ ] Support data table (each column can have a specific types)
 * [X] Support of multiple HDU, fits extensions (in progress, only the header is parsed)
