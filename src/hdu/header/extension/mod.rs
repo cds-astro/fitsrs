@@ -49,9 +49,7 @@ pub trait Xtension {
 
     // Parse the Xtension keywords
     // During the parsing, some checks will be made
-    fn parse(
-        values: &HashMap<String, Value>
-    ) -> Result<Self, Error>
+    fn parse(values: &HashMap<String, Value>) -> Result<Self, Error>
     where
         Self: Sized;
 }

@@ -105,9 +105,7 @@ impl Xtension for AsciiTable {
         self.naxis1 * self.naxis2
     }
 
-    fn parse(
-        values: &HashMap<String, Value>,
-    ) -> Result<Self, Error> {
+    fn parse(values: &HashMap<String, Value>) -> Result<Self, Error> {
         // BITPIX
         let bitpix = check_for_bitpix(values)?;
         if bitpix != Bitpix::U8 {
@@ -143,13 +141,17 @@ impl Xtension for AsciiTable {
         let (tbcols, tforms) = (0..tfields)
             .filter_map(|idx_field| {
                 let idx_field = idx_field + 1;
-                let tbcol = if let Some(Value::Integer { value, .. }) = values.get(&format!("TBCOL{idx_field:?}")) {
+                let tbcol = if let Some(Value::Integer { value, .. }) =
+                    values.get(&format!("TBCOL{idx_field:?}"))
+                {
                     Some(value.to_owned())
                 } else {
                     None
                 };
 
-                let tform = if let Some(Value::String { value, .. }) = values.get(&format!("TFORM{idx_field:?}")) {
+                let tform = if let Some(Value::String { value, .. }) =
+                    values.get(&format!("TFORM{idx_field:?}"))
+                {
                     Some(value.to_owned())
                 } else {
                     None
@@ -158,7 +160,6 @@ impl Xtension for AsciiTable {
                 if tbcol.is_none() {
                     warn!("Discard field {}", idx_field);
                 }
-
 
                 if tform.is_none() {
                     warn!("Discard field {}", idx_field);
@@ -170,16 +171,12 @@ impl Xtension for AsciiTable {
                 let first_char = &tform[0..1];
                 let tform = match first_char {
                     "A" => {
-                        let w = tform[1..]
-                            .trim_end()
-                            .parse::<i32>().ok()?;
+                        let w = tform[1..].trim_end().parse::<i32>().ok()?;
 
                         TFormAsciiTable::Character { w: w as usize }
                     }
                     "I" => {
-                        let w = tform[1..]
-                            .trim_end()
-                            .parse::<i32>().ok()?;
+                        let w = tform[1..].trim_end().parse::<i32>().ok()?;
 
                         TFormAsciiTable::DecimalInteger { w: w as usize }
                     }
@@ -216,13 +213,15 @@ impl Xtension for AsciiTable {
                             d: d as usize,
                         }
                     }
-                    _ => { return None; }
+                    _ => {
+                        return None;
+                    }
                 };
 
                 Some((tbcol, tform))
             })
             .unzip();
-  
+
         Ok(AsciiTable {
             bitpix,
             naxis,

@@ -9,7 +9,7 @@ Fits reader written in pure Rust
 This crate is under development, it was initiated for reading fits HiPS tile, i.e. generated from hipsgen.
 
 This fits parser only supports image data (not tables), and does not know anything about WCS parsing.
-For WCS parsing, see [wcsrs](https://github.com/cds-astro/wcs-rs).
+For WCS parsing, see [wcs-rs](https://github.com/cds-astro/wcs-rs).
 This parser is able to parse extension HDUs. Ascii tables and binary tables are still not properly parsed, only the list bytes of their data block can be retrieved but no interpretation/parsing is done on it.
 
 Contributing
@@ -41,7 +41,7 @@ To Do list
 * [ ] Support compressed fits files (https://fits.gsfc.nasa.gov/registry/tilecompression.html)
 * [ ] Support data table (each column can have a specific types)
 * [X] Support of multiple HDU, fits extensions (in progress, only the header is parsed)
-* [ ] WCS parsing, see [wcsrs](https://github.com/cds-astro/wcs-rs)
+* [ ] WCS parsing, see [wcs-rs](https://github.com/cds-astro/wcs-rs)
 
 License
 -------
@@ -105,14 +105,15 @@ while let Some(Ok(hdu)) = hdu_list.next() {
             }
         },
         HDU::XBinaryTable(hdu) => {
-            let num_bytes = hdu.get_header()
+            let num_rows = hdu.get_header()
                 .get_xtension()
-                .get_num_bytes_data_block();
+                .get_num_rows();
 
-            let data = hdu_list.get_data(hdu)
+            let rows = hdu_list.get_data(hdu)
+                .row_iter()
                 .collect::<Vec<_>>();
 
-            assert_eq!(num_bytes as usize, data.len());
+            assert_eq!(num_rows, rows.len());
         },
         HDU::XASCIITable(hdu) => {
             let num_bytes = hdu.get_header()
@@ -159,7 +160,7 @@ async fn parse_fits_async() {
 
                 let num_pixels = naxis2 * naxis1;
 
-                match hdu.get_data(&mut hdu_list) {
+                match hdu_list.get_data(hdu) {
                     Stream::U8(st) => {
                         let data = st.collect::<Vec<_>>().await;
                         assert_eq!(num_pixels, data.len())
@@ -191,7 +192,7 @@ async fn parse_fits_async() {
                     .get_xtension()
                     .get_num_bytes_data_block();
 
-                let it_bytes = hdu.get_data(&mut hdu_list);
+                let it_bytes = hdu_list.get_data(hdu);
                 let data = it_bytes.collect::<Vec<_>>().await;
                 assert_eq!(num_bytes as usize, data.len());
             },
@@ -200,7 +201,7 @@ async fn parse_fits_async() {
                     .get_xtension()
                     .get_num_bytes_data_block();
 
-                let it_bytes = xhdu.get_data(&mut hdu_list);
+                let it_bytes = hdu_list.get_data(hdu);
                 let data = it_bytes.collect::<Vec<_>>().await;
                 assert_eq!(num_bytes as usize, data.len());
             },

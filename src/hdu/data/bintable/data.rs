@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use crate::hdu::data::{AsyncDataBufRead, stream::St};
 use crate::hdu::header::Xtension;
-use crate::hdu::header::extension::bintable::{ArrayDescriptorTy, TForm, TileCompressedImageTy, VariableArrayTy, A, B, C, D, E, I, J, K, L, M, P, Q, X, TileCompressedImage};
+use crate::hdu::header::extension::bintable::{ArrayDescriptorTy, TForm, TileCompressedImageTy, VariableArrayTy, A, B, C, D, E, I, J, K, L, M, P, Q, X, TileCompressedImage, ZCmpType};
 
 use byteorder::BigEndian;
 use flate2::read::GzDecoder;
@@ -79,7 +79,9 @@ pub struct TableData<R> {
     start_pos: u64,
 
     /// buffer for storing uncompressed data from GZIP
-    buf: Vec<u8>
+    buf: Vec<u8>,
+    /// current row index
+    row_idx: usize,
 }
 
 impl<R> TableData<Cursor<R>>
@@ -94,6 +96,14 @@ where
         let s = self.start_pos as usize;
         let e = s + (self.ctx.get_num_bytes_data_block() as usize);
         &raw_bytes[s..e]
+    }
+}
+
+use std::io::Cursor;
+/// Retrieve the current position of the inner reader for cursor readers
+impl<R> TableData<Cursor<R>> {
+    pub const fn get_ref(&self) -> &R {
+        self.reader.get_ref()
     }
 }
 
@@ -128,7 +138,7 @@ impl<R> TableData<R> {
                 col_byte_offset
             }).collect();
 
-        let cols_idx = (0..(ctx.tfields)).collect();
+        let cols_idx = (0..(ctx.tforms.len())).collect();
 
         let col_idx = 0;
         let item_idx = 0;
@@ -142,13 +152,25 @@ impl<R> TableData<R> {
         // Allocation of a buffer at init of the iterator that is the size of the biggest tiles we can found
         // on the tile compressed image. This is simply given by the ZTILEi keyword.
         // Some tiles found on the border of the image can be smaller
-        if let Some(TileCompressedImage { z_tilen, z_bitpix, .. }) = &ctx.z_image {
+        if let Some(TileCompressedImage { z_tilen, z_bitpix, z_cmp_type, .. }) = &ctx.z_image {
             let n_elems_max = z_tilen.iter().fold(1, |mut tile_size, z_tilei| {
                 tile_size *= *z_tilei;
                 tile_size
             });
-            buf.resize(n_elems_max * z_bitpix.byte_size(), 0);
+
+            // A little precision. The gzdecoder from flate2 seems to unzip data in a stream of u32 i.e. even if the type of data
+            // to uncompress is byte or short, the result will be cast in a u32. I thus allocate for gzip compression, a buffer of
+            // n_elems_max * size_in_bytes of u32.
+            let num_bytes_max_tile = if z_cmp_type == &ZCmpType::Gzip1 {
+                n_elems_max * std::mem::size_of::<u32>()
+            } else {
+                n_elems_max * z_bitpix.byte_size()
+            };
+
+            buf.resize(num_bytes_max_tile, 0);
         }
+
+        let row_idx = 0;
 
         Self {
             reader,
@@ -161,7 +183,8 @@ impl<R> TableData<R> {
             main_data_table_byte_size,
             start_pos,
             ctx: ctx.clone(),
-            buf
+            buf,
+            row_idx,
         }
     }
 
@@ -170,7 +193,15 @@ impl<R> TableData<R> {
     pub fn select_fields(&mut self, cols: &[ColumnId]) -> &mut Self {
         self.cols_idx = cols.iter().filter_map(|col| {
             match col {
-                ColumnId::Index(index) => Some(*index),
+                ColumnId::Index(index) => {
+                    // check that the index does not exceed the number of columns
+                    if *index >= self.ctx.tforms.len() {
+                        warn!("{} index provided exceeds the number of valid columns found in the table. This index will be discarded.", index);
+                        None
+                    } else {
+                        Some(*index)
+                    }
+                },
                 ColumnId::Name(name) => {
                     // If the column is given by its name, then we must search
                     // in the ttypes keywords to get its correct index
@@ -195,20 +226,16 @@ impl<R> TableData<R> {
     }
 }
 
-
-use std::io::Cursor;
-/// Retrieve the current position of the inner reader for cursor readers
-impl<R> TableData<Cursor<R>> {
-    pub const fn get_ref(&self) -> &R {
-        self.reader.get_ref()
-    }
-}
-
 impl<R> TableData<R>
 where 
     R: Seek
 {
     fn seek_to_next_col(&mut self) -> Result<(), Error> {
+        // detect if we jump of row
+        if self.col_idx == self.cols_idx.len() - 1 {
+            self.row_idx += 1;
+        }
+
         self.col_idx = (self.col_idx + 1) % self.cols_idx.len();
         self.item_idx = 0;
 
@@ -289,7 +316,7 @@ where
                         tile_size
                     });
                     n_elems = n_elems_max as u64;
-                    t_byte_size = (*z_bitpix as i8).abs() as u64 / 8;
+                    t_byte_size = z_bitpix.byte_size() as u64;
 
                     match tci {
                         TileCompressedImageTy::Gzip1U8 | TileCompressedImageTy::Gzip1I16 | TileCompressedImageTy::Gzip1I32 => {
@@ -337,6 +364,50 @@ where
     }
 }
 
+impl<R> TableData<R>
+where
+    R: Read + Seek + Debug
+{
+    pub fn row_iter(self) -> impl Iterator<Item = Box<[DataValue]>> {
+        TableRowData::new(self)
+    }
+}
+
+struct TableRowData<R> {
+    data: TableData<R>,
+    idx_row: usize,
+}
+
+impl<R> TableRowData<R> {
+    fn new(data: TableData<R>) -> Self {
+        Self {
+            data,
+            idx_row: 0,
+        }
+    }
+}
+
+impl<R> Iterator for TableRowData<R>
+where
+    R: Read + Seek + Debug,
+{
+    // Return a vec of fields because to take into account the repeat count value for that field
+    type Item = Box<[DataValue]>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut row_data = vec![];
+
+        while self.data.row_idx == self.idx_row {
+            row_data.push(self.data.next()?);
+        }
+
+        self.idx_row += 1;
+
+        Some(row_data.into_boxed_slice())
+    }
+}
+
+
 use std::io::Seek;
 use super::rice::RICEDecoder;
 use super::{ColumnId, DataValue};
@@ -365,20 +436,24 @@ where
                     // Unsigned byte
                     ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip1U8) => {
                         *num_bytes_to_read -= B::BYTES_SIZE as u64;
-                        let value = self.buf[idx];
+                        // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
+                        let off = 4 * idx;
+                        let value = i32::from_be_bytes([self.buf[off], self.buf[off + 1], self.buf[off + 2], self.buf[off + 3]]) as u8;
                         DataValue::UnsignedByte { value, column: ColumnId::Index(col_idx), idx  }
                     }
                     // 16-bit integer
                     ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip1I16) => {
                         *num_bytes_to_read -= I::BYTES_SIZE as u64;
-                        let off = idx * I::BYTES_SIZE;
-                        let value = i16::from_be_bytes([self.buf[off], self.buf[off + 1]]);
+                        // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
+                        let off = 4 * idx;
+                        let value = i32::from_be_bytes([self.buf[off], self.buf[off + 1], self.buf[off + 2], self.buf[off + 3]]) as i16;
                         DataValue::Short { value, column: ColumnId::Index(col_idx), idx  }
                     }
                     // 32-bit integer
                     ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip1I32) => {
                         *num_bytes_to_read -= J::BYTES_SIZE as u64;
-                        let off = idx * J::BYTES_SIZE;
+                        // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
+                        let off = 4 * idx;
                         let value = i32::from_be_bytes([self.buf[off], self.buf[off + 1], self.buf[off + 2], self.buf[off + 3]]);
                         DataValue::Integer { value, column: ColumnId::Index(col_idx), idx  }
                     }

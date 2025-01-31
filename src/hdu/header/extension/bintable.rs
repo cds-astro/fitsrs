@@ -1,17 +1,17 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 
-use async_trait::async_trait;
-use serde::Serialize;
-use crate::hdu::Value;
 use crate::error::Error;
-use crate::hdu::header::Bitpix;
 use crate::hdu::header::check_for_bitpix;
 use crate::hdu::header::check_for_gcount;
 use crate::hdu::header::check_for_naxis;
 use crate::hdu::header::check_for_naxisi;
 use crate::hdu::header::check_for_pcount;
 use crate::hdu::header::check_for_tfields;
+use crate::hdu::header::Bitpix;
+use crate::hdu::Value;
+use async_trait::async_trait;
+use serde::Serialize;
 
 use super::Xtension;
 
@@ -56,7 +56,7 @@ pub struct BinTable {
     /// or ’+’ characters in the name may be confused with mathematical operators). String comparisons with the TTYPEn keyword
     /// values should not be case sensitive (e.g., ’TIME’ and ’Time’
     /// should be interpreted as the same name).
-    pub(crate) ttypes: Vec<Option<String>>, 
+    pub(crate) ttypes: Vec<Option<String>>,
 
     /// The value field shall contain the number of
     /// bytes that follow the table in the supplemental data area called
@@ -69,7 +69,13 @@ pub struct BinTable {
     /// ZIMAGE (required keyword) This keyword must have the logical value T. It indicates that the
     /// FITS binary table extension contains a compressed image and that logically this extension
     /// should be interpreted as an image and not as a table.
-    pub(crate) z_image: Option<TileCompressedImage>
+    pub(crate) z_image: Option<TileCompressedImage>,
+}
+
+impl BinTable {
+    pub fn get_num_rows(&self) -> usize {
+        self.naxis2 as usize
+    }
 }
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
@@ -115,7 +121,7 @@ pub(crate) struct TileCompressedImage {
     /// gives the seed value for the random dithering pattern that was used when quantizing the
     /// floating-point pixel values. The value may range from 1 to 10000, inclusive. See section 4 for
     /// further discussion of this keyword.
-    pub(crate) z_dither_0: Option<i64>
+    pub(crate) z_dither_0: Option<i64>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
@@ -131,7 +137,7 @@ pub(crate) enum ZCmpType {
     Gzip2,
     Rice,
     PLI0_1,
-    Hcompress1
+    Hcompress1,
 }
 
 #[async_trait(?Send)]
@@ -155,9 +161,7 @@ impl Xtension for BinTable {
         self.naxis1 * self.naxis2 + self.pcount
     }
 
-    fn parse(
-        values: &HashMap<String, Value>,
-    ) -> Result<Self, Error> {
+    fn parse(values: &HashMap<String, Value>) -> Result<Self, Error> {
         // BITPIX
         let bitpix = check_for_bitpix(values)?;
         if bitpix != Bitpix::U8 {
@@ -177,7 +181,6 @@ impl Xtension for BinTable {
         // NAXIS2
         let naxis2 = check_for_naxisi(values, 2)? as u64;
 
-
         // PCOUNT
         let pcount = check_for_pcount(values)? as u64;
 
@@ -191,7 +194,11 @@ impl Xtension for BinTable {
         let tfields = check_for_tfields(values)?;
 
         // Tile compressed image parameters
-        let z_cmp_type = if let Some(Value::String{value: ref z_cmp_type, ..}) = values.get("ZCMPTYPE") {
+        let z_cmp_type = if let Some(Value::String {
+            value: ref z_cmp_type,
+            ..
+        }) = values.get("ZCMPTYPE")
+        {
             match z_cmp_type.trim_ascii_end() {
                 "GZIP_1" => Some(ZCmpType::Gzip1),
                 "GZIP_2" => Some(ZCmpType::Gzip2),
@@ -207,7 +214,10 @@ impl Xtension for BinTable {
             None
         };
 
-        let z_bitpix = if let Some(Value::Integer{value: z_bitpix, ..}) = values.get("ZBITPIX") {
+        let z_bitpix = if let Some(Value::Integer {
+            value: z_bitpix, ..
+        }) = values.get("ZBITPIX")
+        {
             match z_bitpix {
                 8 => Some(Bitpix::U8),
                 16 => Some(Bitpix::I16),
@@ -226,7 +236,7 @@ impl Xtension for BinTable {
 
         // ZNAXIS (required keyword) The value field of this keyword shall contain an integer that gives
         // the value of the NAXIS keyword in the uncompressed FITS image.
-        let z_naxis =  if let Some(Value::Integer{value, ..}) = values.get("ZNAXIS") {
+        let z_naxis = if let Some(Value::Integer { value, .. }) = values.get("ZNAXIS") {
             Some(*value)
         } else {
             None
@@ -252,11 +262,12 @@ impl Xtension for BinTable {
             let mut z_tilen = Vec::with_capacity(z_naxis as usize);
 
             for i in 1..=(z_naxis as i64) {
-                let naxisn = if let Some(Value::Integer{value, ..}) = values.get(&format!("ZNAXIS{i}")) {
-                    Some(*value)
-                } else {
-                    None
-                };
+                let naxisn =
+                    if let Some(Value::Integer { value, .. }) = values.get(&format!("ZNAXIS{i}")) {
+                        Some(*value)
+                    } else {
+                        None
+                    };
 
                 if naxisn.is_none() {
                     warn!("ZNAXISN is mandatory. Tile compressed image discarded");
@@ -265,10 +276,14 @@ impl Xtension for BinTable {
 
                 let naxisn = naxisn.unwrap();
                 // If not found, z_tilen equals z_naxisn
-                let tilen = if let Some(Value::Integer{value, ..}) = values.get(&format!("ZNAXIS{i}")) {
-                    *value
-                } else {
-                    naxisn
+                let tilen = match (values.get(&format!("ZTILE{i}")), i) {
+                    // ZTILEi has been found
+                    (Some(&Value::Integer { value, .. }), _) => value,
+                    // ZTILEi has not been found or is not set to an integer => default behavior
+                    // * i == 1, ZTILE1 = NAXIS1
+                    // * i > 1, ZTILEi = 1
+                    (_, 1) => naxisn,
+                    _ => 1,
                 };
 
                 z_naxisn.push(naxisn as usize);
@@ -278,7 +293,10 @@ impl Xtension for BinTable {
             if z_naxisn.len() != z_naxis as usize {
                 (None, None)
             } else {
-                (Some(z_naxisn.into_boxed_slice()), Some(z_tilen.into_boxed_slice()))
+                (
+                    Some(z_naxisn.into_boxed_slice()),
+                    Some(z_tilen.into_boxed_slice()),
+                )
             }
         } else {
             (None, None)
@@ -287,7 +305,10 @@ impl Xtension for BinTable {
         // ZQUANTIZ (optional keyword) This keyword records the name of the algorithm that was
         // used to quantize floating-point image pixels into integer values which are then passed to
         // the compression algorithm, as discussed further in section 4 of this document.
-        let z_quantiz = if let Some(Value::String { value: z_quantiz, .. }) = values.get("ZQUANTIZ") {
+        let z_quantiz = if let Some(Value::String {
+            value: z_quantiz, ..
+        }) = values.get("ZQUANTIZ")
+        {
             match z_quantiz.trim_ascii_end() {
                 "NO_DITHER" => Some(ZQuantiz::NoDither),
                 "SUBTRACTIVE_DITHER_1" => Some(ZQuantiz::SubtractiveDither1),
@@ -305,15 +326,31 @@ impl Xtension for BinTable {
         // gives the seed value for the random dithering pattern that was used when quantizing the
         // floating-point pixel values. The value may range from 1 to 10000, inclusive. See section 4 for
         // further discussion of this keyword.
-        let z_dither_0 = if let Some(Value::Integer{value, ..}) = values.get(&format!("ZDITHER0")) {
-            Some(*value)
-        } else {
-            None
-        };
+        let z_dither_0 =
+            if let Some(Value::Integer { value, .. }) = values.get(&format!("ZDITHER0")) {
+                Some(*value)
+            } else {
+                None
+            };
 
         // Fill the headers with these specific tile compressed image keywords
-        let z_image = if let (Some(z_cmp_type), Some(z_bitpix), Some(z_naxis), Some(z_naxisn), Some(z_tilen)) = (z_cmp_type, z_bitpix, z_naxis, z_naxisn, z_tilen) {
-            Some(TileCompressedImage { z_cmp_type, z_bitpix, z_naxis: z_naxis as usize, z_naxisn, z_tilen, z_quantiz, z_dither_0 })
+        let z_image = if let (
+            Some(z_cmp_type),
+            Some(z_bitpix),
+            Some(z_naxis),
+            Some(z_naxisn),
+            Some(z_tilen),
+        ) = (z_cmp_type, z_bitpix, z_naxis, z_naxisn, z_tilen)
+        {
+            Some(TileCompressedImage {
+                z_cmp_type,
+                z_bitpix,
+                z_naxis: z_naxis as usize,
+                z_naxisn,
+                z_tilen,
+                z_quantiz,
+                z_dither_0,
+            })
         } else {
             None
         };
@@ -419,11 +456,11 @@ impl Xtension for BinTable {
                     // Unsigned Byte
                     'B' => TFormType::B { repeat_count },
                     // 16-bit integer
-                    'I' => TFormType::I { repeat_count }, 
+                    'I' => TFormType::I { repeat_count },
                     // 32-bit integer
-                    'J' => TFormType::J { repeat_count }, 
+                    'J' => TFormType::J { repeat_count },
                     // 64-bit integer
-                    'K' => TFormType::K { repeat_count }, 
+                    'K' => TFormType::K { repeat_count },
                     // Character
                     'A' => TFormType::A { repeat_count },
                     // Single-precision floating point
@@ -433,7 +470,7 @@ impl Xtension for BinTable {
                     // Single-precision complex
                     'C' => TFormType::C { repeat_count },
                     // Double-precision complex
-                    'M' => TFormType::M { repeat_count }, 
+                    'M' => TFormType::M { repeat_count },
                     // Array Descriptor 32-bit
                     'P' => {
                         let (t_byte_size, ty) = compute_ty_array_desc()?;
@@ -465,19 +502,22 @@ impl Xtension for BinTable {
             .unzip();
 
         // update the value of theap if found
-        let theap = if let Some(Value::Integer{value, ..}) = values.get("THEAP") {
+        let theap = if let Some(Value::Integer { value, .. }) = values.get("THEAP") {
             *value as usize
         } else {
             (naxis1 as usize) * (naxis2 as usize)
         };
 
-        let num_bits_per_row = tforms.iter().map(|tform| tform.num_bits_field() as u64).sum::<u64>();
+        let num_bits_per_row = tforms
+            .iter()
+            .map(|tform| tform.num_bits_field() as u64)
+            .sum::<u64>();
 
         let num_bytes_per_row = num_bits_per_row >> 3;
         if num_bytes_per_row != naxis1 {
             return Err(Error::StaticError("BinTable NAXIS1 and TFORMS does not give the same amount of bytes the table should have per row."));
         }
-      
+
         Ok(BinTable {
             bitpix,
             naxis,
@@ -489,7 +529,7 @@ impl Xtension for BinTable {
             pcount,
             gcount,
             theap,
-            z_image
+            z_image,
         })
     }
 }
@@ -545,7 +585,6 @@ impl TForm for J {
     const BITS_SIZE: usize = 32;
 
     type Ty = i32;
-
 }
 // 64-bit integer
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
@@ -607,7 +646,7 @@ impl TForm for P {
 
 // Array Descriptor (64-bit)
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Default)]
-pub(crate)  struct Q;
+pub(crate) struct Q;
 impl TForm for Q {
     const BITS_SIZE: usize = 128;
 
@@ -638,15 +677,15 @@ pub(crate) enum TFormType {
     },
     // 64-bit integer
     K {
-        repeat_count: usize
+        repeat_count: usize,
     },
     // Character
     A {
-        repeat_count: usize
+        repeat_count: usize,
     },
     // Single-precision floating point
     E {
-        repeat_count: usize
+        repeat_count: usize,
     },
     // Double-precision floating point
     D {
@@ -654,13 +693,13 @@ pub(crate) enum TFormType {
     },
     // Single-precision complex
     C {
-        repeat_count: usize
+        repeat_count: usize,
     },
     // Double-precision complex
     M {
-        repeat_count: usize
+        repeat_count: usize,
     },
-    // Array Descriptor (32-bit) 
+    // Array Descriptor (32-bit)
     P {
         /// number of bytes per element
         t_byte_size: u64,
@@ -677,7 +716,7 @@ pub(crate) enum TFormType {
         e_max: u64,
         /// the type
         ty: ArrayDescriptorTy,
-    }
+    },
 }
 
 #[derive(PartialEq, Serialize, Clone, Copy, Debug)]
@@ -719,7 +758,7 @@ pub(crate) enum VariableArrayTy {
 #[derive(PartialEq, Serialize, Clone, Copy, Debug)]
 pub(crate) enum ArrayDescriptorTy {
     TileCompressedImage(TileCompressedImageTy),
-    Default(VariableArrayTy)
+    Default(VariableArrayTy),
 }
 
 impl TFormType {
@@ -736,8 +775,8 @@ impl TFormType {
             TFormType::D { repeat_count } => repeat_count * D::BITS_SIZE, // Double-precision floating point
             TFormType::C { repeat_count } => repeat_count * C::BITS_SIZE, // Single-precision complex
             TFormType::M { repeat_count } => repeat_count * M::BITS_SIZE, // Double-precision complex
-            TFormType::P { .. } => P::BITS_SIZE,                                  // Array Descriptor (32-bit)
-            TFormType::Q { .. } => Q::BITS_SIZE,                                  // Array Descriptor (64-bit)
+            TFormType::P { .. } => P::BITS_SIZE, // Array Descriptor (32-bit)
+            TFormType::Q { .. } => Q::BITS_SIZE, // Array Descriptor (64-bit)
         }
     }
 
@@ -750,7 +789,8 @@ impl TFormType {
 mod tests {
     use super::{BinTable, TFormType};
     use crate::{
-        hdu::{header::Bitpix, HDU}, FITSFile,
+        hdu::{header::Bitpix, HDU},
+        FITSFile,
     };
 
     fn compare_bintable_ext(filename: &str, bin_table: BinTable) {
@@ -800,7 +840,17 @@ mod tests {
                     TFormType::I { repeat_count: 640 },
                     TFormType::E { repeat_count: 640 },
                 ],
-                ttypes: vec![Some("APERTURE".to_owned()), Some("NPOINTS".to_owned()), Some("WAVELENGTH".to_owned()), Some("DELTAW".to_owned()), Some("NET".to_owned()), Some("BACKGROUND".to_owned()), Some("SIGMA".to_owned()), Some("QUALITY".to_owned()), Some("FLUX".to_owned())],
+                ttypes: vec![
+                    Some("APERTURE".to_owned()),
+                    Some("NPOINTS".to_owned()),
+                    Some("WAVELENGTH".to_owned()),
+                    Some("DELTAW".to_owned()),
+                    Some("NET".to_owned()),
+                    Some("BACKGROUND".to_owned()),
+                    Some("SIGMA".to_owned()),
+                    Some("QUALITY".to_owned()),
+                    Some("FLUX".to_owned()),
+                ],
                 theap: 11535,
                 // Should be 0
                 pcount: 0,

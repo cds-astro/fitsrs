@@ -29,6 +29,7 @@
 //! ```
 
 #[doc = include_str!("../README.md")]
+
 extern crate async_trait;
 extern crate byteorder;
 #[macro_use]
@@ -301,21 +302,22 @@ mod tests {
     fn test_fits_bintable() {
         use std::fs::File;
 
-        let mut f = File::open("samples/vizier/II_278_table2v1.fits").unwrap();
-        let mut buf = Vec::new();
-        f.read_to_end(&mut buf).unwrap();
+        let f = File::open("samples/vizier/II_278_transit.fits").unwrap();
 
-        let reader = Cursor::new(&buf[..]);
+        let reader = BufReader::new(f);
         let mut hdu_list = Fits::from_reader(reader);
-
-        while let Some(Ok(HDU::XBinaryTable(bintable))) = dbg!(hdu_list.next()) {
-            let _ = bintable.get_header().get_xtension();
-            let data = hdu_list.get_data(bintable).collect::<Vec<_>>();
-
-            dbg!(data);
+        let mut data = vec![];
+        while let Some(Ok(hdu)) = dbg!(hdu_list.next()) {
+            match dbg!(hdu) {
+                HDU::XBinaryTable(hdu) => {
+                    let _ = hdu.get_header().get_xtension();
+                    data = hdu_list.get_data(hdu).collect::<Vec<_>>();
+                },
+                _ => ()
+            }
         }
 
-        assert!(true);
+        assert_eq!(177 * 23, data.len());
     }
 
     #[test_case("samples/misc/SN2923fxjA.fits.gz", 5415.0, 6386.0)]
@@ -601,6 +603,80 @@ mod tests {
                     let data = it_bytes.collect::<Vec<_>>().await;
                     assert_eq!(num_bytes as usize, data.len());
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn test_fits_euve() {
+        use std::fs::File;
+        use std::io::BufReader;
+
+        let f = File::open("samples/fits.gsfc.nasa.gov/EUVE.fits").unwrap();
+        let reader = BufReader::new(f);
+
+        let mut hdu_list = Fits::from_reader(reader);
+
+        while let Some(Ok(hdu)) = hdu_list.next() {
+            match hdu {
+                // skip the primary HDU
+                HDU::Primary(_) => (),
+                HDU::XImage(hdu) => {
+                    let xtension = hdu.get_header().get_xtension();
+
+                    let naxis1 = *xtension.get_naxisn(1).unwrap();
+                    let naxis2 = *xtension.get_naxisn(2).unwrap();
+
+                    let num_pixels = (naxis2 * naxis1) as usize;
+
+                    match hdu_list.get_data(hdu) {
+                        ImageData::U8(it) => {
+                            let data = it.collect::<Vec<_>>();
+                            assert_eq!(num_pixels, data.len())
+                        },
+                        ImageData::I16(it) => {
+                            let data = it.collect::<Vec<_>>();
+                            assert_eq!(num_pixels, data.len())
+                        },
+                        ImageData::I32(it) => {
+                            let data = it.collect::<Vec<_>>();
+                            assert_eq!(num_pixels, data.len())
+                        },
+                        ImageData::I64(it) => {
+                            let data = it.collect::<Vec<_>>();
+                            assert_eq!(num_pixels, data.len())
+                        },
+                        ImageData::F32(it) => {
+                            let data = it.collect::<Vec<_>>();
+                            assert_eq!(num_pixels, data.len())
+                        },
+                        ImageData::F64(it) => {
+                            let data = it.collect::<Vec<_>>();
+                            assert_eq!(num_pixels, data.len())
+                        },
+                    }
+                },
+                HDU::XBinaryTable(hdu) => {
+                    let num_rows = hdu.get_header()
+                        .get_xtension()
+                        .get_num_rows();
+
+                    let rows = hdu_list.get_data(hdu)
+                        .row_iter()
+                        .collect::<Vec<_>>();
+
+                    assert_eq!(num_rows, rows.len());
+                },
+                HDU::XASCIITable(hdu) => {
+                    let num_bytes = hdu.get_header()
+                        .get_xtension()
+                        .get_num_bytes_data_block();
+
+                    let data = hdu_list.get_data(hdu)
+                        .collect::<Vec<_>>();
+
+                    assert_eq!(num_bytes as usize, data.len());
+                },
             }
         }
     }

@@ -1,6 +1,6 @@
-use std::collections::HashMap;
 use async_trait::async_trait;
 use serde::Serialize;
+use std::collections::HashMap;
 
 use crate::card::Value;
 use crate::error::Error;
@@ -54,9 +54,7 @@ impl Xtension for Image {
         num_bits >> 3
     }
 
-    fn parse(
-        values: &HashMap<String, Value>
-    ) -> Result<Self, Error> {
+    fn parse(values: &HashMap<String, Value>) -> Result<Self, Error> {
         // BITPIX
         let bitpix = check_for_bitpix(values)?;
         // NAXIS
