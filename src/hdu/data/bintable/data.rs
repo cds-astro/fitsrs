@@ -100,7 +100,7 @@ where
 }
 
 use std::io::Cursor;
-/// Retrieve the current position of the inner reader for cursor readers
+/// Get a reference to the inner reader for in-memory readers
 impl<R> TableData<Cursor<R>> {
     pub const fn get_ref(&self) -> &R {
         self.reader.get_ref()
@@ -304,17 +304,14 @@ where
                 let _ = self.reader.seek_relative(off)?;
 
                 // In case this variable length column refers to a tile compressed image
-                if let (ArrayDescriptorTy::TileCompressedImage(tci), Some(TileCompressedImage { z_tilen, z_bitpix, .. })) = (ty, &self.ctx.z_image) {
-                    // FIXME, compute the real number of values in the tile in function of the idx of the row currently processed
-                    // because tiles on the border of the total images can be smaller!
-                    let n_elems_max = z_tilen.iter().fold(1, |mut tile_size, z_tilei| {
-                        tile_size *= *z_tilei;
-                        tile_size
-                    });
-                    n_elems = n_elems_max as u64;
-                    t_byte_size = z_bitpix.byte_size() as u64;
+                if let (ArrayDescriptorTy::TileCompressedImage(arr_desc), Some(tci)) = (ty, &self.ctx.z_image) {
+                    n_elems = tci.tile_size_from_row_idx(self.row_idx).iter().fold(1, |mut n, &tile| {
+                        n *= tile;
+                        n
+                    }) as u64;
+                    t_byte_size = tci.z_bitpix.byte_size() as u64;
 
-                    match tci {
+                    match arr_desc {
                         TileCompressedImageTy::Gzip1U8 | TileCompressedImageTy::Gzip1I16 | TileCompressedImageTy::Gzip1I32 => {
                             let mut gz = GzDecoder::new(&mut self.reader);
                             gz.read_exact(&mut self.buf[..])?;

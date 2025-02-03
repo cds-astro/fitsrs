@@ -124,6 +124,52 @@ pub(crate) struct TileCompressedImage {
     pub(crate) z_dither_0: Option<i64>,
 }
 
+impl TileCompressedImage {
+    /// Compute the size of the tile from its row position inside the compressed data column
+    /// FIXME: optimize this computation by using memoization
+    pub(crate) fn tile_size_from_row_idx(&self, n: usize) -> Box<[usize]> {
+        let d = self.z_tilen.len();
+
+        if d == 0 {
+            // There must be at least one dimension
+            unreachable!();
+        } else {
+            let mut u = vec![0_usize; self.z_tilen.len()];
+
+            let s = self.z_naxisn.iter().zip(self.z_tilen.iter()).map(|(naxisi, tilei)| {
+                naxisi.div_ceil(*tilei)
+            }).collect::<Vec<_>>();
+
+            // Compute the position inside the first dimension
+            u[0] = n % s[0];
+
+            for i in 1..=(d - 1) {
+                u[i] = n - u[0] - (1..=(i - 1)).map(|k| {
+                    let mut prod_sk = 1;
+                    for l in 0..=(k - 1) {
+                        prod_sk *= s[l];
+                    }
+
+                    u[k] * prod_sk
+                }).sum::<usize>();
+
+                let mut prod_si = 1;
+                for k in 0..=(i - 1) {
+                    prod_si *= s[k];
+                }
+
+                u[i] = (u[i] / prod_si) % s[i];
+            }
+
+            u.iter().zip(self.z_naxisn.iter().zip(self.z_tilen.iter())).map(|(&u_i, (&naxis, &tilez))| {
+                tilez.min(naxis - u_i*tilez)
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice()
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub(crate) enum ZQuantiz {
     NoDither,
@@ -787,7 +833,7 @@ impl TFormType {
 
 #[cfg(test)]
 mod tests {
-    use super::{BinTable, TFormType};
+    use super::{BinTable, TFormType, TileCompressedImage, ZCmpType};
     use crate::{
         hdu::{header::Bitpix, HDU},
         FITSFile,
@@ -859,5 +905,63 @@ mod tests {
                 z_image: None,
             },
         );
+    }
+
+    #[test]
+    fn test_tile_size_from_row_idx() {
+        let tc = TileCompressedImage {
+            z_cmp_type: ZCmpType::Rice, // not important
+            z_bitpix: Bitpix::F32, // not important
+            z_naxis: 3,
+            z_naxisn: vec![1000, 500, 350].into_boxed_slice(),
+            z_tilen: vec![300, 200, 150].into_boxed_slice(),
+
+            z_quantiz: None,
+            z_dither_0: None,
+        };
+
+        let ground_truth = [
+            [300, 200, 150],
+            [300, 200, 150],
+            [300, 200, 150],
+            [100, 200, 150],
+            [300, 200, 150],
+            [300, 200, 150],
+            [300, 200, 150],
+            [100, 200, 150],
+            [300, 100, 150],
+            [300, 100, 150],
+            [300, 100, 150],
+            [100, 100, 150],
+            [300, 200, 150],
+            [300, 200, 150],
+            [300, 200, 150],
+            [100, 200, 150],
+            [300, 200, 150],
+            [300, 200, 150],
+            [300, 200, 150],
+            [100, 200, 150],
+            [300, 100, 150],
+            [300, 100, 150],
+            [300, 100, 150],
+            [100, 100, 150],
+            [300, 200, 50],
+            [300, 200, 50],
+            [300, 200, 50],
+            [100, 200, 50],
+            [300, 200, 50],
+            [300, 200, 50],
+            [300, 200, 50],
+            [100, 200, 50],
+            [300, 100, 50],
+            [300, 100, 50],
+            [300, 100, 50],
+            [100, 100, 50],
+        ];
+
+        for i in 0..ground_truth.len() {
+            let tile_s = tc.tile_size_from_row_idx(i);
+            assert_eq!([tile_s[0], tile_s[1], tile_s[2]], ground_truth[i]);
+        }
     }
 }
