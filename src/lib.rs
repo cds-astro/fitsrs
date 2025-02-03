@@ -369,7 +369,7 @@ mod tests {
         while let Some(Ok(hdu)) = hdu_list.next() {
             match hdu {
                 HDU::XBinaryTable(hdu) => {
-                    let mut pixels = hdu_list.get_data(hdu)
+                    let pixels = hdu_list.get_data(hdu)
                         .map(|value| {
                             let value = value;
                             match value {

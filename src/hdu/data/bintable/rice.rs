@@ -66,6 +66,8 @@ pub(crate) struct RICEDecoder<R, T> {
     state: RICEState,
     /// Coding block size
     nblock: i32,
+    /// Number of output pixels/values
+    nx: i32,
     /// Type of the output value after decoding
     _t: PhantomData<T>,
 }
@@ -78,11 +80,13 @@ impl<R, T> RICEDecoder<R, T> {
     ///
     /// * `reader` - The reader to decode
     /// * `nblock` - coding block size, usually 32 is given
-    pub(crate) fn new(reader: R, nblock: i32) -> Self {
+    /// * `nx` - number of output pixels/values
+    pub(crate) fn new(reader: R, nblock: i32, nx: i32) -> Self {
         Self {
             reader,
             state: RICEState::Start,
             nblock,
+            nx,
             _t: PhantomData,
         }
     }
@@ -144,7 +148,7 @@ impl RICE for i32 {
     }
 
     fn as_i32(self) -> i32 {
-        self as i32
+        self
     }
 }
 
@@ -193,7 +197,7 @@ where
 
                     b &= (1 << nbits) - 1;
                     /* loop over the next block */
-                    let imax = i + self.nblock;
+                    let imax = (i + self.nblock).min(self.nx);
 
                     self.state = if fs < 0 {
                         RICEState::LowEntropyDecoding {
@@ -372,185 +376,3 @@ where
         }
     }
 }
-
-// /*---------------------------------------------------------------------------*/
-// /*----------------------------------------------------------*/
-// /*                                                          */
-// /*    START OF SOURCE FILE ORIGINALLY CALLED rdecomp.c      */
-// /*                                                          */
-// /*----------------------------------------------------------*/
-// /* @(#) rdecomp.c 1.4 99/03/01 12:38:41 */
-// /* rdecomp.c	Decompress image line using
-//  *		(1) Difference of adjacent pixels
-//  *		(2) Rice algorithm coding
-//  *
-//  * Returns 0 on success or 1 on failure
-//  */
-// /*    moved these 'includes' to the beginning of the file (WDP)
-// #include <stdio.h>
-// #include <stdlib.h>
-// */
-// /*---------------------------------------------------------------------------*/
-// /* this routine used to be called 'rdecomp'  (WDP)  */
-// int fits_rdecomp (unsigned char *c,		/* input buffer			*/
-//     int clen,			/* length of input		*/
-//     unsigned int array[],	/* output array			*/
-//     int nx,			/* number of output pixels	*/
-//     int nblock)		/* coding block size		*/
-// {
-//     /* int bsize;  */
-//     int i, k, imax;
-//     int nbits, nzero, fs;
-//     unsigned char *cend, bytevalue;
-//     unsigned int b, diff, lastpix;
-//     int fsmax, fsbits, bbits;
-//     extern const int nonzero_count[];
-
-//     /*
-//     * Original size of each pixel (bsize, bytes) and coding block
-//     * size (nblock, pixels)
-//     * Could make bsize a parameter to allow more efficient
-//     * compression of short & byte images.
-//     */
-//     /*    bsize = 4; */
-//     /*    nblock = 32; now an input parameter */
-//     /*
-//     * From bsize derive:
-//     * FSBITS = # bits required to store FS
-//     * FSMAX = maximum value for FS
-//     * BBITS = bits/pixel for direct coding
-//     */
-//     /*
-//     switch (bsize) {
-//     case 1:
-//     fsbits = 3;
-//     fsmax = 6;
-//     break;
-//     case 2:
-//     fsbits = 4;
-//     fsmax = 14;
-//     break;
-//     case 4:
-//     fsbits = 5;
-//     fsmax = 25;
-//     break;
-//     default:
-//     ffpmsg("rdecomp: bsize must be 1, 2, or 4 bytes");
-//     return 1;
-//     }
-//     */
-//     /* move out of switch block, to tweak performance */
-//     fsbits = 5;
-//     fsmax = 25;
-
-//     bbits = 1<<fsbits;
-
-//     /*
-//     * Decode in blocks of nblock pixels
-//     */
-//     /* first 4 bytes of input buffer contain the value of the first */
-//     /* 4 byte integer value, without any encoding */
-//     lastpix = 0;
-//     bytevalue = c[0];
-//     lastpix = lastpix | (bytevalue<<24);
-//     bytevalue = c[1];
-//     lastpix = lastpix | (bytevalue<<16);
-//     bytevalue = c[2];
-//     lastpix = lastpix | (bytevalue<<8);
-//     bytevalue = c[3];
-//     lastpix = lastpix | bytevalue;
-
-//     c += 4;
-//     cend = c + clen - 4;
-
-//     b = *c++;		    /* bit buffer			*/
-//     nbits = 8;		    /* number of bits remaining in b	*/
-//     for (i = 0; i<nx; ) {
-//         /* get the FS value from first fsbits */
-//         nbits -= fsbits;
-//         while (nbits < 0) {
-//             b = (b<<8) | (*c++);
-//             nbits += 8;
-//         }
-//         fs = (b >> nbits) - 1;
-
-//         b &= (1<<nbits)-1;
-//         /* loop over the next block */
-//         imax = i + nblock;
-//         if (imax > nx) imax = nx;
-//         if (fs<0) {
-//             /* low-entropy case, all zero differences */
-//             for ( ; i<imax; i++) array[i] = lastpix;
-//         } else if (fs==fsmax) {
-//             /* high-entropy case, directly coded pixel values */
-//             for ( ; i<imax; i++) {
-//                 k = bbits - nbits;
-//                 diff = b<<k;
-//                 for (k -= 8; k >= 0; k -= 8) {
-//                     b = *c++;
-//                     diff |= b<<k;
-//                 }
-//                 if (nbits>0) {
-//                     b = *c++;
-//                     diff |= b>>(-k);
-//                     b &= (1<<nbits)-1;
-//                 } else {
-//                     b = 0;
-//                 }
-//                 /*
-//                     * undo mapping and differencing
-//                     * Note that some of these operations will overflow the
-//                     * unsigned int arithmetic -- that's OK, it all works
-//                     * out to give the right answers in the output file.
-//                     */
-//                 if ((diff & 1) == 0) {
-//                     diff = diff>>1;
-//                 } else {
-//                     diff = ~(diff>>1);
-//                 }
-//                 array[i] = diff+lastpix;
-//                 lastpix = array[i];
-//             }
-//         } else {
-//             /* normal case, Rice coding */
-//             for ( ; i<imax; i++) {
-//                 /* count number of leading zeros */
-//                 while (b == 0) {
-//                     nbits += 8;
-//                     b = *c++;
-//                 }
-//                 nzero = nbits - nonzero_count[b];
-//                 nbits -= nzero+1;
-//                 /* flip the leading one-bit */
-//                 b ^= 1<<nbits;
-//                 /* get the FS trailing bits */
-//                 nbits -= fs;
-//                 while (nbits < 0) {
-//                     b = (b<<8) | (*c++);
-//                     nbits += 8;
-//                 }
-//                 diff = (nzero<<fs) | (b>>nbits);
-//                 b &= (1<<nbits)-1;
-
-//                 /* undo mapping and differencing */
-//                 if ((diff & 1) == 0) {
-//                     diff = diff>>1;
-//                 } else {
-//                     diff = ~(diff>>1);
-//                 }
-//                 array[i] = diff+lastpix;
-//                 lastpix = array[i];
-//             }
-//         }
-//         if (c > cend) {
-//             ffpmsg("decompression error: hit end of compressed byte stream");
-//             return 1;
-//         }
-//     }
-//     if (c < cend) {
-//         ffpmsg("decompression warning: unused bytes at end of compressed buffer");
-//     }
-//     return 0;
-// }
-// /*---------------------------------------------------------------------------*/
-// /* this routine used to be called 'rdecomp'  (WDP)  */
