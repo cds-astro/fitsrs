@@ -92,7 +92,7 @@ impl<R> TableData<Cursor<R>>
 where 
     R: AsRef<[u8]>
 {
-    /// For in memory buffers, access the raw bytes of the main data table + HEAP if any
+    /// For in memory buffers, access the raw bytes of the main data table + HEAP
     pub fn raw_bytes(&self) -> &[u8] {
         let inner = self.reader.get_ref();
         let raw_bytes = inner.as_ref();

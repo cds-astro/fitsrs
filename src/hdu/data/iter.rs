@@ -45,8 +45,8 @@ impl Value for f64 {
 pub struct BigEndianIt<R, T> {
     /// The reader
     reader: R,
-    /// A limit of number of the bytes to read from the reader
-    limit: usize,
+    /// The number of items the reader must read
+    num_items: usize,
     /// Number of item read
     cur_idx: usize,
     /// The type of element read from the reader
@@ -67,10 +67,12 @@ where
     R: Read
 {
     pub fn new(reader: R, limit: u64) -> Self {
+        let num_items = limit as usize / std::mem::size_of::<T>();
+
         Self {
             reader,
             cur_idx: 0,
-            limit: limit as usize,
+            num_items,
             _t: std::marker::PhantomData,
         }
     }
@@ -84,11 +86,10 @@ where
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.limit == 0 {
+        if self.cur_idx == self.num_items {
             None
         } else {
             let byte = T::read_be(&mut self.reader);
-            self.limit -= std::mem::size_of::<T>();
             self.cur_idx += 1;
 
             byte.ok()
@@ -105,17 +106,21 @@ where
     /// Returns the value of the item from a data iterator
     /// 
     /// This internally perform a seek on the inner reader to directly
-    /// target the value and it will only read it afterwards
+    /// targets and read the value
     /// This should be faster than reading the whole stream until the idx
     pub fn read_value(&mut self, idx: usize) -> Result<T, Error> {
-        // Get the position of the reader since the start of the stream
-        let t_bytes = std::mem::size_of::<T>() as i64;
-        let off = (idx as i64 - self.cur_idx as i64) * t_bytes;
+        if idx >= self.num_items {
+            Err(Error::StaticError("Value to retrieve is out of bounds"))
+        } else {
+            // Get the position of the reader since the start of the stream
+            let t_bytes = std::mem::size_of::<T>() as i64;
+            let off = (idx as i64 - self.cur_idx as i64) * t_bytes;
 
-        self.reader.seek_relative(off)?;
-        let val = T::read_be(&mut self.reader);
-        self.reader.seek_relative(-off - t_bytes)?;
+            self.reader.seek_relative(off)?;
+            self.cur_idx = idx;
 
-        val
+            self.next()
+                .ok_or(Error::StaticError("Value to retrieve is out of bounds"))
+        }
     }
 }
