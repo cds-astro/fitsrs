@@ -78,10 +78,14 @@ pub struct TableData<R> {
     /// Start byte position of the data unit
     start_pos: u64,
 
-    /// buffer for storing uncompressed data from GZIP
+    /// buffer for storing uncompressed data from GZIP/RICE
     buf: Vec<u8>,
     /// current row index
     row_idx: usize,
+
+    /// When storing tile compressed images, RICE asks for a number of block (i.e. a number of pixels) to process
+    /// Default value is 32 but in some fits, the true nblock can be stored in ZNAME/ZVAL. 
+    nblock: i32,
 }
 
 impl<R> TableData<Cursor<R>>
@@ -169,9 +173,12 @@ impl<R> TableData<R> {
 
         let row_idx = 0;
 
+        let nblock = 32;
+
         Self {
             reader,
             state,
+            nblock,
             col_idx,
             item_idx,
             cols_idx,
@@ -221,6 +228,12 @@ impl<R> TableData<R> {
 
         self
     }
+
+    /// This method allow the user to change the number of block that RICE decomp/comp algorithm must use.
+    /// Default value is 32 but it may happen that fits provider use the ZNAME/ZVAL cards to provide another number of block
+    pub fn set_rice_block_size(&mut self, nblock: u32) {
+        self.nblock = nblock as i32;
+    }
 }
 
 impl<R> TableData<R>
@@ -259,6 +272,37 @@ where
         self.reader.seek_relative(off)?;
 
         Ok(())
+    }
+
+    /// Seek directly to a specific row idx
+    /// 
+    /// # Params
+    /// * `idx` - Index of the row to jump to
+    pub fn seek_to_row(&mut self, idx: usize) -> Result<(), Error> {
+        if idx >= self.ctx.naxis2 as usize {
+            Err(Error::StaticError("The row index specified is > than the number of rows of the table"))
+        } else {
+            self.col_idx = 0;
+            self.row_idx = idx;
+            self.item_idx = 0;
+
+            let new_byte_offset =
+                // go to the beginning of the idx-th row
+                (idx as i64) * (self.ctx.naxis1 as i64)
+                // go to the first column of that row
+                + (self.col_byte_offsets[self.cols_idx[0]] as i64);
+
+            // Offset for moving from the current position to the new row position
+            let off =
+                // go back to the beginning of the main table data block
+                - (self.byte_offset as i64) + new_byte_offset;
+
+            let _ = self.reader.seek_relative(off)?;
+
+            self.byte_offset = new_byte_offset as usize;
+
+            Ok(())
+        }
     }
 
     /// Jump to the heap at a specific offset in the HEAP associated to the binary table
@@ -317,15 +361,15 @@ where
                             gz.read_exact(&mut self.buf[..])?;
                         },
                         TileCompressedImageTy::RiceU8 => {
-                            let mut rice = RICEDecoder::<_, i32>::new(&mut self.reader, 32, n_elems as i32);
+                            let mut rice = RICEDecoder::<_, i32>::new(&mut self.reader, self.nblock, n_elems as i32);
                             rice.read_exact(&mut self.buf[..])?;
                         }
                         TileCompressedImageTy::RiceI16 => {
-                            let mut rice = RICEDecoder::<_, i32>::new(&mut self.reader, 32, n_elems as i32);
+                            let mut rice = RICEDecoder::<_, i32>::new(&mut self.reader, self.nblock, n_elems as i32);
                             rice.read_exact(&mut self.buf[..])?;
                         }
                         TileCompressedImageTy::RiceI32 => {
-                            let mut rice = RICEDecoder::<_, i32>::new(&mut self.reader, 32, n_elems as i32);
+                            let mut rice = RICEDecoder::<_, i32>::new(&mut self.reader, self.nblock, n_elems as i32);
                             rice.read_exact(&mut self.buf[..])?;
                         }
                     }
