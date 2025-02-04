@@ -1,5 +1,6 @@
 pub mod data;
 pub mod rice;
+pub mod dithering;
 
 pub use data::TableData;
 

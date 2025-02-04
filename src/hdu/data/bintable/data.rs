@@ -347,6 +347,15 @@ where
                             let mut gz = GzDecoder::new(&mut self.reader);
                             gz.read_exact(&mut self.buf[..])?;
                         }
+                        ZCmpType::Gzip2 => {
+                            let mut tmp_buf = vec![0; self.buf.len()];
+                            let mut gz = GzDecoder::new(&mut self.reader);
+                            gz.read_exact(&mut tmp_buf[..])?;
+
+
+
+
+                        }
                         // FIXME support bytepix
                         ZCmpType::Rice { blocksize, .. } => {
                             let mut rice = RICEDecoder::<_, i32>::new(&mut self.reader, blocksize as i32, n_elems as i32);
@@ -454,7 +463,7 @@ where
                 let value = match *ty {
                     // GZIP compression
                     // Unsigned byte
-                    ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip1U8) => {
+                    ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip1U8) | ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip2U8) => {
                         *num_bytes_to_read -= B::BYTES_SIZE as u64;
                         // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
                         let off = 4 * idx;
@@ -477,6 +486,31 @@ where
                         // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
                         let off = 4 * idx;
                         let value = i32::from_be_bytes([self.buf[off], self.buf[off + 1], self.buf[off + 2], self.buf[off + 3]]);
+                        DataValue::Integer { value, column: ColumnId::Index(col_idx), idx  }
+                    }
+                    // GZIP2 (when uncompressed, the bytes are all in most signicant byte order)
+                    // 16-bit integer
+                    ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip2I16) => {
+                        *num_bytes_to_read -= I::BYTES_SIZE as u64;
+                        // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
+                        // read from BigEndian, i.e. the most significant byte is at first and the least one is at last position
+                        let num_bytes = self.buf.len();
+                        let step_msb = num_bytes / 4;
+                        let value = (self.buf[3 * step_msb + idx] as i16) | ((self.buf[2 * step_msb + idx] as i16) << 8);
+                        DataValue::Short { value, column: ColumnId::Index(col_idx), idx  }
+                    }
+                    // 32-bit integer
+                    ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip2I32) => {
+                        *num_bytes_to_read -= J::BYTES_SIZE as u64;
+                        // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
+                        // read from BigEndian, i.e. the most significant byte is at first and the least one is at last position
+                        let num_bytes = self.buf.len();
+                        let step_msb = num_bytes / 4;
+                        let value = ((self.buf[idx] as i32) << 24) |
+                         ((self.buf[idx + step_msb] as i32) << 16) |
+                         ((self.buf[idx + 2 * step_msb] as i32) << 8) |
+                         (self.buf[idx + 3 * step_msb] as i32);
+
                         DataValue::Integer { value, column: ColumnId::Index(col_idx), idx  }
                     }
                     // RICE compression

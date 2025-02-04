@@ -525,6 +525,15 @@ impl Xtension for BinTable {
                         // GZIP1 integer
                         (Some("COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Gzip1, z_bitpix: Bitpix::I32, .. })) | (Some("GZIP_COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Gzip1, z_bitpix: Bitpix::I32, .. })) =>
                             ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip1I32),
+                        // GZIP2 byte
+                        (Some("COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Gzip2, z_bitpix: Bitpix::U8, .. })) | (Some("GZIP_COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Gzip2, z_bitpix: Bitpix::U8, .. })) =>
+                            ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip2U8),
+                        // GZIP2 short
+                        (Some("COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Gzip2, z_bitpix: Bitpix::I16, .. })) | (Some("GZIP_COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Gzip2, z_bitpix: Bitpix::I16, .. })) =>
+                            ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip2I16),
+                        // GZIP2 integer
+                        (Some("COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Gzip2, z_bitpix: Bitpix::I32, .. })) | (Some("GZIP_COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Gzip2, z_bitpix: Bitpix::I32, .. })) =>
+                            ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip2I32),
                         // RICE byte
                         (Some("COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Rice { .. }, z_bitpix: Bitpix::U8, .. })) =>
                             ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::RiceU8),
@@ -817,6 +826,9 @@ pub(crate) enum TileCompressedImageTy {
     Gzip1U8,
     Gzip1I16,
     Gzip1I32,
+    Gzip2U8,
+    Gzip2I16,
+    Gzip2I32,
     RiceU8,
     RiceI16,
     RiceI32,
