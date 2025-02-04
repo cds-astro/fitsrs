@@ -6,11 +6,12 @@ Fits reader written in pure Rust
 [![API Documentation on docs.rs](https://docs.rs/fitsrs/badge.svg)](https://docs.rs/fitsrs/)
 ![testing CI](https://github.com/cds-astro/fitsrs/actions/workflows/rust.yml/badge.svg)
 
-This crate is under development, it was initiated for reading fits HiPS tile, i.e. generated from hipsgen.
+This crate is under development, it was initiated for reading FITS images mapped onto HEALPix cell in the sky (See the [HiPS IVOA](https://www.ivoa.net/documents/HiPS/) standard) for using inside the [Aladin Lite](https://github.com/cds-astro/aladin-lite) web sky atlas.
 
-This fits parser only supports image data (not tables), and does not know anything about WCS parsing.
-For WCS parsing, see [wcs-rs](https://github.com/cds-astro/wcs-rs).
-This parser is able to parse extension HDUs. Ascii tables and binary tables are still not properly parsed, only the list bytes of their data block can be retrieved but no interpretation/parsing is done on it.
+Currently, fitsrs supports reading multiple HDU and is mainly dedicated to image extension reading.
+For interpreting WCS keywords, see [wcs-rs](https://github.com/cds-astro/wcs-rs).
+A very new support of binary table extension has been added. This has been done mainly for supporting the Tile-Compressed Image convention that stores tile images inside variable length arrays of a binary table.
+The ASCII table extension parsing has not been implemented but it is possible to get an iterator over the data bytes as well as its mandatory cards from the header.
 
 Contributing
 ------------
@@ -34,13 +35,14 @@ To Do list
 ----------
 
 * [X] Support single typed data block (i.e. image type data)
-* [X] Single HDU parsing, header and data units
-* [X] Support big fits file parsing that may not fit in memory (iterator usage)
-* [X] Async reading (experimental and not tested)
-* [X] Keep CARD comment
-* [ ] Support compressed fits files (https://fits.gsfc.nasa.gov/registry/tilecompression.html)
-* [ ] Support data table (each column can have a specific types)
-* [X] Support of multiple HDU, fits extensions (in progress, only the header is parsed)
+* [X] Single HDU parsing, header and data units 
+* [X] Support FITS files that may not fit in memory (iterator, possibility to seek directly to a specific pixel index/row)
+* [X] Async reading (requires to read the whole data. Seeking is not possible)
+* [X] Parse and keep CARD comment.
+* [X] Keep all the cards in the original order
+* [ ] Write a FITS file
+* [ ] Tile-compressed in binary table files (https://fits.gsfc.nasa.gov/registry/tilecompression.html). Only RICE and GZIP supported
+* [X] Support of multiple HDU. Image and binary tables extension support.
 * [ ] WCS parsing, see [wcs-rs](https://github.com/cds-astro/wcs-rs)
 
 License
