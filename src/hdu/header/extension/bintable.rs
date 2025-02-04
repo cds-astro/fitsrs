@@ -181,7 +181,14 @@ pub(crate) enum ZQuantiz {
 pub(crate) enum ZCmpType {
     Gzip1,
     Gzip2,
-    Rice,
+    Rice {
+        /// The block size used should be recorded in the compressed image header with
+        /// ZNAMEn = `BLOCKSIZE`
+        blocksize: u8,
+        /// The number of 8-bit bytes in each original pixel. Default value is 4 (32-bits)
+        /// Should be recorded in the compressed image header with ZNAMEn = `BYTEPIX`
+        bytepix: u8,
+    },
     PLI0_1,
     Hcompress1,
 }
@@ -248,7 +255,38 @@ impl Xtension for BinTable {
             match z_cmp_type.trim_ascii_end() {
                 "GZIP_1" => Some(ZCmpType::Gzip1),
                 "GZIP_2" => Some(ZCmpType::Gzip2),
-                "RICE_1" | "RICE_ONE" => Some(ZCmpType::Rice),
+                "RICE_1" | "RICE_ONE" => {
+                    // Retrieve the block size
+                    let blocksize = values
+                        .iter()
+                        .find_map(|(zname, val)| {
+                            if let Value::String { value, .. } = val {
+                                if value == "BLOCKSIZE" && zname.starts_with("ZNAME") {
+                                    let zval = zname.replace("NAME", "VAL");
+
+                                    if let Some(Value::Integer { value, .. }) = values.get(&zval) {
+                                        Some(*value as u8)
+                                    } else {
+                                        None
+                                    }
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            }
+                        })
+                        // Default value: 32
+                        .unwrap_or(32);
+
+                    // FIXME: implement RICE parsing for BYTEPIX != 4
+                    let bytepix = 4;
+
+                    Some(ZCmpType::Rice {
+                        blocksize,
+                        bytepix
+                    })
+                },
                 "PLI0_1" => Some(ZCmpType::PLI0_1),
                 "HCOMPRESS_1" => Some(ZCmpType::Hcompress1),
                 _ => {
@@ -388,15 +426,24 @@ impl Xtension for BinTable {
             Some(z_tilen),
         ) = (z_cmp_type, z_bitpix, z_naxis, z_naxisn, z_tilen)
         {
-            Some(TileCompressedImage {
-                z_cmp_type,
-                z_bitpix,
-                z_naxis: z_naxis as usize,
-                z_naxisn,
-                z_tilen,
-                z_quantiz,
-                z_dither_0,
-            })
+            // FIXME here we only support GZIP and RICE compression
+            // If other compression are found, I disable the zimage 
+            // so that the compressed data field is considered as a normal
+            // variable length array field.
+            match z_cmp_type {
+                ZCmpType::Gzip1 | ZCmpType::Rice { .. } => {
+                    Some(TileCompressedImage {
+                        z_cmp_type,
+                        z_bitpix,
+                        z_naxis: z_naxis as usize,
+                        z_naxisn,
+                        z_tilen,
+                        z_quantiz,
+                        z_dither_0,
+                    })
+                }
+                _ => None
+            }
         } else {
             None
         };
@@ -479,13 +526,13 @@ impl Xtension for BinTable {
                         (Some("COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Gzip1, z_bitpix: Bitpix::I32, .. })) | (Some("GZIP_COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Gzip1, z_bitpix: Bitpix::I32, .. })) =>
                             ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip1I32),
                         // RICE byte
-                        (Some("COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Rice, z_bitpix: Bitpix::U8, .. })) =>
+                        (Some("COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Rice { .. }, z_bitpix: Bitpix::U8, .. })) =>
                             ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::RiceU8),
                         // RICE short
-                        (Some("COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Rice, z_bitpix: Bitpix::I16, .. })) =>
+                        (Some("COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Rice { .. }, z_bitpix: Bitpix::I16, .. })) =>
                             ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::RiceI16),
                         // RICE integer
-                        (Some("COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Rice, z_bitpix: Bitpix::I32, .. })) =>
+                        (Some("COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Rice { .. }, z_bitpix: Bitpix::I32, .. })) =>
                             ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::RiceI32),
                         // consider the array as normal
                         _ => ty
@@ -910,7 +957,7 @@ mod tests {
     #[test]
     fn test_tile_size_from_row_idx() {
         let tc = TileCompressedImage {
-            z_cmp_type: ZCmpType::Rice, // not important
+            z_cmp_type: ZCmpType::Rice { blocksize: 32, bytepix: 4 }, // not important
             z_bitpix: Bitpix::F32, // not important
             z_naxis: 3,
             z_naxisn: vec![1000, 500, 350].into_boxed_slice(),

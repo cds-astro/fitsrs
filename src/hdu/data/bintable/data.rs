@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use crate::hdu::data::{AsyncDataBufRead, stream::St};
 use crate::hdu::header::Xtension;
-use crate::hdu::header::extension::bintable::{ArrayDescriptorTy, TForm, TileCompressedImageTy, VariableArrayTy, A, B, C, D, E, I, J, K, L, M, P, Q, X, TileCompressedImage};
+use crate::hdu::header::extension::bintable::{ArrayDescriptorTy, TForm, TileCompressedImageTy, VariableArrayTy, A, B, C, D, E, I, J, K, L, M, P, Q, X, TileCompressedImage, ZCmpType};
 
 use byteorder::BigEndian;
 use flate2::read::GzDecoder;
@@ -82,10 +82,6 @@ pub struct TableData<R> {
     buf: Vec<u8>,
     /// current row index
     row_idx: usize,
-
-    /// When storing tile compressed images, RICE asks for a number of block (i.e. a number of pixels) to process
-    /// Default value is 32 but in some fits, the true nblock can be stored in ZNAME/ZVAL. 
-    nblock: i32,
 }
 
 impl<R> TableData<Cursor<R>>
@@ -173,12 +169,9 @@ impl<R> TableData<R> {
 
         let row_idx = 0;
 
-        let nblock = 32;
-
         Self {
             reader,
             state,
-            nblock,
             col_idx,
             item_idx,
             cols_idx,
@@ -227,12 +220,6 @@ impl<R> TableData<R> {
         }).collect();
 
         self
-    }
-
-    /// This method allow the user to change the number of block that RICE decomp/comp algorithm must use.
-    /// Default value is 32 but it may happen that fits provider use the ZNAME/ZVAL cards to provide another number of block
-    pub fn set_rice_block_size(&mut self, nblock: u32) {
-        self.nblock = nblock as i32;
     }
 }
 
@@ -348,30 +335,26 @@ where
                 let _ = self.reader.seek_relative(off)?;
 
                 // In case this variable length column refers to a tile compressed image
-                if let (ArrayDescriptorTy::TileCompressedImage(arr_desc), Some(tci)) = (ty, &self.ctx.z_image) {
+                if let Some(tci) = &self.ctx.z_image {
                     n_elems = tci.tile_size_from_row_idx(self.row_idx).iter().fold(1, |mut n, &tile| {
                         n *= tile;
                         n
                     }) as u64;
                     t_byte_size = tci.z_bitpix.byte_size() as u64;
 
-                    match arr_desc {
-                        TileCompressedImageTy::Gzip1U8 | TileCompressedImageTy::Gzip1I16 | TileCompressedImageTy::Gzip1I32 => {
+                    match tci.z_cmp_type {
+                        ZCmpType::Gzip1 => {
                             let mut gz = GzDecoder::new(&mut self.reader);
                             gz.read_exact(&mut self.buf[..])?;
-                        },
-                        TileCompressedImageTy::RiceU8 => {
-                            let mut rice = RICEDecoder::<_, i32>::new(&mut self.reader, self.nblock, n_elems as i32);
+                        }
+                        // FIXME support bytepix
+                        ZCmpType::Rice { blocksize, .. } => {
+                            let mut rice = RICEDecoder::<_, i32>::new(&mut self.reader, blocksize as i32, n_elems as i32);
                             rice.read_exact(&mut self.buf[..])?;
                         }
-                        TileCompressedImageTy::RiceI16 => {
-                            let mut rice = RICEDecoder::<_, i32>::new(&mut self.reader, self.nblock, n_elems as i32);
-                            rice.read_exact(&mut self.buf[..])?;
-                        }
-                        TileCompressedImageTy::RiceI32 => {
-                            let mut rice = RICEDecoder::<_, i32>::new(&mut self.reader, self.nblock, n_elems as i32);
-                            rice.read_exact(&mut self.buf[..])?;
-                        }
+                        // Other compression not supported, when parsing the bintable extension keywords
+                        // we ensured that z_image is `None` for other compressions than GZIP or RICE
+                        _ => unreachable!()
                     }
                 }
 
@@ -475,15 +458,17 @@ where
                         *num_bytes_to_read -= B::BYTES_SIZE as u64;
                         // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
                         let off = 4 * idx;
-                        let value = i32::from_be_bytes([self.buf[off], self.buf[off + 1], self.buf[off + 2], self.buf[off + 3]]) as u8;
+                        // read from BigEndian, i.e. the most significant byte is at first and the least one is at last position
+                        let value = self.buf[off + 3];
                         DataValue::UnsignedByte { value, column: ColumnId::Index(col_idx), idx  }
                     }
                     // 16-bit integer
                     ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip1I16) => {
                         *num_bytes_to_read -= I::BYTES_SIZE as u64;
                         // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
+                        // read from BigEndian, i.e. the most significant byte is at first and the least one is at last position
                         let off = 4 * idx;
-                        let value = i32::from_be_bytes([self.buf[off], self.buf[off + 1], self.buf[off + 2], self.buf[off + 3]]) as i16;
+                        let value = (self.buf[off + 3] as i16) | ((self.buf[off + 2] as i16) << 8);
                         DataValue::Short { value, column: ColumnId::Index(col_idx), idx  }
                     }
                     // 32-bit integer
