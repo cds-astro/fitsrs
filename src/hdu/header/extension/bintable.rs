@@ -76,6 +76,17 @@ impl BinTable {
     pub fn get_num_rows(&self) -> usize {
         self.naxis2 as usize
     }
+
+    /// Returns the index of the field by name
+    pub fn find_field_by_ttype(&self, ttype: &str) -> Option<usize> {
+        self.ttypes.iter().position(|tt| {
+            if let Some(tt) = tt {
+                tt == ttype
+            } else {
+                false
+            }
+        })
+    }
 }
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
@@ -122,52 +133,6 @@ pub(crate) struct TileCompressedImage {
     /// floating-point pixel values. The value may range from 1 to 10000, inclusive. See section 4 for
     /// further discussion of this keyword.
     pub(crate) z_dither_0: Option<i64>,
-}
-
-impl TileCompressedImage {
-    /// Compute the size of the tile from its row position inside the compressed data column
-    /// FIXME: optimize this computation by using memoization
-    pub(crate) fn tile_size_from_row_idx(&self, n: usize) -> Box<[usize]> {
-        let d = self.z_tilen.len();
-
-        if d == 0 {
-            // There must be at least one dimension
-            unreachable!();
-        } else {
-            let mut u = vec![0_usize; self.z_tilen.len()];
-
-            let s = self.z_naxisn.iter().zip(self.z_tilen.iter()).map(|(naxisi, tilei)| {
-                naxisi.div_ceil(*tilei)
-            }).collect::<Vec<_>>();
-
-            // Compute the position inside the first dimension
-            u[0] = n % s[0];
-
-            for i in 1..=(d - 1) {
-                u[i] = n - u[0] - (1..=(i - 1)).map(|k| {
-                    let mut prod_sk = 1;
-                    for l in 0..=(k - 1) {
-                        prod_sk *= s[l];
-                    }
-
-                    u[k] * prod_sk
-                }).sum::<usize>();
-
-                let mut prod_si = 1;
-                for k in 0..=(i - 1) {
-                    prod_si *= s[k];
-                }
-
-                u[i] = (u[i] / prod_si) % s[i];
-            }
-
-            u.iter().zip(self.z_naxisn.iter().zip(self.z_tilen.iter())).map(|(&u_i, (&naxis, &tilez))| {
-                tilez.min(naxis - u_i*tilez)
-            })
-            .collect::<Vec<_>>()
-            .into_boxed_slice()
-        }
-    }
 }
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
@@ -496,55 +461,22 @@ impl Xtension for BinTable {
 
                     let elem_ty = elem_ty?;
 
-                    let (t_byte_size, mut ty) = match elem_ty {
-                        'L' => (L::BYTES_SIZE, ArrayDescriptorTy::Default(VariableArrayTy::L)),
-                        'X' => (X::BYTES_SIZE, ArrayDescriptorTy::Default(VariableArrayTy::X)),
-                        'B' => (B::BYTES_SIZE, ArrayDescriptorTy::Default(VariableArrayTy::B)),
-                        'I' => (I::BYTES_SIZE, ArrayDescriptorTy::Default(VariableArrayTy::I)),
-                        'J' => (J::BYTES_SIZE, ArrayDescriptorTy::Default(VariableArrayTy::J)),
-                        'K' => (K::BYTES_SIZE, ArrayDescriptorTy::Default(VariableArrayTy::K)),
-                        'A' => (A::BYTES_SIZE, ArrayDescriptorTy::Default(VariableArrayTy::A)),
-                        'E' => (E::BYTES_SIZE, ArrayDescriptorTy::Default(VariableArrayTy::E)),
-                        'D' => (D::BYTES_SIZE, ArrayDescriptorTy::Default(VariableArrayTy::D)),
-                        'C' => (C::BYTES_SIZE, ArrayDescriptorTy::Default(VariableArrayTy::C)),
-                        'M' => (M::BYTES_SIZE, ArrayDescriptorTy::Default(VariableArrayTy::M)),
+                    let (t_byte_size, ty) = match elem_ty {
+                        'L' => (L::BYTES_SIZE, VariableArrayTy::L),
+                        'X' => (X::BYTES_SIZE, VariableArrayTy::X),
+                        'B' => (B::BYTES_SIZE, VariableArrayTy::B),
+                        'I' => (I::BYTES_SIZE, VariableArrayTy::I),
+                        'J' => (J::BYTES_SIZE, VariableArrayTy::J),
+                        'K' => (K::BYTES_SIZE, VariableArrayTy::K),
+                        'A' => (A::BYTES_SIZE, VariableArrayTy::A),
+                        'E' => (E::BYTES_SIZE, VariableArrayTy::E),
+                        'D' => (D::BYTES_SIZE, VariableArrayTy::D),
+                        'C' => (C::BYTES_SIZE, VariableArrayTy::C),
+                        'M' => (M::BYTES_SIZE, VariableArrayTy::M),
                         _ => {
                             warn!("Type not recognized. Discard {}", &tform_kw);
                             return None;
                         },
-                    };
-
-                    // Check whether it refers to a tile compressed image
-                    ty = match (ttype.as_deref(), &z_image)  {
-                        // GZIP1 byte
-                        (Some("COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Gzip1, z_bitpix: Bitpix::U8, .. })) | (Some("GZIP_COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Gzip1, z_bitpix: Bitpix::U8, .. })) =>
-                            ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip1U8),
-                        // GZIP1 short
-                        (Some("COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Gzip1, z_bitpix: Bitpix::I16, .. })) | (Some("GZIP_COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Gzip1, z_bitpix: Bitpix::I16, .. })) =>
-                            ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip1I16),
-                        // GZIP1 integer
-                        (Some("COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Gzip1, z_bitpix: Bitpix::I32, .. })) | (Some("GZIP_COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Gzip1, z_bitpix: Bitpix::I32, .. })) =>
-                            ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip1I32),
-                        // GZIP2 byte
-                        (Some("COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Gzip2, z_bitpix: Bitpix::U8, .. })) | (Some("GZIP_COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Gzip2, z_bitpix: Bitpix::U8, .. })) =>
-                            ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip2U8),
-                        // GZIP2 short
-                        (Some("COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Gzip2, z_bitpix: Bitpix::I16, .. })) | (Some("GZIP_COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Gzip2, z_bitpix: Bitpix::I16, .. })) =>
-                            ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip2I16),
-                        // GZIP2 integer
-                        (Some("COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Gzip2, z_bitpix: Bitpix::I32, .. })) | (Some("GZIP_COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Gzip2, z_bitpix: Bitpix::I32, .. })) =>
-                            ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip2I32),
-                        // RICE byte
-                        (Some("COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Rice { .. }, z_bitpix: Bitpix::U8, .. })) =>
-                            ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::RiceU8),
-                        // RICE short
-                        (Some("COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Rice { .. }, z_bitpix: Bitpix::I16, .. })) =>
-                            ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::RiceI16),
-                        // RICE integer
-                        (Some("COMPRESSED_DATA"), Some(TileCompressedImage { z_cmp_type: ZCmpType::Rice { .. }, z_bitpix: Bitpix::I32, .. })) =>
-                            ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::RiceI32),
-                        // consider the array as normal
-                        _ => ty
                     };
 
                     Some((t_byte_size, ty))
@@ -808,7 +740,7 @@ pub(crate) enum TFormType {
         /// max number of elements of type t
         e_max: u64,
         /// the type
-        ty: ArrayDescriptorTy,
+        ty: VariableArrayTy,
     },
     // Array Descriptor (64-bit)
     Q {
@@ -817,10 +749,11 @@ pub(crate) enum TFormType {
         /// max number of elements of type t
         e_max: u64,
         /// the type
-        ty: ArrayDescriptorTy,
+        ty: VariableArrayTy,
     },
 }
 
+/*
 #[derive(PartialEq, Serialize, Clone, Copy, Debug)]
 pub(crate) enum TileCompressedImageTy {
     Gzip1U8,
@@ -833,7 +766,7 @@ pub(crate) enum TileCompressedImageTy {
     RiceI16,
     RiceI32,
 }
-
+*/
 #[derive(PartialEq, Serialize, Clone, Copy, Debug)]
 pub(crate) enum VariableArrayTy {
     /// Logical
@@ -859,13 +792,13 @@ pub(crate) enum VariableArrayTy {
     // Double-precision complex
     M,
 }
-
+/*
 #[derive(PartialEq, Serialize, Clone, Copy, Debug)]
 pub(crate) enum ArrayDescriptorTy {
     TileCompressedImage(TileCompressedImageTy),
     Default(VariableArrayTy),
 }
-
+*/
 impl TFormType {
     pub(crate) fn num_bits_field(&self) -> usize {
         match self {

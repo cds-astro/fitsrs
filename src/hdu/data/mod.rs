@@ -32,9 +32,9 @@ where
     /// 
     /// * Params
     /// 
-    /// * ctx - The context of the extension
+    /// * header - The parsed header of the HDU
     /// * start_pos - Information variable telling at which byte position the data starts
-    fn read_data_unit(&'a mut self, ctx: &X, start_pos: u64) -> Self::Data
+    fn read_data_unit(&'a mut self, header: &Header<X>, start_pos: u64) -> Self::Data
     where
         Self: Sized;
 }

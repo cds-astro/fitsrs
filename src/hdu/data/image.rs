@@ -21,10 +21,10 @@ where
     type Data = ImageData<&'a mut Self>;
 
     fn read_data_unit(&'a mut self,
-        ctx: &Image,
+        header: &Header<Image>,
         _start_pos: u64,
     ) -> Self::Data {
-        ImageData::new(ctx, self)
+        ImageData::new(header.get_xtension(), self)
     }
 }
 

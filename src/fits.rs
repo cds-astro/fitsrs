@@ -116,8 +116,8 @@ where
         R: FitsRead<'a, X> + 'a,
     {
         // Unroll the internal fits parsing parameters to give it to the data reader
-        let xtension = hdu.header.get_xtension();
-        self.reader.read_data_unit(xtension, self.pos_start_cur_du as u64)
+        let header = &hdu.header;
+        self.reader.read_data_unit(header, self.pos_start_cur_du as u64)
     }
 }
 
@@ -142,7 +142,7 @@ where
                                 Err(Error::Io(kind))
                                     // an EOF has been encountered but the number of bytes read is 0
                                     // this is valid since we have terminated the previous HDU
-                                    if dbg!(kind) == std::io::ErrorKind::UnexpectedEof && num_bytes_read == 0 => {
+                                    if kind == std::io::ErrorKind::UnexpectedEof && num_bytes_read == 0 => {
                                         None
                                     },
                                 Err(e) => Some(Err(e))

@@ -17,10 +17,10 @@ where
     type Data = Bytes<Take<&'a mut R>>;
 
     fn read_data_unit(&'a mut self,
-        ctx: &AsciiTable,
+        header: &Header<AsciiTable>,
         _start_pos: u64
     ) -> Self::Data {
-        let limit = ctx.get_num_bytes_data_block();
+        let limit = header.get_xtension().get_num_bytes_data_block();
 
         self.take(limit).bytes()
     }

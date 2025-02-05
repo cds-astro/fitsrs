@@ -1,10 +1,10 @@
 use std::fmt::Debug;
 use crate::hdu::data::{AsyncDataBufRead, stream::St};
-use crate::hdu::header::Xtension;
-use crate::hdu::header::extension::bintable::{ArrayDescriptorTy, TForm, TileCompressedImageTy, VariableArrayTy, A, B, C, D, E, I, J, K, L, M, P, Q, X, TileCompressedImage, ZCmpType};
+use crate::hdu::header::{Xtension, Header};
+use crate::hdu::header::extension::bintable::{TForm, VariableArrayTy, A, B, C, D, E, I, J, K, L, M, P, Q, X, TileCompressedImage, ZCmpType};
 
 use byteorder::BigEndian;
-use flate2::read::GzDecoder;
+use super::row::TableRowData;
 use crate::hdu::header::extension::bintable::{BinTable, TFormType};
 use crate::hdu::FitsRead;
 use log::warn;
@@ -17,10 +17,10 @@ where
 {
     type Data = TableData<&'a mut Self>;
 
-    fn read_data_unit(&'a mut self, ctx: &BinTable, start_pos: u64) -> Self::Data
+    fn read_data_unit(&'a mut self, header: &Header<BinTable>, start_pos: u64) -> Self::Data
         where
             Self: Sized {
-        TableData::new(self, ctx, start_pos)
+        TableData::new(self, header, start_pos)
     }
 }
 
@@ -39,7 +39,7 @@ enum DataReaderState {
         /// This will be used to go back to the main table reading state
         main_table_pos: SeekFrom,
         /// The type contained in the heap that we are reading
-        ty: ArrayDescriptorTy,
+        ty: VariableArrayTy,
         /// The number of bytes remaining to read
         num_bytes_to_read: u64,
         /// The number of elements to read
@@ -56,7 +56,7 @@ use byteorder::ReadBytesExt;
 #[derive(Debug)]
 pub struct TableData<R> {
     /// The reader owned
-    pub reader: R,
+    pub(crate) reader: R,
     /// An intern state enum variable telling if we are parsing the main table or the heap
     state: DataReaderState,
 
@@ -78,10 +78,11 @@ pub struct TableData<R> {
     /// Start byte position of the data unit
     start_pos: u64,
 
-    /// buffer for storing uncompressed data from GZIP/RICE
-    buf: Vec<u8>,
-    /// current row index
-    row_idx: usize,
+    /// current row index, is read from the row iterator
+    pub(crate) row_idx: usize,
+
+    /// A flag indicating if the iterator will jump to the heap to parse the variable length array columns
+    heap: bool,
 }
 
 impl<R> TableData<Cursor<R>>
@@ -122,9 +123,10 @@ where
 impl<R> TableData<R> {
     pub fn new(
         reader: R,
-        ctx: &BinTable,
+        header: &Header<BinTable>,
         start_pos: u64
     ) -> Self {
+        let ctx = header.get_xtension();
         let state = DataReaderState::MainTable;
 
         // Compute an byte offset for each columns to know at which byte index does the column
@@ -146,29 +148,9 @@ impl<R> TableData<R> {
         let main_data_table_byte_size = (ctx.naxis1 * ctx.naxis2) as usize;
         let byte_offset = 0;
 
-        // This buffer is only used if tile compressed image in the gzip compression is to be found
-        let mut buf = vec![];
-
-        // Allocation of a buffer at init of the iterator that is the size of the biggest tiles we can found
-        // on the tile compressed image. This is simply given by the ZTILEi keyword.
-        // Some tiles found on the border of the image can be smaller
-        if let Some(TileCompressedImage { z_tilen, .. }) = &ctx.z_image {
-            let n_elems_max = z_tilen.iter().fold(1, |mut tile_size, z_tilei| {
-                tile_size *= *z_tilei;
-                tile_size
-            });
-
-            // A little precision. The gzdecoder from flate2 seems to unzip data in a stream of u32 i.e. even if the type of data
-            // to uncompress is byte or short, the result will be cast in a u32. I thus allocate for gzip compression, a buffer of
-            // n_elems_max * size_in_bytes of u32.
-            // It seems to be the same for RICE, so the latter rice decompression code is called on i32
-            let num_bytes_max_tile = n_elems_max * std::mem::size_of::<u32>();
-
-            buf.resize(dbg!(num_bytes_max_tile), 0);
-        }
-
         let row_idx = 0;
 
+        let heap = true;
         Self {
             reader,
             state,
@@ -180,8 +162,8 @@ impl<R> TableData<R> {
             main_data_table_byte_size,
             start_pos,
             ctx: ctx.clone(),
-            buf,
             row_idx,
+            heap
         }
     }
 
@@ -220,6 +202,18 @@ impl<R> TableData<R> {
         }).collect();
 
         self
+    }
+
+    pub(crate) fn read_the_heap(&mut self, heap: bool) {
+        self.heap = heap;
+    }
+
+    pub(crate) fn get_ctx(&self) -> &BinTable {
+        &self.ctx
+    }
+
+    pub(crate) fn get_reader(&mut self) -> &mut R {
+        &mut self.reader
     }
 }
 
@@ -305,12 +299,12 @@ where
     /// byte_offset - byte offset extracted in the row indicating where the start of the heap region occurs
     /// n_elems - number of elements extracted in the row indicating how many elements the array contains
     /// t_byte_size - the size in bytes of an element inside the array
-    fn jump_to_heap(
+    pub(crate) fn jump_to_heap(
         &mut self,
-        ty: ArrayDescriptorTy,
+        ty: VariableArrayTy,
         byte_offset: u64,
-        mut n_elems: u64,
-        mut t_byte_size: u64,
+        n_elems: u64,
+        t_byte_size: u64,
     ) -> Result<(), Error>
     where 
         R: Read + Seek,
@@ -334,48 +328,15 @@ where
                 // Go to the HEAP
                 let _ = self.reader.seek_relative(off)?;
 
-                // In case this variable length column refers to a tile compressed image
-                if let Some(tci) = &self.ctx.z_image {
-                    n_elems = tci.tile_size_from_row_idx(self.row_idx).iter().fold(1, |mut n, &tile| {
-                        n *= tile;
-                        n
-                    }) as u64;
-                    t_byte_size = tci.z_bitpix.byte_size() as u64;
-
-                    match tci.z_cmp_type {
-                        ZCmpType::Gzip1 => {
-                            let mut gz = GzDecoder::new(&mut self.reader);
-                            gz.read_exact(&mut self.buf[..])?;
-                        }
-                        ZCmpType::Gzip2 => {
-                            let mut tmp_buf = vec![0; self.buf.len()];
-                            let mut gz = GzDecoder::new(&mut self.reader);
-                            gz.read_exact(&mut tmp_buf[..])?;
-
-
-
-
-                        }
-                        // FIXME support bytepix
-                        ZCmpType::Rice { blocksize, .. } => {
-                            let mut rice = RICEDecoder::<_, i32>::new(&mut self.reader, blocksize as i32, n_elems as i32);
-                            rice.read_exact(&mut self.buf[..])?;
-                        }
-                        // Other compression not supported, when parsing the bintable extension keywords
-                        // we ensured that z_image is `None` for other compressions than GZIP or RICE
-                        _ => unreachable!()
-                    }
-                }
-
                 let num_bytes_to_read = n_elems * t_byte_size;
-                self.state = DataReaderState::HEAP { main_table_pos: pos, ty, num_bytes_to_read, t_byte_size, n_elems };
+                self.state = DataReaderState::HEAP { ty, main_table_pos: pos, num_bytes_to_read, t_byte_size, n_elems };
             }
         }
 
         Ok(())
     }
 
-    fn jump_to_main_table(&mut self) -> Result<(), Error>
+    pub(crate) fn jump_to_main_table(&mut self) -> Result<(), Error>
     where 
         R: Seek
     {
@@ -391,54 +352,32 @@ where
 
         Ok(())
     }
+
+    /// Jump to a specific location of the reader, perform an operation and jumps back to the original position
+    pub(crate) fn jump_to_location<F>(&mut self, f: F, pos: SeekFrom) -> Result<(), Error>
+    where
+        F: FnOnce() -> Result<(), Error>
+    {
+        let old_pos = SeekFrom::Start(self.reader.stream_position()?);
+
+        self.reader.seek(pos)?;
+        f()?;
+        let _ = self.reader.seek(old_pos)?;
+
+        Ok(())
+    }
 }
 
 impl<R> TableData<R>
 where
     R: Read + Seek + Debug
 {
-    pub fn row_iter(self) -> impl Iterator<Item = Box<[DataValue]>> {
+    pub fn row_iter(self) -> TableRowData<R> {
         TableRowData::new(self)
     }
 }
 
-struct TableRowData<R> {
-    data: TableData<R>,
-    idx_row: usize,
-}
-
-impl<R> TableRowData<R> {
-    fn new(data: TableData<R>) -> Self {
-        Self {
-            data,
-            idx_row: 0,
-        }
-    }
-}
-
-impl<R> Iterator for TableRowData<R>
-where
-    R: Read + Seek + Debug,
-{
-    // Return a vec of fields because to take into account the repeat count value for that field
-    type Item = Box<[DataValue]>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut row_data = vec![];
-
-        while self.data.row_idx == self.idx_row {
-            row_data.push(self.data.next()?);
-        }
-
-        self.idx_row += 1;
-
-        Some(row_data.into_boxed_slice())
-    }
-}
-
-
 use std::io::Seek;
-use super::rice::RICEDecoder;
 use super::{ColumnId, DataValue};
 impl<R> Iterator for TableData<R>
 where
@@ -460,7 +399,8 @@ where
                 // idx of the elem in the heap area
                 let idx = (*n_elems - (*num_bytes_to_read) / (*t_byte_size)) as usize;
 
-                let value = match *ty {
+                let value =
+                /*match *ty {
                     // GZIP compression
                     // Unsigned byte
                     ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip1U8) | ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip2U8) => {
@@ -489,6 +429,7 @@ where
                         DataValue::Integer { value, column: ColumnId::Index(col_idx), idx  }
                     }
                     // GZIP2 (when uncompressed, the bytes are all in most signicant byte order)
+                    // FIXME: not tested
                     // 16-bit integer
                     ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip2I16) => {
                         *num_bytes_to_read -= I::BYTES_SIZE as u64;
@@ -500,6 +441,7 @@ where
                         DataValue::Short { value, column: ColumnId::Index(col_idx), idx  }
                     }
                     // 32-bit integer
+                    // FIXME: not tested
                     ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip2I32) => {
                         *num_bytes_to_read -= J::BYTES_SIZE as u64;
                         // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
@@ -539,8 +481,8 @@ where
                         DataValue::Integer { value, column: ColumnId::Index(col_idx), idx  }
                     }
                     // No compressed data
-                    ArrayDescriptorTy::Default(va_ty) => {
-                        match va_ty {
+                    ArrayDescriptorTy::Default(va_ty) => {*/
+                        match ty {
                             VariableArrayTy::L => {
                                 let value = self.reader.read_u8().ok()? != 0;
                                 *num_bytes_to_read -= L::BYTES_SIZE as u64;
@@ -600,9 +542,9 @@ where
                                 *num_bytes_to_read -= M::BYTES_SIZE as u64;
                                 DataValue::ComplexDouble { real, imag, column: ColumnId::Index(col_idx), idx  }
                             }
-                        }
-                    }
-                };
+                        };
+                    //}
+                //};
 
                 if *num_bytes_to_read == 0 {
                     // no more bytes to read on the heap.
@@ -760,35 +702,45 @@ where
                         },
                         // Array Descriptor (32-bit) 
                         TFormType::P { ty, t_byte_size, .. } => {
-                            let n_elems = self.reader.read_u32::<BigEndian>().ok()?;
-                            let byte_offset = self.reader.read_u32::<BigEndian>().ok()?;
+                            let num_elems = self.reader.read_u32::<BigEndian>().ok()?;
+                            let offset_byte = self.reader.read_u32::<BigEndian>().ok()?;
         
                             self.byte_offset += P::BYTES_SIZE;
         
-                            self.jump_to_heap(
-                                *ty,
-                                byte_offset as u64,
-                                n_elems as u64,
-                                *t_byte_size,
-                            ).ok()?;
-        
-                            self.next()
+                            if self.heap {
+                                self.jump_to_heap(
+                                    *ty,
+                                    offset_byte as u64,
+                                    num_elems as u64,
+                                    *t_byte_size,
+                                ).ok()?;
+            
+                                self.next()
+                            } else {
+                                // just returns the n_elems and offset from the iterator
+                                Some(DataValue::VariableLengthArray32 { num_elems, offset_byte })
+                            }
                         },
                         // Array Descriptor (64-bit) 
                         TFormType::Q { ty, t_byte_size, .. } => {
-                            let n_elems = self.reader.read_u64::<BigEndian>().ok()?;
-                            let byte_offset = self.reader.read_u64::<BigEndian>().ok()?;
+                            let num_elems = self.reader.read_u64::<BigEndian>().ok()?;
+                            let offset_byte = self.reader.read_u64::<BigEndian>().ok()?;
         
                             self.byte_offset += Q::BYTES_SIZE;
         
-                            self.jump_to_heap(
-                                *ty,
-                                byte_offset as u64,
-                                n_elems as u64,
-                                *t_byte_size,
-                            ).ok()?;
-        
-                            self.next()
+                            if self.heap {
+                                self.jump_to_heap(
+                                    *ty,
+                                    offset_byte as u64,
+                                    num_elems as u64,
+                                    *t_byte_size,
+                                ).ok()?;
+            
+                                self.next()
+                            } else {
+                                // just returns the n_elems and offset from the iterator
+                                Some(DataValue::VariableLengthArray64 { num_elems, offset_byte })
+                            }
                         },
                     }
                 }

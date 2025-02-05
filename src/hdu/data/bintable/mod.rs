@@ -1,6 +1,8 @@
 pub mod data;
+pub mod row;
 pub mod rice;
 pub mod dithering;
+pub mod tile_compressed;
 
 pub use data::TableData;
 
@@ -17,7 +19,7 @@ pub enum ColumnId {
 
 #[derive(Debug)]
 pub enum DataValue {
-    // 'L' => Logical
+    /// 'L' => Logical
     Logical {
         /// The value read
         value: bool,
@@ -26,7 +28,7 @@ pub enum DataValue {
         /// Its position in the column (i.e. when repeat count > 1)
         idx: usize,
     },
-    // 'X' => Bit
+    /// 'X' => Bit
     Bit {
         /// The current byte where the bit lies
         byte: u8,
@@ -37,7 +39,7 @@ pub enum DataValue {
         /// Its position in the column (i.e. when repeat count > 1)
         idx: usize,
     },
-    // 'B' => Unsigned Byte
+    /// 'B' => Unsigned Byte
     UnsignedByte {
          /// The value read
          value: u8,
@@ -46,7 +48,7 @@ pub enum DataValue {
          /// Its position in the column (i.e. when repeat count > 1)
          idx: usize,
     },
-    // 'I' => 16-bit integer
+    /// 'I' => 16-bit integer
     Short {
         /// The value read
         value: i16,
@@ -55,7 +57,7 @@ pub enum DataValue {
         /// Its position in the column (i.e. when repeat count > 1)
         idx: usize,
     },
-    // 'J' => 32-bit integer
+    /// 'J' => 32-bit integer
     Integer {
         /// The value read
         value: i32,
@@ -64,7 +66,7 @@ pub enum DataValue {
         /// Its position in the column (i.e. when repeat count > 1)
         idx: usize,
     },
-    // 'K' => 64-bit integer
+    /// 'K' => 64-bit integer
     Long {
         /// The value read
         value: i64,
@@ -73,7 +75,7 @@ pub enum DataValue {
         /// Its position in the column (i.e. when repeat count > 1)
         idx: usize,
     },
-    // 'A' => Character
+    /// 'A' => Character
     Character {
         /// The value read
         value: char,
@@ -82,7 +84,7 @@ pub enum DataValue {
         /// Its position in the column (i.e. when repeat count > 1)
         idx: usize,
     },
-    // 'E' => Single-precision floating point
+    /// 'E' => Single-precision floating point
     Float {
         /// The value read
         value: f32,
@@ -91,7 +93,7 @@ pub enum DataValue {
         /// Its position in the column (i.e. when repeat count > 1)
         idx: usize,
     },
-    // 'D' => Double-precision floating point
+    /// 'D' => Double-precision floating point
     Double {
         /// The value read
         value: f64,
@@ -100,7 +102,7 @@ pub enum DataValue {
         /// Its position in the column (i.e. when repeat count > 1)
         idx: usize,
     },
-    // 'C' => Single-precision complex
+    /// 'C' => Single-precision complex
     ComplexFloat {
         /// The real part of the complex number
         real: f32,
@@ -111,7 +113,7 @@ pub enum DataValue {
         /// Its position in the column (i.e. when repeat count > 1)
         idx: usize,
     },
-    // 'M' => Double-precision complex
+    /// 'M' => Double-precision complex
     ComplexDouble {
         /// The real part of the complex number
         real: f64,
@@ -122,4 +124,18 @@ pub enum DataValue {
         /// Its position in the column (i.e. when repeat count > 1)
         idx: usize,
     },
+    /// 'P' => Variable-length array descriptor (32-bits case)
+    VariableLengthArray32 {
+        /// The number of elements in the array
+        num_elems: u32,
+        /// The offset byte position from the start of the heap
+        offset_byte: u32,
+    },
+    /// 'Q' => Variable-length array descriptor (64-bits case)
+    VariableLengthArray64 {
+        /// The number of elements in the array
+        num_elems: u64,
+        /// The offset byte position from the start of the heap
+        offset_byte: u64,
+    }
 }
