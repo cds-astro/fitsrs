@@ -133,6 +133,9 @@ pub(crate) struct TileCompressedImage {
     /// floating-point pixel values. The value may range from 1 to 10000, inclusive. See section 4 for
     /// further discussion of this keyword.
     pub(crate) z_dither_0: Option<i64>,
+
+    /// Mandatory fields. Data compressed idx of the field
+    pub(crate) data_compressed_idx: usize,
 }
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
@@ -382,38 +385,7 @@ impl Xtension for BinTable {
                 None
             };
 
-        // Fill the headers with these specific tile compressed image keywords
-        let z_image = if let (
-            Some(z_cmp_type),
-            Some(z_bitpix),
-            Some(z_naxis),
-            Some(z_naxisn),
-            Some(z_tilen),
-        ) = (z_cmp_type, z_bitpix, z_naxis, z_naxisn, z_tilen)
-        {
-            // FIXME here we only support GZIP and RICE compression
-            // If other compression are found, I disable the zimage 
-            // so that the compressed data field is considered as a normal
-            // variable length array field.
-            match z_cmp_type {
-                ZCmpType::Gzip1 | ZCmpType::Rice { .. } => {
-                    Some(TileCompressedImage {
-                        z_cmp_type,
-                        z_bitpix,
-                        z_naxis: z_naxis as usize,
-                        z_naxisn,
-                        z_tilen,
-                        z_quantiz,
-                        z_dither_0,
-                    })
-                }
-                _ => None
-            }
-        } else {
-            None
-        };
-
-        // TFORMS
+        // TFORMS & TTYPES
         let (tforms, ttypes): (Vec<_>, Vec<_>) = (0..tfields)
             .filter_map(|idx_field| {
                 let idx_field = idx_field + 1;
@@ -534,6 +506,65 @@ impl Xtension for BinTable {
                 Some((tformty, ttype))
             })
             .unzip();
+
+            // Find for a DATA_COMPRESSED named field
+            let find_field_by_ttype = |ttype: &str| -> Option<usize> {
+                ttypes.iter().position(|tt| { 
+                    if let Some(tt) = tt {
+                        tt == ttype
+                    } else {
+                        false
+                    }
+                })
+            };
+
+            let data_compressed_idx = find_field_by_ttype("COMPRESSED_DATA")
+                // Find for a GZIP_DATA_COMPRESSED named field
+                .or(find_field_by_ttype("GZIP_COMPRESSED_DATA"));
+
+            // Fill the headers with these specific tile compressed image keywords
+            let z_image = if let (
+                Some(z_cmp_type),
+                Some(z_bitpix),
+                Some(z_naxis),
+                Some(z_naxisn),
+                Some(z_tilen),
+                Some(data_compressed_idx)
+            ) = (z_cmp_type, z_bitpix, z_naxis, z_naxisn, z_tilen, data_compressed_idx)
+            {
+                // FIXME here we only support GZIP1/GZIP2 and RICE compression
+                // If other compression are found, I disable the zimage 
+                // so that the binary table is considered as normal i.e. it does not follow
+                // the tile compressed convention
+                let tile_compressed = TileCompressedImage {
+                    z_cmp_type,
+                    z_bitpix,
+                    z_naxis: z_naxis as usize,
+                    z_naxisn,
+                    z_tilen,
+                    z_quantiz,
+                    z_dither_0,
+                    data_compressed_idx
+                };
+
+                match (z_cmp_type, z_bitpix) {
+                    (ZCmpType::Hcompress1, _) => {
+                        warn!("Hcompress compression not supported");
+                        None
+                    },
+                    (ZCmpType::PLI0_1, _) => {
+                        warn!("PLI0_1 compression not supported");
+                        None
+                    },
+                    (_, Bitpix::F64) | (_, Bitpix::I64) => {
+                        warn!("Only bitpix u8, i16, i32 and f32 are supported");
+                        None
+                    },
+                    _ => Some(tile_compressed)
+                }
+            } else {
+                None
+            };
 
         // update the value of theap if found
         let theap = if let Some(Value::Integer { value, .. }) = values.get("THEAP") {
@@ -825,7 +856,7 @@ impl TFormType {
 
 #[cfg(test)]
 mod tests {
-    use super::{BinTable, TFormType, TileCompressedImage, ZCmpType};
+    use super::{BinTable, TFormType};
     use crate::{
         hdu::{header::Bitpix, HDU},
         FITSFile,
@@ -897,63 +928,5 @@ mod tests {
                 z_image: None,
             },
         );
-    }
-
-    #[test]
-    fn test_tile_size_from_row_idx() {
-        let tc = TileCompressedImage {
-            z_cmp_type: ZCmpType::Rice { blocksize: 32, bytepix: 4 }, // not important
-            z_bitpix: Bitpix::F32, // not important
-            z_naxis: 3,
-            z_naxisn: vec![1000, 500, 350].into_boxed_slice(),
-            z_tilen: vec![300, 200, 150].into_boxed_slice(),
-
-            z_quantiz: None,
-            z_dither_0: None,
-        };
-
-        let ground_truth = [
-            [300, 200, 150],
-            [300, 200, 150],
-            [300, 200, 150],
-            [100, 200, 150],
-            [300, 200, 150],
-            [300, 200, 150],
-            [300, 200, 150],
-            [100, 200, 150],
-            [300, 100, 150],
-            [300, 100, 150],
-            [300, 100, 150],
-            [100, 100, 150],
-            [300, 200, 150],
-            [300, 200, 150],
-            [300, 200, 150],
-            [100, 200, 150],
-            [300, 200, 150],
-            [300, 200, 150],
-            [300, 200, 150],
-            [100, 200, 150],
-            [300, 100, 150],
-            [300, 100, 150],
-            [300, 100, 150],
-            [100, 100, 150],
-            [300, 200, 50],
-            [300, 200, 50],
-            [300, 200, 50],
-            [100, 200, 50],
-            [300, 200, 50],
-            [300, 200, 50],
-            [300, 200, 50],
-            [100, 200, 50],
-            [300, 100, 50],
-            [300, 100, 50],
-            [300, 100, 50],
-            [100, 100, 50],
-        ];
-
-        for i in 0..ground_truth.len() {
-            let tile_s = tc.tile_size_from_row_idx(i);
-            assert_eq!([tile_s[0], tile_s[1], tile_s[2]], ground_truth[i]);
-        }
     }
 }

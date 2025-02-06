@@ -43,6 +43,8 @@ use async_trait::async_trait;
 use futures::io::AsyncBufRead;
 use futures::AsyncBufReadExt;
 
+use super::header::Header;
+
 #[async_trait(?Send)]
 pub trait AsyncDataBufRead<'a, X>: AsyncBufRead + Unpin
 where

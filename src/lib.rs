@@ -352,9 +352,13 @@ mod tests {
         }
     }
 
-    #[test_case("samples/fits.gsfc.nasa.gov/m13_rice.fits")]
-    #[test_case("samples/fits.gsfc.nasa.gov/m13_gzip.fits")]
-    fn test_fits_open_tile_compressed_image(filename: &str) {
+    #[test_case("samples/fits.gsfc.nasa.gov/m13real_rice.fits", 1000.0)]
+    #[test_case("samples/fits.gsfc.nasa.gov/m13_rice.fits", 1000.0)]
+    #[test_case("samples/fits.gsfc.nasa.gov/m13_gzip.fits", 1000.0)]
+    #[test_case("samples/fits.gsfc.nasa.gov/FITS RICE_ONE.fits", 10.0)]
+    #[test_case("samples/fits.gsfc.nasa.gov/FITS RICE integer.fz", 10.0)]
+    #[test_case("samples/fits.gsfc.nasa.gov/FITS RICE DITHER2 method.fz", 10.0)]
+    fn test_fits_open_tile_compressed_image(filename: &str, vmax: f32) {
         use std::fs::File;
 
         use crate::hdu::data::bintable::DataValue;
@@ -369,21 +373,29 @@ mod tests {
         while let Some(Ok(hdu)) = hdu_list.next() {
             match hdu {
                 HDU::XBinaryTable(hdu) => {
+                    let width = hdu.get_header().get_parsed::<i64>("ZNAXIS1").unwrap().unwrap() as u32;
+                    let height = hdu.get_header().get_parsed::<i64>("ZNAXIS2").unwrap().unwrap() as u32;
                     let pixels = hdu_list.get_data(hdu)
                         .map(|value| {
                             let value = value;
                             match value {
                                 DataValue::Short { value, .. } => {
+                                    value as f32
+                                },
+                                DataValue::Integer { value, .. } => {
+                                    value as f32
+                                },
+                                DataValue::Float { value, .. } => {
                                     value
-                                }
+                                },
                                 _ => unimplemented!()
                             }
                         })
-                        .map(|v| (((v as f32) / 1000.0) * 255.0) as u8)
+                        .map(|v| ((v / vmax) * 255.0) as u8)
                         .collect::<Vec<_>>();
 
                     let imgbuf = DynamicImage::ImageLuma8(
-                        image::ImageBuffer::from_raw(300, 300, pixels)
+                        image::ImageBuffer::from_raw(width, height, pixels)
                             .unwrap()
                         );
                     imgbuf.save(&format!("{}.jpg", filename)).unwrap();

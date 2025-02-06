@@ -5,6 +5,7 @@ use std::io::Read;
 
 use super::{stream::St, AsyncDataBufRead};
 
+use crate::hdu::header::Header;
 use crate::hdu::header::extension::asciitable::AsciiTable;
 use crate::hdu::header::extension::Xtension;
 use crate::hdu::data::FitsRead;

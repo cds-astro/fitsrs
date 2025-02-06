@@ -2,7 +2,7 @@
 //use super::DataAsyncBufRead;
 
 use crate::hdu::data::iter::BigEndianIt;
-use crate::hdu::header::{Bitpix, Xtension};
+use crate::hdu::header::{Header, Bitpix, Xtension};
 use async_trait::async_trait;
 use futures::AsyncReadExt;
 use std::io::Read;

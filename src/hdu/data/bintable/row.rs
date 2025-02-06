@@ -1,12 +1,12 @@
 use std::fmt::Debug;
-use std::io::{Read, Seek, SeekFrom};
-use crate::error::Error;
+use std::io::{Read, Seek};
 use crate::hdu::header::extension::bintable::BinTable;
 
 use super::DataValue;
 use super::data::TableData;
 
-pub(crate) struct TableRowData<R> {
+#[derive(Debug)]
+pub struct TableRowData<R> {
     data: TableData<R>,
     idx_row: usize,
 }
@@ -49,17 +49,5 @@ where
         self.idx_row += 1;
 
         Some(row_data.into_boxed_slice())
-    }
-}
-
-impl<R> TableRowData<R>
-where
-    R: Seek
-{
-    pub(crate) fn jump_to_location<F>(&mut self, f: F, pos: SeekFrom) -> Result<(), Error>
-    where
-        F: FnOnce() -> Result<(), Error>
-    {
-        self.data.jump_to_location(f, pos)
     }
 }

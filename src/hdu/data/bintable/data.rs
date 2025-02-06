@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use crate::hdu::data::{AsyncDataBufRead, stream::St};
 use crate::hdu::header::{Xtension, Header};
-use crate::hdu::header::extension::bintable::{TForm, VariableArrayTy, A, B, C, D, E, I, J, K, L, M, P, Q, X, TileCompressedImage, ZCmpType};
+use crate::hdu::header::extension::bintable::{TForm, VariableArrayTy, A, B, C, D, E, I, J, K, L, M, P, Q, X};
 
 use byteorder::BigEndian;
 use super::row::TableRowData;
@@ -15,12 +15,59 @@ impl<'a, R> FitsRead<'a, BinTable> for R
 where
     R: Read + Debug + 'a,
 {
-    type Data = TableData<&'a mut Self>;
+    type Data = BinaryTableData<&'a mut Self>;
 
     fn read_data_unit(&'a mut self, header: &Header<BinTable>, start_pos: u64) -> Self::Data
         where
             Self: Sized {
-        TableData::new(self, header, start_pos)
+        BinaryTableData::new(self, header, start_pos)
+    }
+}
+
+use super::tile_compressed::TileCompressedData;
+#[derive(Debug)]
+pub enum BinaryTableData<R> {
+    Table(TableData<R>),
+    TileCompressed(TileCompressedData<R>)
+}
+
+impl<R> Iterator for BinaryTableData<R>
+where
+    R: Debug + Seek + Read
+{
+    type Item = DataValue;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Table(data) => data.next(),
+            Self::TileCompressed(data) => data.next()
+        }
+    }
+}
+
+impl<R> BinaryTableData<R>
+where
+    R: Debug + Read
+{
+    fn new(reader: R, header: &Header<BinTable>, start_pos: u64) -> Self {
+        let ctx = header.get_xtension();
+
+        let data = TableData::new(reader, header, start_pos);
+
+        if let Some(tile_compressed) = &ctx.z_image {
+            BinaryTableData::TileCompressed(TileCompressedData::new(header, data, &tile_compressed))
+        } else {
+            BinaryTableData::Table(data)
+        }
+    }
+}
+
+impl<R> BinaryTableData<R> {
+    pub fn row_iter(self) -> TableRowData<R> {
+        match self {
+            Self::Table(table) => TableRowData::new(table),
+            Self::TileCompressed(TileCompressedData { row_it, .. }) => row_it,
+        }
     }
 }
 
@@ -352,30 +399,14 @@ where
 
         Ok(())
     }
-
-    /// Jump to a specific location of the reader, perform an operation and jumps back to the original position
-    pub(crate) fn jump_to_location<F>(&mut self, f: F, pos: SeekFrom) -> Result<(), Error>
-    where
-        F: FnOnce() -> Result<(), Error>
-    {
-        let old_pos = SeekFrom::Start(self.reader.stream_position()?);
-
-        self.reader.seek(pos)?;
-        f()?;
-        let _ = self.reader.seek(old_pos)?;
-
-        Ok(())
-    }
 }
 
-impl<R> TableData<R>
-where
-    R: Read + Seek + Debug
-{
+impl<R> TableData<R> {
     pub fn row_iter(self) -> TableRowData<R> {
         TableRowData::new(self)
     }
 }
+
 
 use std::io::Seek;
 use super::{ColumnId, DataValue};
@@ -399,152 +430,68 @@ where
                 // idx of the elem in the heap area
                 let idx = (*n_elems - (*num_bytes_to_read) / (*t_byte_size)) as usize;
 
-                let value =
-                /*match *ty {
-                    // GZIP compression
-                    // Unsigned byte
-                    ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip1U8) | ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip2U8) => {
+                let value = match ty {
+                    VariableArrayTy::L => {
+                        let value = self.reader.read_u8().ok()? != 0;
+                        *num_bytes_to_read -= L::BYTES_SIZE as u64;
+                        DataValue::Logical { value, column: ColumnId::Index(col_idx), idx  }
+                    },
+                    VariableArrayTy::X => {
+                        let byte = self.reader.read_u8().ok()?;
+                        *num_bytes_to_read -= X::BYTES_SIZE as u64;
+                        DataValue::Bit { byte, bit_idx: 0, column: ColumnId::Index(col_idx), idx  }
+                    },
+                    VariableArrayTy::B => {
+                        let value = self.reader.read_u8().ok()?;
                         *num_bytes_to_read -= B::BYTES_SIZE as u64;
-                        // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
-                        let off = 4 * idx;
-                        // read from BigEndian, i.e. the most significant byte is at first and the least one is at last position
-                        let value = self.buf[off + 3];
                         DataValue::UnsignedByte { value, column: ColumnId::Index(col_idx), idx  }
                     }
-                    // 16-bit integer
-                    ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip1I16) => {
+                    VariableArrayTy::I => {
+                        let value = self.reader.read_i16::<BigEndian>().ok()?;
                         *num_bytes_to_read -= I::BYTES_SIZE as u64;
-                        // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
-                        // read from BigEndian, i.e. the most significant byte is at first and the least one is at last position
-                        let off = 4 * idx;
-                        let value = (self.buf[off + 3] as i16) | ((self.buf[off + 2] as i16) << 8);
                         DataValue::Short { value, column: ColumnId::Index(col_idx), idx  }
                     }
-                    // 32-bit integer
-                    ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip1I32) => {
+                    VariableArrayTy::J => {
+                        let value = self.reader.read_i32::<BigEndian>().ok()?;
                         *num_bytes_to_read -= J::BYTES_SIZE as u64;
-                        // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
-                        let off = 4 * idx;
-                        let value = i32::from_be_bytes([self.buf[off], self.buf[off + 1], self.buf[off + 2], self.buf[off + 3]]);
                         DataValue::Integer { value, column: ColumnId::Index(col_idx), idx  }
                     }
-                    // GZIP2 (when uncompressed, the bytes are all in most signicant byte order)
-                    // FIXME: not tested
-                    // 16-bit integer
-                    ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip2I16) => {
-                        *num_bytes_to_read -= I::BYTES_SIZE as u64;
-                        // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
-                        // read from BigEndian, i.e. the most significant byte is at first and the least one is at last position
-                        let num_bytes = self.buf.len();
-                        let step_msb = num_bytes / 4;
-                        let value = (self.buf[3 * step_msb + idx] as i16) | ((self.buf[2 * step_msb + idx] as i16) << 8);
-                        DataValue::Short { value, column: ColumnId::Index(col_idx), idx  }
+                    VariableArrayTy::K => {
+                        let value = self.reader.read_i64::<BigEndian>().ok()?;
+                        *num_bytes_to_read -= K::BYTES_SIZE as u64;
+                        DataValue::Long { value, column: ColumnId::Index(col_idx), idx  }
                     }
-                    // 32-bit integer
-                    // FIXME: not tested
-                    ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::Gzip2I32) => {
-                        *num_bytes_to_read -= J::BYTES_SIZE as u64;
-                        // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
-                        // read from BigEndian, i.e. the most significant byte is at first and the least one is at last position
-                        let num_bytes = self.buf.len();
-                        let step_msb = num_bytes / 4;
-                        let value = ((self.buf[idx] as i32) << 24) |
-                         ((self.buf[idx + step_msb] as i32) << 16) |
-                         ((self.buf[idx + 2 * step_msb] as i32) << 8) |
-                         (self.buf[idx + 3 * step_msb] as i32);
+                    VariableArrayTy::A => {
+                        let value = self.reader.read_u8().ok()? as char;
+                        *num_bytes_to_read -= A::BYTES_SIZE as u64;
+                        DataValue::Character { value, column: ColumnId::Index(col_idx), idx  }
+                    }
+                    VariableArrayTy::E => {
+                        let value = self.reader.read_f32::<BigEndian>().ok()?;
+                        *num_bytes_to_read -= E::BYTES_SIZE as u64;
+                        DataValue::Float { value, column: ColumnId::Index(col_idx), idx  }
+                    }
+                    VariableArrayTy::D => {
+                        let value = self.reader.read_f64::<BigEndian>().ok()?;
+                        *num_bytes_to_read -= D::BYTES_SIZE as u64;
+                        DataValue::Double { value, column: ColumnId::Index(col_idx), idx  }
+                    }
+                    VariableArrayTy::C => {
+                        let real = self.reader.read_f32::<BigEndian>().ok()?;
+                        let imag = self.reader.read_f32::<BigEndian>().ok()?;
 
-                        DataValue::Integer { value, column: ColumnId::Index(col_idx), idx  }
+                        *num_bytes_to_read -= C::BYTES_SIZE as u64;
+                        DataValue::ComplexFloat { real, imag, column: ColumnId::Index(col_idx), idx  }
                     }
-                    // RICE compression
-                    // Unsigned byte
-                    ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::RiceU8) => {
-                        *num_bytes_to_read -= B::BYTES_SIZE as u64;
-                        // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
-                        let off = 4 * idx;
-                        let value = self.buf[off];
-                        DataValue::UnsignedByte { value, column: ColumnId::Index(col_idx), idx  }
-                    }
-                    // 16-bit integer
-                    ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::RiceI16) => {
-                        *num_bytes_to_read -= I::BYTES_SIZE as u64;
-                        // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
-                        let off = 4 * idx;
-                        let value = (self.buf[off] as i16) | ((self.buf[off + 1] as i16) << 8);
-                        DataValue::Short { value, column: ColumnId::Index(col_idx), idx  }
-                    }
-                    // 32-bit integer
-                    ArrayDescriptorTy::TileCompressedImage(TileCompressedImageTy::RiceI32) => {
-                        *num_bytes_to_read -= J::BYTES_SIZE as u64;
-                        // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
-                        let off = 4 * idx;
-                        let value = i32::from_ne_bytes([self.buf[off], self.buf[off + 1], self.buf[off + 2], self.buf[off + 3]]);
-                        DataValue::Integer { value, column: ColumnId::Index(col_idx), idx  }
-                    }
-                    // No compressed data
-                    ArrayDescriptorTy::Default(va_ty) => {*/
-                        match ty {
-                            VariableArrayTy::L => {
-                                let value = self.reader.read_u8().ok()? != 0;
-                                *num_bytes_to_read -= L::BYTES_SIZE as u64;
-                                DataValue::Logical { value, column: ColumnId::Index(col_idx), idx  }
-                            },
-                            VariableArrayTy::X => {
-                                let byte = self.reader.read_u8().ok()?;
-                                *num_bytes_to_read -= X::BYTES_SIZE as u64;
-                                DataValue::Bit { byte, bit_idx: 0, column: ColumnId::Index(col_idx), idx  }
-                            },
-                            VariableArrayTy::B => {
-                                let value = self.reader.read_u8().ok()?;
-                                *num_bytes_to_read -= B::BYTES_SIZE as u64;
-                                DataValue::UnsignedByte { value, column: ColumnId::Index(col_idx), idx  }
-                            }
-                            VariableArrayTy::I => {
-                                let value = self.reader.read_i16::<BigEndian>().ok()?;
-                                *num_bytes_to_read -= I::BYTES_SIZE as u64;
-                                DataValue::Short { value, column: ColumnId::Index(col_idx), idx  }
-                            }
-                            VariableArrayTy::J => {
-                                let value = self.reader.read_i32::<BigEndian>().ok()?;
-                                *num_bytes_to_read -= J::BYTES_SIZE as u64;
-                                DataValue::Integer { value, column: ColumnId::Index(col_idx), idx  }
-                            }
-                            VariableArrayTy::K => {
-                                let value = self.reader.read_i64::<BigEndian>().ok()?;
-                                *num_bytes_to_read -= K::BYTES_SIZE as u64;
-                                DataValue::Long { value, column: ColumnId::Index(col_idx), idx  }
-                            }
-                            VariableArrayTy::A => {
-                                let value = self.reader.read_u8().ok()? as char;
-                                *num_bytes_to_read -= A::BYTES_SIZE as u64;
-                                DataValue::Character { value, column: ColumnId::Index(col_idx), idx  }
-                            }
-                            VariableArrayTy::E => {
-                                let value = self.reader.read_f32::<BigEndian>().ok()?;
-                                *num_bytes_to_read -= E::BYTES_SIZE as u64;
-                                DataValue::Float { value, column: ColumnId::Index(col_idx), idx  }
-                            }
-                            VariableArrayTy::D => {
-                                let value = self.reader.read_f64::<BigEndian>().ok()?;
-                                *num_bytes_to_read -= D::BYTES_SIZE as u64;
-                                DataValue::Double { value, column: ColumnId::Index(col_idx), idx  }
-                            }
-                            VariableArrayTy::C => {
-                                let real = self.reader.read_f32::<BigEndian>().ok()?;
-                                let imag = self.reader.read_f32::<BigEndian>().ok()?;
+                    VariableArrayTy::M => {
+                        let real = self.reader.read_f64::<BigEndian>().ok()?;
+                        let imag = self.reader.read_f64::<BigEndian>().ok()?;
 
-                                *num_bytes_to_read -= C::BYTES_SIZE as u64;
-                                DataValue::ComplexFloat { real, imag, column: ColumnId::Index(col_idx), idx  }
-                            }
-                            VariableArrayTy::M => {
-                                let real = self.reader.read_f64::<BigEndian>().ok()?;
-                                let imag = self.reader.read_f64::<BigEndian>().ok()?;
+                        *num_bytes_to_read -= M::BYTES_SIZE as u64;
+                        DataValue::ComplexDouble { real, imag, column: ColumnId::Index(col_idx), idx  }
+                    }
+                };
 
-                                *num_bytes_to_read -= M::BYTES_SIZE as u64;
-                                DataValue::ComplexDouble { real, imag, column: ColumnId::Index(col_idx), idx  }
-                            }
-                        };
-                    //}
-                //};
 
                 if *num_bytes_to_read == 0 {
                     // no more bytes to read on the heap.
@@ -717,6 +664,10 @@ where
             
                                 self.next()
                             } else {
+                                // We need to seek to the next call if we do not jump to the heap, notifying
+                                // we finished parsing this field
+                                self.seek_to_next_col().ok()?;
+
                                 // just returns the n_elems and offset from the iterator
                                 Some(DataValue::VariableLengthArray32 { num_elems, offset_byte })
                             }
@@ -738,6 +689,10 @@ where
             
                                 self.next()
                             } else {
+                                // We need to seek to the next call if we do not jump to the heap, notifying
+                                // we finished parsing this field
+                                self.seek_to_next_col().ok()?;
+
                                 // just returns the n_elems and offset from the iterator
                                 Some(DataValue::VariableLengthArray64 { num_elems, offset_byte })
                             }
