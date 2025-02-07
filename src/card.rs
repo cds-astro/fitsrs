@@ -9,20 +9,20 @@ pub type CardBuf = [u8; 80];
 use serde::Serialize;
 
 /// Enum representing the variants of a single 80 character line in the header.
-#[derive(PartialEq, Debug, Serialize)]
+#[derive(PartialEq, Debug, Serialize, Clone)]
 pub enum Card {
     /// A keyword card with a value and optional comment.
-    Value {
-        name: String,
-        value: Value,
-    },
+    Value { name: String, value: Value },
     /// Continuation of a long-string with `CONTINUE`` in the keyword field of the card.
     Continuation {
         string: Option<String>,
         comment: Option<String>,
     },
     // FITS extension string value, cf FITSv4, section 4.2.1.1
-    Xtension { x: XtensionType, comment: Option<String> },
+    Xtension {
+        x: XtensionType,
+        comment: Option<String>,
+    },
     /// A file comment where the keyword field is `COMMENT` or an empty string.
     Comment(String),
     /// A log line of the operations used for processing the file.
@@ -163,16 +163,18 @@ impl TryFrom<&CardBuf> for Card {
 }
 
 fn parse_extension(buf: &[u8; 80]) -> Result<Card, Error> {
-    let (value,comment) = split_value_and_comment(&buf[10..])?;
+    let (value, comment) = split_value_and_comment(&buf[10..])?;
     if value.starts_with("'") && value.ends_with("'") {
-        let end = value.len()-1;
+        let end = value.len() - 1;
         let x = XtensionType::try_from(value[1..end].trim_ascii())?;
         Ok(Card::Xtension { x, comment })
     } else {
-        let msg = format!("XTENSION value must be enclosed in single quotes, found: {}", value);
+        let msg = format!(
+            "XTENSION value must be enclosed in single quotes, found: {}",
+            value
+        );
         Err(Error::DynamicError(msg))
     }
-
 }
 
 /// FITSv4, sections 4.2. Value and 4.1.2.3. Value/comment (Bytes 11 through 80)
@@ -361,13 +363,13 @@ fn parse_comment_text(buf: &[u8]) -> String {
     let mut comment = String::new();
     buf.iter()
         .map(|b| match b {
-            0x20..=0x7E => { // FITSv4, section 4.2.1.1
+            0x20..=0x7E => {
+                // FITSv4, section 4.2.1.1
                 *b as char
-            },
+            }
             _ => REPLACEMENT_CHARACTER,
         })
-        .for_each(|ch| comment.push(ch))
-        ;
+        .for_each(|ch| comment.push(ch));
     comment.trim_ascii_end().to_owned()
 }
 
@@ -530,7 +532,11 @@ mod tests {
     use core::panic;
     use std::convert::TryFrom;
 
-    use crate::{card::{parse_empty_keyword_card, parse_string}, error::Error, hdu::header::extension::XtensionType};
+    use crate::{
+        card::{parse_empty_keyword_card, parse_string},
+        error::Error,
+        hdu::header::extension::XtensionType,
+    };
 
     use super::{parse_number, split_value_and_comment, Card, CardBuf, Value};
 
@@ -676,8 +682,9 @@ mod tests {
     }
 
     #[test]
-    fn comment_card() -> Result<(),Error> {
-        let buf = b"COMMENT comment starts / ends here...\n                                          ";
+    fn comment_card() -> Result<(), Error> {
+        let buf =
+            b"COMMENT comment starts / ends here...\n                                          ";
         let card = Card::try_from(buf)?;
         if let Card::Comment(comment) = card {
             assert_eq!(comment, "comment starts / ends here...�");
@@ -764,14 +771,17 @@ mod tests {
         let r = b"XTENSION= 'TABLE   ' / an extension table                                       ";
         assert_eq!(
             Card::try_from(r),
-            Ok(Card::Xtension { x: XtensionType::AsciiTable, comment:Some(" an extension table".to_owned()) })
+            Ok(Card::Xtension {
+                x: XtensionType::AsciiTable,
+                comment: Some(" an extension table".to_owned())
+            })
         );
     }
 
     #[test]
     fn empty_keyword_card() {
-
-        let r = b"        empty header comment with an illegal \t tab and \n newline                ";
+        let r =
+            b"        empty header comment with an illegal \t tab and \n newline                ";
         assert_eq!(
             parse_empty_keyword_card(r),
             Card::Comment("empty header comment with an illegal � tab and � newline".to_owned()),
@@ -782,11 +792,14 @@ mod tests {
     }
 
     #[test]
-    fn undefined_card() -> Result<(),Error> {
-        let r1 = b"SOMEKEY   which is not a value as it does not have '= ' at pos 9 and 10         ";
-        let r2 = b"SOMEKEY   which is not a value as it does not have '= ' at pos 9 and 10         ";
+    fn undefined_card() -> Result<(), Error> {
+        let r1 =
+            b"SOMEKEY   which is not a value as it does not have '= ' at pos 9 and 10         ";
+        let r2 =
+            b"SOMEKEY   which is not a value as it does not have '= ' at pos 9 and 10         ";
         assert_eq!(
-            Card::try_from(r1)?, Card::Undefined(String::from_utf8_lossy(r2).into_owned())
+            Card::try_from(r1)?,
+            Card::Undefined(String::from_utf8_lossy(r2).into_owned())
         );
         Ok(())
     }

@@ -1,12 +1,25 @@
 # CHANGELOG.md
 
-## 0.3.0 (unreleased)
+## 0.3.0
 
 Features:
 
-- BREAKING API change. Provide an iterator over the HDU list
+- Provide an iterator over the HDU list
 - #16: Parsing of comments, history, continued, card as enum.
-- BREAKING API change. `get` method on the Header object now takes a `&str` instead of a `[u8; 8]` slice.
+- #20 Basic support of Bintable
+- #20 Faster parsing using the benefit of the Seek trait to skip data block not wanted
+- Seek to a specific pixel in the ImageData struct
+- Possibility to access the raw bytes of a binary table for cursor typed readers
+- Fits is cloneable as long as the provided reader is cloneable
+- #20 Tiled image convention for storing compressed images in FITS binary tables
+    * Compression supported, GZIP, GZIP2 and RICE on u8, i16, i32 and f32. H_compress and PLI0 are not supported
+    * Dithering techniques for floating point texture not well tested (test samples are welcome)
+    * `NULL_PIXEL_MASK` column and `ZMASKCMP` keyword is not supported
+
+Breaking changes:
+
+- The iterator over HDUs is more rust idiomatic but introduces a different usage of the API
+- `Header.get` method now takes a `&str` instead of a `[u8; 8]` slice.
 
 Bugfixes:
 

@@ -1,5 +1,3 @@
-use serde::Serialize;
-
 use crate::card::Card;
 use crate::hdu;
 use crate::hdu::header::extension::asciitable::AsciiTable;
@@ -8,21 +6,49 @@ use crate::hdu::header::extension::image::Image;
 use crate::hdu::header::Header;
 use crate::hdu::header::Xtension;
 
-#[derive(Debug, Serialize)]
+use std::fmt::Debug;
+
+#[derive(Debug)]
 pub struct Fits<R> {
     start: bool,
     // Store the number of bytes that remains to read so that the current HDU data finishes
     // When getting the next HDU, we will first consume those bytes if there are some
-    num_remaining_bytes_in_cur_hdu: usize,
+    pos_start_cur_du: usize,
     // Keep track of the number of total bytes for the current HDU as we might
     // skip the trailing bytes to get to a multiple of 2880 bytes
-    num_bytes_in_cur_hdu: usize,
+    num_bytes_in_cur_du: usize,
     // If an error has been encountered, the HDU iterator ends
     error_parsing_encountered: bool,
+    // The reader
     reader: R,
+}
+use std::io::Read;
+impl<R> Read for Fits<R>
+where
+    R: Read,
+{
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.reader.read(buf)
+    }
+}
+
+impl<R> Clone for Fits<R>
+where
+    R: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            reader: self.reader.clone(),
+            error_parsing_encountered: self.error_parsing_encountered,
+            num_bytes_in_cur_du: self.num_bytes_in_cur_du,
+            pos_start_cur_du: self.pos_start_cur_du,
+            start: self.start,
+        }
+    }
 }
 
 use crate::error::Error;
+
 impl<'a, R> Fits<R> {
     /// Parse a FITS file
     /// # Params
@@ -30,56 +56,73 @@ impl<'a, R> Fits<R> {
     pub fn from_reader(reader: R) -> Self {
         Self {
             reader,
-            num_remaining_bytes_in_cur_hdu: 0,
-            num_bytes_in_cur_hdu: 0,
+            pos_start_cur_du: 0,
+            num_bytes_in_cur_du: 0,
             error_parsing_encountered: false,
             start: true,
         }
     }
 }
-
-use hdu::data::DataBufRead;
+use hdu::data::FitsRead;
+use std::io::Seek;
 impl<'a, R> Fits<R>
 where
-    R: DataBufRead<'a, Image> + DataBufRead<'a, AsciiTable> + DataBufRead<'a, BinTable> + 'a,
+    R: FitsRead<'a, Image> + FitsRead<'a, AsciiTable> + FitsRead<'a, BinTable> + 'a + Seek,
 {
-    /// Returns a boolean to know if we are at EOF
-    fn consume_until_next_hdu(&mut self) -> Result<bool, Error> {
-        // 1. Check if there are still bytes to be read to get to the end of data
-        if self.num_remaining_bytes_in_cur_hdu > 0 {
-            // Then read them
-            <R as DataBufRead<'_, Image>>::read_n_bytes_exact(
-                &mut self.reader,
-                self.num_remaining_bytes_in_cur_hdu as u64,
-            )?;
+    /// Targets the reader to the next HDU
+    ///
+    /// It is possible that EOF is reached immediately because some fits files do not have these blank bytes
+    /// at the end of its last HDU
+    pub(crate) fn consume_until_next_hdu(&mut self) -> Result<(), Error> {
+        // Seek to the beginning of the next HDU.
+        // The number of bytes to skip is the remaining bytes +
+        // an offset to get to a multiple of 2880 bytes
+
+        // current seek position since the start of the stream
+        let cur_pos = self.reader.stream_position()? as usize;
+        let mut num_bytes_to_skip = self.num_bytes_in_cur_du - (cur_pos - self.pos_start_cur_du);
+
+        let offset_in_2880_block = self.num_bytes_in_cur_du % 2880;
+        let is_aligned_on_block = offset_in_2880_block == 0;
+        if !is_aligned_on_block {
+            num_bytes_to_skip += (2880 - offset_in_2880_block) as usize;
         }
+        self.reader.seek_relative(num_bytes_to_skip as i64)?;
 
-        // 2. We are at the end of the real data. As FITS standard stores data in block of 2880 bytes
-        // we must read until the next block of data to get the location of the next HDU
+        Ok(())
+    }
+}
 
-        let is_remaining_bytes = (self.num_bytes_in_cur_hdu % 2880) > 0;
-        // Skip the remaining bytes to set the reader where a new HDU begins
-        if is_remaining_bytes {
-            let mut block_mem_buf: [u8; 2880] = [0; 2880];
+impl<'a, R> Fits<R> {
+    /// Get the byte index where the data for the current processed HDU is
+    ///
+    /// At least one next call has to be done
+    pub fn get_position_data_unit(&self) -> usize {
+        self.pos_start_cur_du
+    }
+}
 
-            let num_off_bytes = (2880 - (self.num_bytes_in_cur_hdu % 2880)) as usize;
-            match self.reader.read_exact(&mut block_mem_buf[..num_off_bytes]) {
-                // An error like unexpected EOF is not permitted by the standard but we make it pass
-                // interpreting it as the last HDU in the file
-                Err(ref e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(true),
-                Err(e) => return Err(e.into()),
-                Ok(()) => {}
-            }
-        }
-
-        let eof = self.reader.fill_buf()?.is_empty();
-        Ok(eof)
+impl<'a, R> Fits<R>
+where
+    R: FitsRead<'a, Image> + FitsRead<'a, AsciiTable> + FitsRead<'a, BinTable> + 'a,
+{
+    // Retrieve the iterator or in memory data from the reader
+    // This has the effect of consuming the HDU
+    pub fn get_data<X>(&'a mut self, hdu: HDU<X>) -> <R as FitsRead<'a, X>>::Data
+    where
+        X: Xtension + Debug,
+        R: FitsRead<'a, X> + 'a,
+    {
+        // Unroll the internal fits parsing parameters to give it to the data reader
+        let header = &hdu.header;
+        self.reader
+            .read_data_unit(header, self.pos_start_cur_du as u64)
     }
 }
 
 impl<'a, R> Iterator for Fits<R>
 where
-    R: DataBufRead<'a, Image> + DataBufRead<'a, AsciiTable> + DataBufRead<'a, BinTable> + 'a,
+    R: FitsRead<'a, Image> + FitsRead<'a, AsciiTable> + FitsRead<'a, BinTable> + Debug + 'a + Seek,
 {
     type Item = Result<hdu::HDU, Error>;
 
@@ -91,12 +134,18 @@ where
                 // We must consume the bytes until the next header is found
                 // if eof then the iterator finishes
                 match self.consume_until_next_hdu() {
-                    Ok(eof) => {
-                        if !eof {
-                            Some(hdu::HDU::new_xtension(&mut self.reader))
-                        } else {
-                            None
-                        }
+                    Ok(()) => {
+                        let mut num_bytes_read = 0;
+                        match hdu::HDU::new_xtension(&mut self.reader, &mut num_bytes_read) {
+                                Ok(hdu) => Some(Ok(hdu)),
+                                Err(Error::Io(kind))
+                                    // an EOF has been encountered but the number of bytes read is 0
+                                    // this is valid since we have terminated the previous HDU
+                                    if kind == std::io::ErrorKind::UnexpectedEof && num_bytes_read == 0 => {
+                                        None
+                                    },
+                                Err(e) => Some(Err(e))
+                            }
                     }
                     Err(e) => Some(Err(e)),
                 }
@@ -110,7 +159,7 @@ where
 
             match n {
                 Some(Ok(hdu)) => {
-                    self.num_bytes_in_cur_hdu = match &hdu {
+                    self.num_bytes_in_cur_du = match &hdu {
                         hdu::HDU::XImage(h) | hdu::HDU::Primary(h) => {
                             let xtension = h.get_header().get_xtension();
                             xtension.get_num_bytes_data_block() as usize
@@ -125,9 +174,13 @@ where
                         }
                     };
 
-                    self.num_remaining_bytes_in_cur_hdu = self.num_bytes_in_cur_hdu;
-
-                    Some(Ok(hdu))
+                    match self.reader.stream_position() {
+                        Err(e) => Some(Err(e.into())),
+                        Ok(pos) => {
+                            self.pos_start_cur_du = pos as usize;
+                            Some(Ok(hdu))
+                        }
+                    }
                 }
                 Some(Err(e)) => {
                     // an error has been found we return it and ends the iterator for future next calls
@@ -160,8 +213,9 @@ where
         cards: Vec<Card>,
     ) -> Result<Self, Error>
     where
-        R: DataBufRead<'a, X> + 'a,
+        R: FitsRead<'a, X> + 'a,
     {
+        /* 1. Parse the header first */
         let header = Header::parse(cards)?;
         /* 2. Skip the next bytes to a new 2880 multiple of bytes
         This is where the data block should start */
@@ -179,30 +233,12 @@ where
             *num_bytes_read += num_off_bytes;
         }
 
+        // Data block
+
         Ok(Self { header })
     }
 
     pub fn get_header(&self) -> &Header<X> {
         &self.header
-    }
-
-    // Retrieve the iterator or in memory data from the reader
-    // This has the effect of consuming the HDU
-    pub fn get_data<'a, R>(self, hdu_list: &'a mut Fits<R>) -> <R as DataBufRead<'a, X>>::Data
-    where
-        R: DataBufRead<'a, X> + 'a,
-    {
-        // Unroll the internal fits parsing parameters to give it to the data reader
-        let Fits {
-            num_remaining_bytes_in_cur_hdu,
-            reader,
-            ..
-        } = hdu_list;
-        let xtension = self.header.get_xtension();
-        <R as DataBufRead<'a, X>>::prepare_data_reading(
-            xtension,
-            num_remaining_bytes_in_cur_hdu,
-            reader,
-        )
     }
 }

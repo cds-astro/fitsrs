@@ -1,8 +1,5 @@
 use std::pin::Pin;
 
-use futures::{Future, Stream};
-use serde::Serialize;
-
 use crate::card::Card;
 use crate::hdu;
 use crate::hdu::data::AsyncDataBufRead;
@@ -11,6 +8,9 @@ use crate::hdu::header::extension::bintable::BinTable;
 use crate::hdu::header::extension::image::Image;
 use crate::hdu::header::extension::Xtension;
 use crate::hdu::header::Header;
+use futures::{Future, Stream};
+use serde::Serialize;
+use std::fmt::Debug;
 
 //use crate::hdu::data::{DataAsyncBufRead, DataBufRead};
 
@@ -88,6 +88,25 @@ where
 
         let eof = self.reader.fill_buf().await?.is_empty();
         Ok(eof)
+    }
+
+    pub fn get_data<X>(&'a mut self, hdu: AsyncHDU<X>) -> <R as AsyncDataBufRead<'a, X>>::Data
+    where
+        X: Xtension + Debug,
+        R: AsyncDataBufRead<'a, X>,
+    {
+        // Unroll the internal fits parsing parameters to give it to the data reader
+        let AsyncFits {
+            num_remaining_bytes_in_cur_hdu,
+            reader,
+            ..
+        } = self;
+        let xtension = hdu.header.get_xtension();
+        <R as AsyncDataBufRead<'a, X>>::prepare_data_reading(
+            xtension,
+            num_remaining_bytes_in_cur_hdu,
+            reader,
+        )
     }
 }
 
@@ -195,7 +214,6 @@ impl<X> AsyncHDU<X>
 where
     X: Xtension + std::fmt::Debug,
 {
-    
     pub async fn new<'a, R>(
         reader: &mut R,
         num_bytes_read: &mut usize,
@@ -230,31 +248,5 @@ where
 
     pub fn get_header(&self) -> &Header<X> {
         &self.header
-    }
-
-    // Retrieve the iterator or in memory data from the reader
-    // This has the effect of consuming the HDU
-    pub fn get_data<'a, R>(
-        self,
-        hdu_list: &'a mut AsyncFits<R>,
-    ) -> <R as AsyncDataBufRead<'a, X>>::Data
-    where
-        R: AsyncDataBufRead<'a, X>
-            + AsyncDataBufRead<'a, Image>
-            + AsyncDataBufRead<'a, BinTable>
-            + AsyncDataBufRead<'a, AsciiTable>,
-    {
-        // Unroll the internal fits parsing parameters to give it to the data reader
-        let AsyncFits {
-            num_remaining_bytes_in_cur_hdu,
-            reader,
-            ..
-        } = hdu_list;
-        let xtension = self.header.get_xtension();
-        <R as AsyncDataBufRead<'a, X>>::prepare_data_reading(
-            xtension,
-            num_remaining_bytes_in_cur_hdu,
-            reader,
-        )
     }
 }

@@ -16,7 +16,6 @@ exclude = [
 ]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 byteorder = "1.4.2"
 serde = { version = "1.0.152", features = ["derive"] }
@@ -24,11 +23,24 @@ serde_json = "1.0"
 futures = "0.3.31"
 async-trait = "0.1.66"
 quick-error = "2.0.1"
+flate2 = "1.0.35"
+log = "0.4"
 
 [dev-dependencies]
 test-case = "3.0.0"
 tokio = { version = "1.26.0", features = ["rt", "macros"]}
+image = { version = "0.25.5" }
 
 [profile.release]
 lto = true
 opt-level = 3
+
+[profile.test]
+incremental = true
+opt-level = 0
+debug = 1
+lto = true
+debug-assertions = true
+overflow-checks = true
+rpath = false
+codegen-units = 512

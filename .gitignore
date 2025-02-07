@@ -5,6 +5,9 @@ fitswasm/test
 fitswasm/Cargo.lock
 fitswasm/target
 fitswasm/pkg
+samples/*
 fits-rs-test-files.tar*
 .DS_Store
 samples
+
+publish-test-files.sh

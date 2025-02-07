@@ -1,25 +1,29 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
+
+use log::warn;
 use serde::Serialize;
 
 use crate::card::Value;
 use crate::error::Error;
+
 use crate::hdu::header::check_for_bitpix;
 use crate::hdu::header::check_for_gcount;
 use crate::hdu::header::check_for_naxis;
 use crate::hdu::header::check_for_naxisi;
 use crate::hdu::header::check_for_pcount;
 use crate::hdu::header::check_for_tfields;
-use crate::hdu::header::BitpixValue;
+use crate::hdu::header::Bitpix;
+
 use crate::hdu::header::Xtension;
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct AsciiTable {
     // Should be 1
-    bitpix: BitpixValue,
+    bitpix: Bitpix,
     // Number of axis, Should be 2,
-    naxis: usize,
+    naxis: u64,
     // A non-negative integer, giving the number of ASCII characters in each row of
     // the table. This includes all the characters in the defined fields
     // plus any characters that are not included in any field.
@@ -38,21 +42,21 @@ pub struct AsciiTable {
     // permitted for encoding
     tforms: Vec<TFormAsciiTable>,
     // Should be 0
-    pcount: usize,
+    pcount: u64,
     // Should be 1
-    gcount: usize,
+    gcount: u64,
 }
 
 impl AsciiTable {
     /// Get the bitpix value given by the "BITPIX" card
     #[inline]
-    pub fn get_bitpix(&self) -> BitpixValue {
+    pub fn get_bitpix(&self) -> Bitpix {
         self.bitpix
     }
 
     /// Get the number of axis given by the "NAXIS" card
     #[inline]
-    pub fn get_naxis(&self) -> usize {
+    pub fn get_naxis(&self) -> u64 {
         self.naxis
     }
 
@@ -84,13 +88,13 @@ impl AsciiTable {
 
     /// Get the pcount value given by the "PCOUNT" card
     #[inline]
-    pub fn get_pcount(&self) -> usize {
+    pub fn get_pcount(&self) -> u64 {
         self.pcount
     }
 
     /// Get the gcount value given by the "PCOUNT" card
     #[inline]
-    pub fn get_gcount(&self) -> usize {
+    pub fn get_gcount(&self) -> u64 {
         self.gcount
     }
 }
@@ -101,12 +105,10 @@ impl Xtension for AsciiTable {
         self.naxis1 * self.naxis2
     }
 
-    fn parse(
-        values: &HashMap<String, Value>,
-    ) -> Result<Self, Error> {
+    fn parse(values: &HashMap<String, Value>) -> Result<Self, Error> {
         // BITPIX
         let bitpix = check_for_bitpix(values)?;
-        if bitpix != BitpixValue::U8 {
+        if bitpix != Bitpix::U8 {
             return Err(Error::StaticError("Ascii Table HDU must have a BITPIX = 8"));
         }
 
@@ -135,115 +137,90 @@ impl Xtension for AsciiTable {
         // FIELDS
         let tfields = check_for_tfields(values)?;
 
-        // TBCOLS
-        let tbcols = (0..tfields)
-            .map(|idx_field| {
-                let idx_field = idx_field + 1;
-                let kw = format!("TBCOL{idx_field:?}");
-
-                values
-                    .get(&kw)
-                    .ok_or(Error::StaticError("TBCOLX card not found"))?
-                    .clone()
-                    .check_for_integer()
-                    .map(|tbcol| tbcol as u64)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
         // TFORMS
-        let tforms = (0..tfields)
-            .map(|idx_field| {
+        let (tbcols, tforms) = (0..tfields)
+            .filter_map(|idx_field| {
                 let idx_field = idx_field + 1;
-                let kw = format!("TFORM{idx_field:?}");
+                let tbcol = if let Some(Value::Integer { value, .. }) =
+                    values.get(&format!("TBCOL{idx_field:?}"))
+                {
+                    Some(value.to_owned())
+                } else {
+                    None
+                };
 
-                let tform = values
-                    .get(&kw)
-                    .ok_or(Error::StaticError("TFORMX card not found"))?
-                    .clone()
-                    .check_for_string()?;
+                let tform = if let Some(Value::String { value, .. }) =
+                    values.get(&format!("TFORM{idx_field:?}"))
+                {
+                    Some(value.to_owned())
+                } else {
+                    None
+                };
+
+                if tbcol.is_none() {
+                    warn!("Discard field {}", idx_field);
+                }
+
+                if tform.is_none() {
+                    warn!("Discard field {}", idx_field);
+                }
+
+                let tbcol = tbcol? as u64;
+                let tform = tform?;
 
                 let first_char = &tform[0..1];
-                match first_char {
+                let tform = match first_char {
                     "A" => {
-                        let w = tform[1..]
-                            .trim_end()
-                            .parse::<i32>()
-                            .map_err(|_| Error::StaticError("expected w after the "))?;
+                        let w = tform[1..].trim_end().parse::<i32>().ok()?;
 
-                        Ok(TFormAsciiTable::Character { w: w as usize })
+                        TFormAsciiTable::Character { w: w as usize }
                     }
                     "I" => {
-                        let w = tform[1..]
-                            .trim_end()
-                            .parse::<i32>()
-                            .map_err(|_| Error::StaticError("expected w after the "))?;
+                        let w = tform[1..].trim_end().parse::<i32>().ok()?;
 
-                        Ok(TFormAsciiTable::DecimalInteger { w: w as usize })
+                        TFormAsciiTable::DecimalInteger { w: w as usize }
                     }
                     "F" => {
                         let wd = tform[1..].trim_end().split('.').collect::<Vec<_>>();
 
-                        let w = wd[0].parse::<i32>().map_err(|_| {
-                            Error::StaticError(
-                                "TFORM E type: w part does not parse into an integer",
-                            )
-                        })?;
+                        let w = wd[0].parse::<i32>().ok()?;
+                        let d = wd[1].parse::<i32>().ok()?;
 
-                        let d = wd[1].parse::<i32>().map_err(|_| {
-                            Error::StaticError(
-                                "TFORM E type: d part does not parse into an integer",
-                            )
-                        })?;
-
-                        Ok(TFormAsciiTable::FloatingPointFixed {
+                        TFormAsciiTable::FloatingPointFixed {
                             w: w as usize,
                             d: d as usize,
-                        })
+                        }
                     }
                     "E" => {
                         let wd = tform[1..].trim_end().split('.').collect::<Vec<_>>();
 
-                        let w = wd[0].parse::<i32>().map_err(|_| {
-                            Error::StaticError(
-                                "TFORM E type: w part does not parse into an integer",
-                            )
-                        })?;
+                        let w = wd[0].parse::<i32>().ok()?;
+                        let d = wd[1].parse::<i32>().ok()?;
 
-                        let d = wd[1].parse::<i32>().map_err(|_| {
-                            Error::StaticError(
-                                "TFORM E type: d part does not parse into an integer",
-                            )
-                        })?;
-
-                        Ok(TFormAsciiTable::EFloatingPointExp {
+                        TFormAsciiTable::EFloatingPointExp {
                             w: w as usize,
                             d: d as usize,
-                        })
+                        }
                     }
                     "D" => {
                         let wd = tform[1..].trim_end().split('.').collect::<Vec<_>>();
 
-                        let w = wd[0].parse::<i32>().map_err(|_| {
-                            Error::StaticError(
-                                "TFORM E type: w part does not parse into an integer",
-                            )
-                        })?;
+                        let w = wd[0].parse::<i32>().ok()?;
+                        let d = wd[1].parse::<i32>().ok()?;
 
-                        let d = wd[1].parse::<i32>().map_err(|_| {
-                            Error::StaticError(
-                                "TFORM E type: d part does not parse into an integer",
-                            )
-                        })?;
-
-                        Ok(TFormAsciiTable::DFloatingPointExp {
+                        TFormAsciiTable::DFloatingPointExp {
                             w: w as usize,
                             d: d as usize,
-                        })
+                        }
                     }
-                    _ => Err(Error::StaticError("Ascii Table TFORM not recognized")),
-                }
+                    _ => {
+                        return None;
+                    }
+                };
+
+                Some((tbcol, tform))
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .unzip();
 
         Ok(AsciiTable {
             bitpix,
@@ -281,7 +258,7 @@ mod tests {
     use super::{AsciiTable, TFormAsciiTable};
     use crate::{
         fits::Fits,
-        hdu::{header::BitpixValue, HDU},
+        hdu::{header::Bitpix, HDU},
     };
     use std::{fs::File, io::BufReader};
 
@@ -314,7 +291,7 @@ mod tests {
         compare_ascii_ext(
             "samples/fits.gsfc.nasa.gov/HST_FGS.fits",
             AsciiTable {
-                bitpix: BitpixValue::U8,
+                bitpix: Bitpix::U8,
                 naxis: 2,
                 naxis1: 99,
                 naxis2: 7,
@@ -338,7 +315,7 @@ mod tests {
         compare_ascii_ext(
             "samples/fits.gsfc.nasa.gov/HST_FOC.fits",
             AsciiTable {
-                bitpix: BitpixValue::U8,
+                bitpix: Bitpix::U8,
                 naxis: 2,
                 naxis1: 312,
                 naxis2: 1,
@@ -377,7 +354,7 @@ mod tests {
         compare_ascii_ext(
             "samples/fits.gsfc.nasa.gov/HST_HRS.fits",
             AsciiTable {
-                bitpix: BitpixValue::U8,
+                bitpix: Bitpix::U8,
                 naxis: 2,
                 naxis1: 412,
                 naxis2: 4,
@@ -423,7 +400,7 @@ mod tests {
         compare_ascii_ext(
             "samples/fits.gsfc.nasa.gov/HST_WFPC_II.fits",
             AsciiTable {
-                bitpix: BitpixValue::U8,
+                bitpix: Bitpix::U8,
                 naxis: 2,
                 naxis1: 796,
                 naxis2: 4,

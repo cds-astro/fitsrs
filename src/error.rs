@@ -1,4 +1,3 @@
-
 quick_error! {
     #[derive(Debug, PartialEq)]
     pub enum Error {
@@ -34,8 +33,12 @@ quick_error! {
             from(std::str::Utf8Error)
             display("Fail to parse a keyword as a utf8 string")
         }
-        Io {
-            from(std::io::Error)
+        /// IO error wrapping the std::io::Error
+        Io(kind: std::io::ErrorKind) {
+            // to be able to derive from PartialEq just above
+            // as std::io::Error does not impl PartialEq I decided
+            // to only store its error kind which is sufficiant for our use
+            from(err: std::io::Error) -> (err.kind())
         }
     }
 }

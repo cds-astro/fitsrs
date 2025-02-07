@@ -44,15 +44,12 @@ impl TryFrom<&str> for XtensionType {
 
 #[async_trait(?Send)]
 pub trait Xtension {
+    /// Return the total size in bytes of the data area
     fn get_num_bytes_data_block(&self) -> u64;
-
-    //fn update_with_parsed_header(&mut self, cards: &HashMap<String, Value>) -> Result<(), Error>;
 
     // Parse the Xtension keywords
     // During the parsing, some checks will be made
-    fn parse(
-        values: &HashMap<String, Value>
-    ) -> Result<Self, Error>
+    fn parse(values: &HashMap<String, Value>) -> Result<Self, Error>
     where
         Self: Sized;
 }
