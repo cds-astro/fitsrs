@@ -31,8 +31,8 @@ Once the files have been extracted you can run the tests locally:
 cargo test --release
 ```
 
-To Do list
-----------
+Features
+--------
 
 * [X] Support single typed data block (i.e. image type data)
 * [X] Single HDU parsing, header and data units 
