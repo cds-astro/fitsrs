@@ -2,11 +2,11 @@
 //use super::DataAsyncBufRead;
 
 use crate::hdu::data::iter::It;
-use crate::hdu::header::{Header, Bitpix, Xtension};
+use crate::hdu::header::{Bitpix, Header, Xtension};
 use async_trait::async_trait;
 use futures::AsyncReadExt;
-use std::io::Read;
 use serde::Serialize;
+use std::io::Read;
 
 use super::super::AsyncDataBufRead;
 use super::DataStream;
@@ -20,10 +20,7 @@ where
 {
     type Data = ImageData<&'a mut Self>;
 
-    fn read_data_unit(&'a mut self,
-        header: &Header<Image>,
-        _start_pos: u64,
-    ) -> Self::Data {
+    fn read_data_unit(&'a mut self, header: &Header<Image>, _start_pos: u64) -> Self::Data {
         ImageData::new(header.get_xtension(), self)
     }
 }
@@ -43,24 +40,12 @@ where
     ) -> Self::Data {
         let bitpix = ctx.get_bitpix();
         match bitpix {
-            Bitpix::U8 => {
-                DataStream::U8(stream::St::new(reader, num_remaining_bytes_in_cur_hdu))
-            }
-            Bitpix::I16 => {
-                DataStream::I16(stream::St::new(reader, num_remaining_bytes_in_cur_hdu))
-            }
-            Bitpix::I32 => {
-                DataStream::I32(stream::St::new(reader, num_remaining_bytes_in_cur_hdu))
-            }
-            Bitpix::I64 => {
-                DataStream::I64(stream::St::new(reader, num_remaining_bytes_in_cur_hdu))
-            }
-            Bitpix::F32 => {
-                DataStream::F32(stream::St::new(reader, num_remaining_bytes_in_cur_hdu))
-            }
-            Bitpix::F64 => {
-                DataStream::F64(stream::St::new(reader, num_remaining_bytes_in_cur_hdu))
-            }
+            Bitpix::U8 => DataStream::U8(stream::St::new(reader, num_remaining_bytes_in_cur_hdu)),
+            Bitpix::I16 => DataStream::I16(stream::St::new(reader, num_remaining_bytes_in_cur_hdu)),
+            Bitpix::I32 => DataStream::I32(stream::St::new(reader, num_remaining_bytes_in_cur_hdu)),
+            Bitpix::I64 => DataStream::I64(stream::St::new(reader, num_remaining_bytes_in_cur_hdu)),
+            Bitpix::F32 => DataStream::F32(stream::St::new(reader, num_remaining_bytes_in_cur_hdu)),
+            Bitpix::F64 => DataStream::F64(stream::St::new(reader, num_remaining_bytes_in_cur_hdu)),
         }
     }
 }
@@ -84,12 +69,9 @@ pub enum ImageData<R> {
 
 impl<R> ImageData<R>
 where
-    R: Read
+    R: Read,
 {
-    pub(crate) fn new(
-        ctx: &Image,
-        reader: R,
-    ) -> Self {
+    pub(crate) fn new(ctx: &Image, reader: R) -> Self {
         let limit = ctx.get_num_bytes_data_block();
 
         match ctx.get_bitpix() {

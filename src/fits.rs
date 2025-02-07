@@ -1,10 +1,10 @@
+use crate::card::Card;
 use crate::hdu;
 use crate::hdu::header::extension::asciitable::AsciiTable;
 use crate::hdu::header::extension::bintable::BinTable;
 use crate::hdu::header::extension::image::Image;
 use crate::hdu::header::Header;
 use crate::hdu::header::Xtension;
-use crate::card::Card;
 
 use std::fmt::Debug;
 
@@ -34,7 +34,7 @@ where
 
 impl<R> Clone for Fits<R>
 where
-    R: Clone
+    R: Clone,
 {
     fn clone(&self) -> Self {
         Self {
@@ -42,7 +42,7 @@ where
             error_parsing_encountered: self.error_parsing_encountered,
             num_bytes_in_cur_du: self.num_bytes_in_cur_du,
             pos_start_cur_du: self.pos_start_cur_du,
-            start: self.start
+            start: self.start,
         }
     }
 }
@@ -63,8 +63,8 @@ impl<'a, R> Fits<R> {
         }
     }
 }
-use std::io::Seek;
 use hdu::data::FitsRead;
+use std::io::Seek;
 impl<'a, R> Fits<R>
 where
     R: FitsRead<'a, Image> + FitsRead<'a, AsciiTable> + FitsRead<'a, BinTable> + 'a + Seek,
@@ -75,7 +75,7 @@ where
     /// at the end of its last HDU
     pub(crate) fn consume_until_next_hdu(&mut self) -> Result<(), Error> {
         // Seek to the beginning of the next HDU.
-        // The number of bytes to skip is the remaining bytes + 
+        // The number of bytes to skip is the remaining bytes +
         // an offset to get to a multiple of 2880 bytes
 
         // current seek position since the start of the stream
@@ -87,9 +87,7 @@ where
         if !is_aligned_on_block {
             num_bytes_to_skip += (2880 - offset_in_2880_block) as usize;
         }
-        self
-            .reader
-            .seek_relative(num_bytes_to_skip as i64)?;
+        self.reader.seek_relative(num_bytes_to_skip as i64)?;
 
         Ok(())
     }
@@ -97,7 +95,7 @@ where
 
 impl<'a, R> Fits<R> {
     /// Get the byte index where the data for the current processed HDU is
-    /// 
+    ///
     /// At least one next call has to be done
     pub fn get_position_data_unit(&self) -> usize {
         self.pos_start_cur_du
@@ -117,7 +115,8 @@ where
     {
         // Unroll the internal fits parsing parameters to give it to the data reader
         let header = &hdu.header;
-        self.reader.read_data_unit(header, self.pos_start_cur_du as u64)
+        self.reader
+            .read_data_unit(header, self.pos_start_cur_du as u64)
     }
 }
 

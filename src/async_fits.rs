@@ -1,5 +1,6 @@
 use std::pin::Pin;
 
+use crate::card::Card;
 use crate::hdu;
 use crate::hdu::data::AsyncDataBufRead;
 use crate::hdu::header::extension::asciitable::AsciiTable;
@@ -8,7 +9,6 @@ use crate::hdu::header::extension::image::Image;
 use crate::hdu::header::extension::Xtension;
 use crate::hdu::header::Header;
 use futures::{Future, Stream};
-use crate::card::Card;
 use serde::Serialize;
 use std::fmt::Debug;
 
@@ -214,7 +214,6 @@ impl<X> AsyncHDU<X>
 where
     X: Xtension + std::fmt::Debug,
 {
-    
     pub async fn new<'a, R>(
         reader: &mut R,
         num_bytes_read: &mut usize,

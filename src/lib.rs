@@ -29,7 +29,6 @@
 //! ```
 
 #[doc = include_str!("../README.md")]
-
 extern crate async_trait;
 extern crate byteorder;
 #[macro_use]
@@ -40,16 +39,16 @@ pub mod card;
 pub mod error;
 pub mod file;
 pub mod fits;
-pub mod hdu;
 mod gz;
+pub mod hdu;
 
 pub use async_fits::AsyncFits;
 pub use file::FITSFile;
 pub use fits::Fits;
-pub use hdu::{AsyncHDU, HDU};
-pub use hdu::data::iter::It;
+pub use hdu::data::bintable::{BinaryTableData, DataValue, TableData, TableRowData};
 pub use hdu::data::image::ImageData;
-pub use hdu::data::bintable::{TableData, BinaryTableData, TableRowData, DataValue};
+pub use hdu::data::iter::It;
+pub use hdu::{AsyncHDU, HDU};
 
 #[cfg(test)]
 mod tests {
@@ -314,8 +313,8 @@ mod tests {
                 HDU::XBinaryTable(hdu) => {
                     let _ = hdu.get_header().get_xtension();
                     data = hdu_list.get_data(hdu).collect::<Vec<_>>();
-                },
-                _ => ()
+                }
+                _ => (),
             }
         }
 
@@ -337,16 +336,17 @@ mod tests {
 
                     match hdu_list.get_data(hdu) {
                         ImageData::F32(it) => {
-                            let c = it.map(|v| (((v - min)/(max - min)) * 255.0) as u8).collect::<Vec<_>>();
+                            let c = it
+                                .map(|v| (((v - min) / (max - min)) * 255.0) as u8)
+                                .collect::<Vec<_>>();
 
                             let imgbuf = DynamicImage::ImageLuma8(
                                 image::ImageBuffer::from_raw(naxis1 as u32, naxis2 as u32, c)
-                                    .unwrap()
-                                );
+                                    .unwrap(),
+                            );
                             imgbuf.save(&format!("{}.jpg", filename)).unwrap();
                         }
-                        _ => ()
-                        
+                        _ => (),
                     };
                 }
                 _ => (),
@@ -380,12 +380,24 @@ mod tests {
 
                             let data = hdu_list.get_data(hdu);
                             match data {
-                                ImageData::U8(it) => assert_eq!(num_pixels, it.collect::<Vec<_>>().len()),
-                                ImageData::I16(it) => assert_eq!(num_pixels, it.collect::<Vec<_>>().len()),
-                                ImageData::I32(it) => assert_eq!(num_pixels, it.collect::<Vec<_>>().len()),
-                                ImageData::I64(it) => assert_eq!(num_pixels, it.collect::<Vec<_>>().len()),
-                                ImageData::F32(it) => assert_eq!(num_pixels, it.collect::<Vec<_>>().len()),
-                                ImageData::F64(it) => assert_eq!(num_pixels, it.collect::<Vec<_>>().len()),
+                                ImageData::U8(it) => {
+                                    assert_eq!(num_pixels, it.collect::<Vec<_>>().len())
+                                }
+                                ImageData::I16(it) => {
+                                    assert_eq!(num_pixels, it.collect::<Vec<_>>().len())
+                                }
+                                ImageData::I32(it) => {
+                                    assert_eq!(num_pixels, it.collect::<Vec<_>>().len())
+                                }
+                                ImageData::I64(it) => {
+                                    assert_eq!(num_pixels, it.collect::<Vec<_>>().len())
+                                }
+                                ImageData::F32(it) => {
+                                    assert_eq!(num_pixels, it.collect::<Vec<_>>().len())
+                                }
+                                ImageData::F64(it) => {
+                                    assert_eq!(num_pixels, it.collect::<Vec<_>>().len())
+                                }
                             }
                         }
                         _ => (),
@@ -595,50 +607,43 @@ mod tests {
                         ImageData::U8(it) => {
                             let data = it.collect::<Vec<_>>();
                             assert_eq!(num_pixels, data.len())
-                        },
+                        }
                         ImageData::I16(it) => {
                             let data = it.collect::<Vec<_>>();
                             assert_eq!(num_pixels, data.len())
-                        },
+                        }
                         ImageData::I32(it) => {
                             let data = it.collect::<Vec<_>>();
                             assert_eq!(num_pixels, data.len())
-                        },
+                        }
                         ImageData::I64(it) => {
                             let data = it.collect::<Vec<_>>();
                             assert_eq!(num_pixels, data.len())
-                        },
+                        }
                         ImageData::F32(it) => {
                             let data = it.collect::<Vec<_>>();
                             assert_eq!(num_pixels, data.len())
-                        },
+                        }
                         ImageData::F64(it) => {
                             let data = it.collect::<Vec<_>>();
                             assert_eq!(num_pixels, data.len())
-                        },
+                        }
                     }
-                },
+                }
                 HDU::XBinaryTable(hdu) => {
-                    let num_rows = hdu.get_header()
-                        .get_xtension()
-                        .get_num_rows();
+                    let num_rows = hdu.get_header().get_xtension().get_num_rows();
 
-                    let rows = hdu_list.get_data(hdu)
-                        .row_iter()
-                        .collect::<Vec<_>>();
+                    let rows = hdu_list.get_data(hdu).row_iter().collect::<Vec<_>>();
 
                     assert_eq!(num_rows, rows.len());
-                },
+                }
                 HDU::XASCIITable(hdu) => {
-                    let num_bytes = hdu.get_header()
-                        .get_xtension()
-                        .get_num_bytes_data_block();
+                    let num_bytes = hdu.get_header().get_xtension().get_num_bytes_data_block();
 
-                    let data = hdu_list.get_data(hdu)
-                        .collect::<Vec<_>>();
+                    let data = hdu_list.get_data(hdu).collect::<Vec<_>>();
 
                     assert_eq!(num_bytes as usize, data.len());
-                },
+                }
             }
         }
     }

@@ -1,15 +1,17 @@
+use crate::hdu::data::{stream::St, AsyncDataBufRead};
+use crate::hdu::header::extension::bintable::{
+    TForm, VariableArrayTy, A, B, C, D, E, I, J, K, L, M, P, Q, X,
+};
+use crate::hdu::header::{Header, Xtension};
 use std::fmt::Debug;
-use crate::hdu::data::{AsyncDataBufRead, stream::St};
-use crate::hdu::header::{Xtension, Header};
-use crate::hdu::header::extension::bintable::{TForm, VariableArrayTy, A, B, C, D, E, I, J, K, L, M, P, Q, X};
 
-use byteorder::BigEndian;
 use super::row::TableRowData;
 use crate::hdu::header::extension::bintable::{BinTable, TFormType};
 use crate::hdu::FitsRead;
+use byteorder::BigEndian;
 use log::warn;
-use std::io::{Bytes, SeekFrom};
 use std::io::Read;
+use std::io::{Bytes, SeekFrom};
 
 impl<'a, R> FitsRead<'a, BinTable> for R
 where
@@ -18,8 +20,9 @@ where
     type Data = BinaryTableData<&'a mut Self>;
 
     fn read_data_unit(&'a mut self, header: &Header<BinTable>, start_pos: u64) -> Self::Data
-        where
-            Self: Sized {
+    where
+        Self: Sized,
+    {
         BinaryTableData::new(self, header, start_pos)
     }
 }
@@ -28,26 +31,26 @@ use super::tile_compressed::TileCompressedData;
 #[derive(Debug)]
 pub enum BinaryTableData<R> {
     Table(TableData<R>),
-    TileCompressed(TileCompressedData<R>)
+    TileCompressed(TileCompressedData<R>),
 }
 
 impl<R> Iterator for BinaryTableData<R>
 where
-    R: Debug + Seek + Read
+    R: Debug + Seek + Read,
 {
     type Item = DataValue;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             Self::Table(data) => data.next(),
-            Self::TileCompressed(data) => data.next()
+            Self::TileCompressed(data) => data.next(),
         }
     }
 }
 
 impl<R> BinaryTableData<R>
 where
-    R: Debug + Read
+    R: Debug + Read,
 {
     fn new(reader: R, header: &Header<BinTable>, start_pos: u64) -> Self {
         let ctx = header.get_xtension();
@@ -72,7 +75,7 @@ impl<R> BinaryTableData<R> {
 }
 
 /// A reader that can overload another reader when the necessity comes to
-/// 
+///
 /// When parsing tile compressed images, we might need to overload the current reader with a Gzip/RICE decoder
 #[derive(Debug)]
 enum DataReaderState {
@@ -93,7 +96,7 @@ enum DataReaderState {
         n_elems: u64,
         /// The size in bytes of one element
         t_byte_size: u64,
-    }
+    },
 }
 
 use crate::error::Error;
@@ -109,7 +112,7 @@ pub struct TableData<R> {
 
     /// Columns ids to return the values, by default all fields are taken into account
     pub cols_idx: Vec<usize>,
-    /// A byte offset to seek 
+    /// A byte offset to seek
     pub col_byte_offsets: Vec<usize>,
     /// Context of the binary table it contains all the mandatory and optional cards parsed from the header unit
     pub ctx: BinTable,
@@ -133,8 +136,8 @@ pub struct TableData<R> {
 }
 
 impl<R> TableData<Cursor<R>>
-where 
-    R: AsRef<[u8]>
+where
+    R: AsRef<[u8]>,
 {
     /// For in memory buffers, access the raw bytes of the main data table + HEAP
     pub fn raw_bytes(&self) -> &[u8] {
@@ -157,8 +160,8 @@ impl<R> TableData<Cursor<R>> {
 
 use std::io::Take;
 impl<R> TableData<R>
-where 
-    R: Read
+where
+    R: Read,
 {
     /// Gives an iterator over the bytes of the main data table
     pub fn bytes(self) -> Bytes<Take<R>> {
@@ -168,24 +171,22 @@ where
 }
 
 impl<R> TableData<R> {
-    pub fn new(
-        reader: R,
-        header: &Header<BinTable>,
-        start_pos: u64
-    ) -> Self {
+    pub fn new(reader: R, header: &Header<BinTable>, start_pos: u64) -> Self {
         let ctx = header.get_xtension();
         let state = DataReaderState::MainTable;
 
         // Compute an byte offset for each columns to know at which byte index does the column
         // starts inside a row
         let mut cumul_num_bytes = 0;
-        let col_byte_offsets = ctx.tforms
+        let col_byte_offsets = ctx
+            .tforms
             .iter()
             .map(|tform| {
                 let col_byte_offset = cumul_num_bytes;
                 cumul_num_bytes += tform.num_bytes_field();
                 col_byte_offset
-            }).collect();
+            })
+            .collect();
 
         let cols_idx = (0..(ctx.tforms.len())).collect();
 
@@ -210,7 +211,7 @@ impl<R> TableData<R> {
             start_pos,
             ctx: ctx.clone(),
             row_idx,
-            heap
+            heap,
         }
     }
 
@@ -265,8 +266,8 @@ impl<R> TableData<R> {
 }
 
 impl<R> TableData<R>
-where 
-    R: Seek
+where
+    R: Seek,
 {
     fn seek_to_next_col(&mut self) -> Result<(), Error> {
         // detect if we jump of row
@@ -303,12 +304,14 @@ where
     }
 
     /// Seek directly to a specific row idx
-    /// 
+    ///
     /// # Params
     /// * `idx` - Index of the row to jump to
     pub fn seek_to_row(&mut self, idx: usize) -> Result<(), Error> {
         if idx >= self.ctx.naxis2 as usize {
-            Err(Error::StaticError("The row index specified is > than the number of rows of the table"))
+            Err(Error::StaticError(
+                "The row index specified is > than the number of rows of the table",
+            ))
         } else {
             self.col_idx = 0;
             self.row_idx = idx;
@@ -334,11 +337,11 @@ where
     }
 
     /// Jump to the heap at a specific offset in the HEAP associated to the binary table
-    /// 
+    ///
     /// This method takes the ownership to change the state of it
-    /// 
+    ///
     /// * Params
-    /// 
+    ///
     /// reader - A reference to the reader
     /// ctx - The context will give some properties (i.e. location of the heap)
     /// byte_offset_from_main_table - a byte offset where the reader is in the main table
@@ -353,7 +356,7 @@ where
         n_elems: u64,
         t_byte_size: u64,
     ) -> Result<(), Error>
-    where 
+    where
         R: Read + Seek,
     {
         match self.state {
@@ -376,7 +379,13 @@ where
                 let _ = self.reader.seek_relative(off)?;
 
                 let num_bytes_to_read = n_elems * t_byte_size;
-                self.state = DataReaderState::HEAP { ty, main_table_pos: pos, num_bytes_to_read, t_byte_size, n_elems };
+                self.state = DataReaderState::HEAP {
+                    ty,
+                    main_table_pos: pos,
+                    num_bytes_to_read,
+                    t_byte_size,
+                    n_elems,
+                };
             }
         }
 
@@ -384,17 +393,17 @@ where
     }
 
     pub(crate) fn jump_to_main_table(&mut self) -> Result<(), Error>
-    where 
-        R: Seek
+    where
+        R: Seek,
     {
         match self.state {
-            DataReaderState::HEAP { main_table_pos, ..} => {
+            DataReaderState::HEAP { main_table_pos, .. } => {
                 // move back to the main table
                 let _ = self.reader.seek(main_table_pos)?;
 
                 self.state = DataReaderState::MainTable;
-            },
-            DataReaderState::MainTable => ()
+            }
+            DataReaderState::MainTable => (),
         }
 
         Ok(())
@@ -407,9 +416,8 @@ impl<R> TableData<R> {
     }
 }
 
-
-use std::io::Seek;
 use super::{ColumnId, DataValue};
+use std::io::Seek;
 impl<R> Iterator for TableData<R>
 where
     R: Read + Seek + Debug,
@@ -422,7 +430,13 @@ where
         let col_idx = self.cols_idx[self.col_idx];
 
         match &mut self.state {
-            DataReaderState::HEAP { ty, num_bytes_to_read, n_elems, t_byte_size, .. } => {
+            DataReaderState::HEAP {
+                ty,
+                num_bytes_to_read,
+                n_elems,
+                t_byte_size,
+                ..
+            } => {
                 // We will build an iterator that will parse the variable length array
                 // in the heap
                 // Here, our reader is at the good heap location
@@ -434,64 +448,110 @@ where
                     VariableArrayTy::L => {
                         let value = self.reader.read_u8().ok()? != 0;
                         *num_bytes_to_read -= L::BYTES_SIZE as u64;
-                        DataValue::Logical { value, column: ColumnId::Index(col_idx), idx  }
-                    },
+                        DataValue::Logical {
+                            value,
+                            column: ColumnId::Index(col_idx),
+                            idx,
+                        }
+                    }
                     VariableArrayTy::X => {
                         let byte = self.reader.read_u8().ok()?;
                         *num_bytes_to_read -= X::BYTES_SIZE as u64;
-                        DataValue::Bit { byte, bit_idx: 0, column: ColumnId::Index(col_idx), idx  }
-                    },
+                        DataValue::Bit {
+                            byte,
+                            bit_idx: 0,
+                            column: ColumnId::Index(col_idx),
+                            idx,
+                        }
+                    }
                     VariableArrayTy::B => {
                         let value = self.reader.read_u8().ok()?;
                         *num_bytes_to_read -= B::BYTES_SIZE as u64;
-                        DataValue::UnsignedByte { value, column: ColumnId::Index(col_idx), idx  }
+                        DataValue::UnsignedByte {
+                            value,
+                            column: ColumnId::Index(col_idx),
+                            idx,
+                        }
                     }
                     VariableArrayTy::I => {
                         let value = self.reader.read_i16::<BigEndian>().ok()?;
                         *num_bytes_to_read -= I::BYTES_SIZE as u64;
-                        DataValue::Short { value, column: ColumnId::Index(col_idx), idx  }
+                        DataValue::Short {
+                            value,
+                            column: ColumnId::Index(col_idx),
+                            idx,
+                        }
                     }
                     VariableArrayTy::J => {
                         let value = self.reader.read_i32::<BigEndian>().ok()?;
                         *num_bytes_to_read -= J::BYTES_SIZE as u64;
-                        DataValue::Integer { value, column: ColumnId::Index(col_idx), idx  }
+                        DataValue::Integer {
+                            value,
+                            column: ColumnId::Index(col_idx),
+                            idx,
+                        }
                     }
                     VariableArrayTy::K => {
                         let value = self.reader.read_i64::<BigEndian>().ok()?;
                         *num_bytes_to_read -= K::BYTES_SIZE as u64;
-                        DataValue::Long { value, column: ColumnId::Index(col_idx), idx  }
+                        DataValue::Long {
+                            value,
+                            column: ColumnId::Index(col_idx),
+                            idx,
+                        }
                     }
                     VariableArrayTy::A => {
                         let value = self.reader.read_u8().ok()? as char;
                         *num_bytes_to_read -= A::BYTES_SIZE as u64;
-                        DataValue::Character { value, column: ColumnId::Index(col_idx), idx  }
+                        DataValue::Character {
+                            value,
+                            column: ColumnId::Index(col_idx),
+                            idx,
+                        }
                     }
                     VariableArrayTy::E => {
                         let value = self.reader.read_f32::<BigEndian>().ok()?;
                         *num_bytes_to_read -= E::BYTES_SIZE as u64;
-                        DataValue::Float { value, column: ColumnId::Index(col_idx), idx  }
+                        DataValue::Float {
+                            value,
+                            column: ColumnId::Index(col_idx),
+                            idx,
+                        }
                     }
                     VariableArrayTy::D => {
                         let value = self.reader.read_f64::<BigEndian>().ok()?;
                         *num_bytes_to_read -= D::BYTES_SIZE as u64;
-                        DataValue::Double { value, column: ColumnId::Index(col_idx), idx  }
+                        DataValue::Double {
+                            value,
+                            column: ColumnId::Index(col_idx),
+                            idx,
+                        }
                     }
                     VariableArrayTy::C => {
                         let real = self.reader.read_f32::<BigEndian>().ok()?;
                         let imag = self.reader.read_f32::<BigEndian>().ok()?;
 
                         *num_bytes_to_read -= C::BYTES_SIZE as u64;
-                        DataValue::ComplexFloat { real, imag, column: ColumnId::Index(col_idx), idx  }
+                        DataValue::ComplexFloat {
+                            real,
+                            imag,
+                            column: ColumnId::Index(col_idx),
+                            idx,
+                        }
                     }
                     VariableArrayTy::M => {
                         let real = self.reader.read_f64::<BigEndian>().ok()?;
                         let imag = self.reader.read_f64::<BigEndian>().ok()?;
 
                         *num_bytes_to_read -= M::BYTES_SIZE as u64;
-                        DataValue::ComplexDouble { real, imag, column: ColumnId::Index(col_idx), idx  }
+                        DataValue::ComplexDouble {
+                            real,
+                            imag,
+                            column: ColumnId::Index(col_idx),
+                            idx,
+                        }
                     }
                 };
-
 
                 if *num_bytes_to_read == 0 {
                     // no more bytes to read on the heap.
@@ -502,7 +562,7 @@ where
                 }
 
                 Some(value)
-            },
+            }
             DataReaderState::MainTable => {
                 // Check whether we are at the end of the main data table
                 // This would mean we read all the table
@@ -523,8 +583,12 @@ where
                                 self.seek_to_next_col().ok()?;
                             }
 
-                            Some(DataValue::Logical { value: byte != 0, column: ColumnId::Index(col_idx), idx: self.item_idx - 1 }) // Determine the count idx inside the field
-                        },
+                            Some(DataValue::Logical {
+                                value: byte != 0,
+                                column: ColumnId::Index(col_idx),
+                                idx: self.item_idx - 1,
+                            }) // Determine the count idx inside the field
+                        }
                         // Bit
                         TFormType::X { repeat_count } => {
                             let byte = self.reader.read_u8().ok()?;
@@ -535,8 +599,13 @@ where
                                 self.seek_to_next_col().ok()?;
                             }
 
-                            Some(DataValue::Bit { byte, bit_idx: 0, column: ColumnId::Index(col_idx), idx: self.item_idx - 1 }) // Determine the count idx inside the field
-                        },
+                            Some(DataValue::Bit {
+                                byte,
+                                bit_idx: 0,
+                                column: ColumnId::Index(col_idx),
+                                idx: self.item_idx - 1,
+                            }) // Determine the count idx inside the field
+                        }
                         // Unsigned byte
                         TFormType::B { repeat_count } => {
                             let byte = self.reader.read_u8().ok()?;
@@ -547,121 +616,162 @@ where
                                 self.seek_to_next_col().ok()?;
                             }
 
-                            Some(DataValue::UnsignedByte { value: byte, column: ColumnId::Index(col_idx), idx: self.item_idx - 1 }) // Determine the count idx inside the field
-                        },
+                            Some(DataValue::UnsignedByte {
+                                value: byte,
+                                column: ColumnId::Index(col_idx),
+                                idx: self.item_idx - 1,
+                            }) // Determine the count idx inside the field
+                        }
                         // 16-bit integer
                         TFormType::I { repeat_count } => {
                             let short = self.reader.read_i16::<BigEndian>().ok()?;
                             self.byte_offset += I::BYTES_SIZE;
-        
+
                             self.item_idx += 1;
                             if self.item_idx == *repeat_count {
                                 self.seek_to_next_col().ok()?;
                             }
-        
-                            Some(DataValue::Short { value: short, column: ColumnId::Index(col_idx), idx: self.item_idx - 1 }) // Determine the count idx inside the field
-                        },
+
+                            Some(DataValue::Short {
+                                value: short,
+                                column: ColumnId::Index(col_idx),
+                                idx: self.item_idx - 1,
+                            }) // Determine the count idx inside the field
+                        }
                         // 32-bit integer
                         TFormType::J { repeat_count } => {
                             let int = self.reader.read_i32::<BigEndian>().ok()?;
                             self.byte_offset += J::BYTES_SIZE;
-        
+
                             self.item_idx += 1;
                             if self.item_idx == *repeat_count {
                                 self.seek_to_next_col().ok()?;
                             }
-        
-                            Some(DataValue::Integer { value: int, column: ColumnId::Index(col_idx), idx: self.item_idx - 1 }) // Determine the count idx inside the field
-                        },
+
+                            Some(DataValue::Integer {
+                                value: int,
+                                column: ColumnId::Index(col_idx),
+                                idx: self.item_idx - 1,
+                            }) // Determine the count idx inside the field
+                        }
                         // 64-bit integer
                         TFormType::K { repeat_count } => {
                             let long = self.reader.read_i64::<BigEndian>().ok()?;
                             self.byte_offset += K::BYTES_SIZE;
-        
+
                             self.item_idx += 1;
                             if self.item_idx == *repeat_count {
                                 self.seek_to_next_col().ok()?;
                             }
-        
-                            Some(DataValue::Long { value: long, column: ColumnId::Index(col_idx), idx: self.item_idx - 1 }) // Determine the count idx inside the field
-                        },
+
+                            Some(DataValue::Long {
+                                value: long,
+                                column: ColumnId::Index(col_idx),
+                                idx: self.item_idx - 1,
+                            }) // Determine the count idx inside the field
+                        }
                         // Character
                         TFormType::A { repeat_count } => {
                             let c = self.reader.read_u8().ok()?;
                             self.byte_offset += A::BYTES_SIZE;
-        
+
                             self.item_idx += 1;
                             if self.item_idx == *repeat_count {
                                 self.seek_to_next_col().ok()?;
                             }
-        
-                            Some(DataValue::Character { value: c as char, column: ColumnId::Index(col_idx), idx: self.item_idx - 1 }) // Determine the count idx inside the field
-                        },
+
+                            Some(DataValue::Character {
+                                value: c as char,
+                                column: ColumnId::Index(col_idx),
+                                idx: self.item_idx - 1,
+                            }) // Determine the count idx inside the field
+                        }
                         // Single-precision floating point
                         TFormType::E { repeat_count } => {
                             let float = self.reader.read_f32::<BigEndian>().ok()?;
                             self.byte_offset += E::BYTES_SIZE;
-        
+
                             self.item_idx += 1;
                             if self.item_idx == *repeat_count {
                                 self.seek_to_next_col().ok()?;
                             }
-        
-                            Some(DataValue::Float { value: float, column: ColumnId::Index(col_idx), idx: self.item_idx - 1 }) // Determine the count idx inside the field
-                        },
+
+                            Some(DataValue::Float {
+                                value: float,
+                                column: ColumnId::Index(col_idx),
+                                idx: self.item_idx - 1,
+                            }) // Determine the count idx inside the field
+                        }
                         // Double-precision floating point
                         TFormType::D { repeat_count } => {
                             let double = self.reader.read_f64::<BigEndian>().ok()?;
                             self.byte_offset += D::BYTES_SIZE;
-        
+
                             self.item_idx += 1;
                             if self.item_idx == *repeat_count {
                                 self.seek_to_next_col().ok()?;
                             }
-        
-                            Some(DataValue::Double { value: double, column: ColumnId::Index(col_idx), idx: self.item_idx - 1 }) // Determine the count idx inside the field
-                        },
+
+                            Some(DataValue::Double {
+                                value: double,
+                                column: ColumnId::Index(col_idx),
+                                idx: self.item_idx - 1,
+                            }) // Determine the count idx inside the field
+                        }
                         // Single-precision complex
                         TFormType::C { repeat_count } => {
                             let real = self.reader.read_f32::<BigEndian>().ok()?;
                             let imag = self.reader.read_f32::<BigEndian>().ok()?;
                             self.byte_offset += C::BYTES_SIZE;
-        
+
                             self.item_idx += 1;
                             if self.item_idx == *repeat_count {
                                 self.seek_to_next_col().ok()?;
                             }
-        
-                            Some(DataValue::ComplexFloat { real, imag, column: ColumnId::Index(col_idx), idx: self.item_idx - 1 }) // Determine the count idx inside the field
-                        },
+
+                            Some(DataValue::ComplexFloat {
+                                real,
+                                imag,
+                                column: ColumnId::Index(col_idx),
+                                idx: self.item_idx - 1,
+                            }) // Determine the count idx inside the field
+                        }
                         // Double-precision complex
                         TFormType::M { repeat_count } => {
                             let real = self.reader.read_f64::<BigEndian>().ok()?;
                             let imag = self.reader.read_f64::<BigEndian>().ok()?;
                             self.byte_offset += M::BYTES_SIZE;
-        
+
                             self.item_idx += 1;
                             if self.item_idx == *repeat_count {
                                 self.seek_to_next_col().ok()?;
                             }
-        
-                            Some(DataValue::ComplexDouble { real, imag, column: ColumnId::Index(col_idx), idx: self.item_idx - 1 }) // Determine the count idx inside the field
-                        },
-                        // Array Descriptor (32-bit) 
-                        TFormType::P { ty, t_byte_size, .. } => {
+
+                            Some(DataValue::ComplexDouble {
+                                real,
+                                imag,
+                                column: ColumnId::Index(col_idx),
+                                idx: self.item_idx - 1,
+                            }) // Determine the count idx inside the field
+                        }
+                        // Array Descriptor (32-bit)
+                        TFormType::P {
+                            ty, t_byte_size, ..
+                        } => {
                             let num_elems = self.reader.read_u32::<BigEndian>().ok()?;
                             let offset_byte = self.reader.read_u32::<BigEndian>().ok()?;
-        
+
                             self.byte_offset += P::BYTES_SIZE;
-        
+
                             if self.heap {
                                 self.jump_to_heap(
                                     *ty,
                                     offset_byte as u64,
                                     num_elems as u64,
                                     *t_byte_size,
-                                ).ok()?;
-            
+                                )
+                                .ok()?;
+
                                 self.next()
                             } else {
                                 // We need to seek to the next call if we do not jump to the heap, notifying
@@ -669,24 +779,30 @@ where
                                 self.seek_to_next_col().ok()?;
 
                                 // just returns the n_elems and offset from the iterator
-                                Some(DataValue::VariableLengthArray32 { num_elems, offset_byte })
+                                Some(DataValue::VariableLengthArray32 {
+                                    num_elems,
+                                    offset_byte,
+                                })
                             }
-                        },
-                        // Array Descriptor (64-bit) 
-                        TFormType::Q { ty, t_byte_size, .. } => {
+                        }
+                        // Array Descriptor (64-bit)
+                        TFormType::Q {
+                            ty, t_byte_size, ..
+                        } => {
                             let num_elems = self.reader.read_u64::<BigEndian>().ok()?;
                             let offset_byte = self.reader.read_u64::<BigEndian>().ok()?;
-        
+
                             self.byte_offset += Q::BYTES_SIZE;
-        
+
                             if self.heap {
                                 self.jump_to_heap(
                                     *ty,
                                     offset_byte as u64,
                                     num_elems as u64,
                                     *t_byte_size,
-                                ).ok()?;
-            
+                                )
+                                .ok()?;
+
                                 self.next()
                             } else {
                                 // We need to seek to the next call if we do not jump to the heap, notifying
@@ -694,9 +810,12 @@ where
                                 self.seek_to_next_col().ok()?;
 
                                 // just returns the n_elems and offset from the iterator
-                                Some(DataValue::VariableLengthArray64 { num_elems, offset_byte })
+                                Some(DataValue::VariableLengthArray64 {
+                                    num_elems,
+                                    offset_byte,
+                                })
                             }
-                        },
+                        }
                     }
                 }
             }

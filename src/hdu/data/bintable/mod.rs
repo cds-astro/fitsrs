@@ -1,11 +1,11 @@
 pub mod data;
-pub mod row;
-pub mod rice;
 pub mod dithering;
+pub mod rice;
+pub mod row;
 pub mod tile_compressed;
 
-pub use data::TableData;
 pub use data::BinaryTableData;
+pub use data::TableData;
 pub use row::TableRowData;
 
 use std::fmt::Debug;
@@ -43,12 +43,12 @@ pub enum DataValue {
     },
     /// 'B' => Unsigned Byte
     UnsignedByte {
-         /// The value read
-         value: u8,
-         /// Name of the column
-         column: ColumnId,
-         /// Its position in the column (i.e. when repeat count > 1)
-         idx: usize,
+        /// The value read
+        value: u8,
+        /// Name of the column
+        column: ColumnId,
+        /// Its position in the column (i.e. when repeat count > 1)
+        idx: usize,
     },
     /// 'I' => 16-bit integer
     Short {
@@ -139,5 +139,5 @@ pub enum DataValue {
         num_elems: u64,
         /// The offset byte position from the start of the heap
         offset_byte: u64,
-    }
+    },
 }

@@ -5,22 +5,19 @@ use std::io::Read;
 
 use super::{stream::St, AsyncDataBufRead};
 
-use crate::hdu::header::Header;
+use crate::hdu::data::FitsRead;
 use crate::hdu::header::extension::asciitable::AsciiTable;
 use crate::hdu::header::extension::Xtension;
-use crate::hdu::data::FitsRead;
+use crate::hdu::header::Header;
 
-use std::io::{Take, Bytes};
+use std::io::{Bytes, Take};
 impl<'a, R> FitsRead<'a, AsciiTable> for R
 where
     R: Read + Debug + 'a,
 {
     type Data = Bytes<Take<&'a mut R>>;
 
-    fn read_data_unit(&'a mut self,
-        header: &Header<AsciiTable>,
-        _start_pos: u64
-    ) -> Self::Data {
+    fn read_data_unit(&'a mut self, header: &Header<AsciiTable>, _start_pos: u64) -> Self::Data {
         let limit = header.get_xtension().get_num_bytes_data_block();
 
         self.take(limit).bytes()

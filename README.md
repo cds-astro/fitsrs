@@ -1,5 +1,5 @@
-Fits reader written in pure Rust
---------------------------------
+FITS file reader written in pure Rust
+-------------------------------------
 
 [![](https://img.shields.io/crates/v/fitsrs.svg)](https://crates.io/crates/fitsrs)
 [![](https://img.shields.io/crates/d/fitsrs.svg)](https://crates.io/crates/fitsrs)
@@ -47,6 +47,7 @@ To Do list
     - [X] Dithering techniques for floating point images. Not well tested (test samples are welcome)
     - [ ] `NULL_PIXEL_MASK` column and `ZMASKCMP` keyword is not supported
 * [ ] FITS writer/serializer
+* [ ] ASCII table extension parsing
 * [ ] Tile-compressed in binary table files (https://fits.gsfc.nasa.gov/registry/tilecompression.html). Only RICE and GZIP supported
 * [X] Support of multiple HDU. Image and binary tables extension support. Provide an idiomatic Rust iterator over the list of HDU.
 * [X] WCS parsing, see [wcs-rs](https://github.com/cds-astro/wcs-rs)

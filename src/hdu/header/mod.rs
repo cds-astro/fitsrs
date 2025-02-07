@@ -197,22 +197,21 @@ where
     /// Get the keyword corresponding to a specific value, returns `None` if
     /// no card are found with that value. If multiple cards do have the same value
     /// then the first found card's keyword will be returned.
-    /// 
+    ///
     /// # Params
     /// * `value` - The value of a card
     pub fn get_keyword(&self, val: &Value) -> Option<&str> {
-        self.cards()
-            .find_map(|card| {
-                if let Card::Value { name, value } = card {
-                    if value == val {
-                        Some(name.as_str())
-                    } else {
-                        None
-                    }
+        self.cards().find_map(|card| {
+            if let Card::Value { name, value } = card {
+                if value == val {
+                    Some(name.as_str())
                 } else {
                     None
                 }
-            })
+            } else {
+                None
+            }
+        })
     }
 
     /// Return an iterator over all keywords representing a FITS [Card::Value]

@@ -1,9 +1,9 @@
+use crate::hdu::header::extension::bintable::BinTable;
 use std::fmt::Debug;
 use std::io::{Read, Seek};
-use crate::hdu::header::extension::bintable::BinTable;
 
-use super::DataValue;
 use super::data::TableData;
+use super::DataValue;
 
 #[derive(Debug)]
 pub struct TableRowData<R> {
@@ -13,10 +13,7 @@ pub struct TableRowData<R> {
 
 impl<R> TableRowData<R> {
     pub fn new(data: TableData<R>) -> Self {
-        Self {
-            data,
-            idx_row: 0,
-        }
+        Self { data, idx_row: 0 }
     }
 
     pub fn get_ctx(&self) -> &BinTable {
@@ -33,7 +30,7 @@ impl<R> TableRowData<R> {
 
     /// Get an iterator over the binary table without interpreting its content as
     /// a compressed tile.
-    /// 
+    ///
     /// This can be useful if you want to have access to the raw data because [TableData] has a method
     /// to get its raw_bytes
     pub fn table_data(self) -> TableData<R> {

@@ -29,4 +29,3 @@ mod tests {
         super::random_generator();
     }
 }
-

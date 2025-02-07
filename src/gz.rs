@@ -22,14 +22,14 @@ where
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         match self {
             GzReader::GzReader(r) => r.read(buf),
-            GzReader::Reader(r) => r.read(buf)
+            GzReader::Reader(r) => r.read(buf),
         }
     }
 }
 
 /// Hack. I implement Seek so that for non externally gzipped files
 /// a seek can be done to get to the next hdu.
-/// 
+///
 /// For gzipped file, the data has to be read block by block
 impl<R> Seek for GzReader<R>
 where
@@ -38,7 +38,7 @@ where
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
         match self {
             GzReader::GzReader(r) => r.seek(pos),
-            GzReader::Reader(r) => r.seek(pos)
+            GzReader::Reader(r) => r.seek(pos),
         }
     }
 }
@@ -86,11 +86,11 @@ where
     }
 }
 */
-use std::io::SeekFrom;
 use crate::error::Error;
+use std::io::SeekFrom;
 impl<R> GzReader<R>
 where
-    R: Read + Seek
+    R: Read + Seek,
 {
     /// Open a fits file from a path. Can be gzip-compressed
     pub fn new(reader: R) -> Result<Self, Error> {

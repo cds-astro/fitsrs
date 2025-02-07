@@ -4,9 +4,9 @@ pub mod image;
 pub mod iter;
 pub mod stream;
 
-pub use image::ImageData;
-pub use bintable::TableData;
 pub use bintable::BinaryTableData;
+pub use bintable::TableData;
+pub use image::ImageData;
 
 pub use iter::It;
 
@@ -21,7 +21,7 @@ use std::io::Read;
 pub use stream::DataStream;
 
 /// Special Read trait on top of the std Read trait
-/// 
+///
 /// This defines methods targeted on reading Fits data units
 pub trait FitsRead<'a, X>: Read + Sized
 where
@@ -32,9 +32,9 @@ where
     type Data: Debug + 'a;
 
     /// Read the data unit providing a special iteratior in function of the extension encountered
-    /// 
+    ///
     /// * Params
-    /// 
+    ///
     /// * header - The parsed header of the HDU
     /// * start_pos - Information variable telling at which byte position the data starts
     fn read_data_unit(&'a mut self, header: &Header<X>, start_pos: u64) -> Self::Data

@@ -250,11 +250,8 @@ impl Xtension for BinTable {
                     // FIXME: implement RICE parsing for BYTEPIX != 4
                     let bytepix = 4;
 
-                    Some(ZCmpType::Rice {
-                        blocksize,
-                        bytepix
-                    })
-                },
+                    Some(ZCmpType::Rice { blocksize, bytepix })
+                }
                 "PLI0_1" => Some(ZCmpType::PLI0_1),
                 "HCOMPRESS_1" => Some(ZCmpType::Hcompress1),
                 _ => {
@@ -507,64 +504,70 @@ impl Xtension for BinTable {
             })
             .unzip();
 
-            // Find for a DATA_COMPRESSED named field
-            let find_field_by_ttype = |ttype: &str| -> Option<usize> {
-                ttypes.iter().position(|tt| { 
-                    if let Some(tt) = tt {
-                        tt == ttype
-                    } else {
-                        false
-                    }
-                })
-            };
-
-            let data_compressed_idx = find_field_by_ttype("COMPRESSED_DATA")
-                // Find for a GZIP_DATA_COMPRESSED named field
-                .or(find_field_by_ttype("GZIP_COMPRESSED_DATA"));
-
-            // Fill the headers with these specific tile compressed image keywords
-            let z_image = if let (
-                Some(z_cmp_type),
-                Some(z_bitpix),
-                Some(z_naxis),
-                Some(z_naxisn),
-                Some(z_tilen),
-                Some(data_compressed_idx)
-            ) = (z_cmp_type, z_bitpix, z_naxis, z_naxisn, z_tilen, data_compressed_idx)
-            {
-                // FIXME here we only support GZIP1/GZIP2 and RICE compression
-                // If other compression are found, I disable the zimage 
-                // so that the binary table is considered as normal i.e. it does not follow
-                // the tile compressed convention
-                let tile_compressed = TileCompressedImage {
-                    z_cmp_type,
-                    z_bitpix,
-                    z_naxis: z_naxis as usize,
-                    z_naxisn,
-                    z_tilen,
-                    z_quantiz,
-                    z_dither_0,
-                    data_compressed_idx
-                };
-
-                match (z_cmp_type, z_bitpix) {
-                    (ZCmpType::Hcompress1, _) => {
-                        warn!("Hcompress compression not supported");
-                        None
-                    },
-                    (ZCmpType::PLI0_1, _) => {
-                        warn!("PLI0_1 compression not supported");
-                        None
-                    },
-                    (_, Bitpix::F64) | (_, Bitpix::I64) => {
-                        warn!("Only bitpix u8, i16, i32 and f32 are supported");
-                        None
-                    },
-                    _ => Some(tile_compressed)
+        // Find for a DATA_COMPRESSED named field
+        let find_field_by_ttype = |ttype: &str| -> Option<usize> {
+            ttypes.iter().position(|tt| {
+                if let Some(tt) = tt {
+                    tt == ttype
+                } else {
+                    false
                 }
-            } else {
-                None
+            })
+        };
+
+        let data_compressed_idx = find_field_by_ttype("COMPRESSED_DATA")
+            // Find for a GZIP_DATA_COMPRESSED named field
+            .or(find_field_by_ttype("GZIP_COMPRESSED_DATA"));
+
+        // Fill the headers with these specific tile compressed image keywords
+        let z_image = if let (
+            Some(z_cmp_type),
+            Some(z_bitpix),
+            Some(z_naxis),
+            Some(z_naxisn),
+            Some(z_tilen),
+            Some(data_compressed_idx),
+        ) = (
+            z_cmp_type,
+            z_bitpix,
+            z_naxis,
+            z_naxisn,
+            z_tilen,
+            data_compressed_idx,
+        ) {
+            // FIXME here we only support GZIP1/GZIP2 and RICE compression
+            // If other compression are found, I disable the zimage
+            // so that the binary table is considered as normal i.e. it does not follow
+            // the tile compressed convention
+            let tile_compressed = TileCompressedImage {
+                z_cmp_type,
+                z_bitpix,
+                z_naxis: z_naxis as usize,
+                z_naxisn,
+                z_tilen,
+                z_quantiz,
+                z_dither_0,
+                data_compressed_idx,
             };
+
+            match (z_cmp_type, z_bitpix) {
+                (ZCmpType::Hcompress1, _) => {
+                    warn!("Hcompress compression not supported");
+                    None
+                }
+                (ZCmpType::PLI0_1, _) => {
+                    warn!("PLI0_1 compression not supported");
+                    None
+                }
+                (_, Bitpix::F64) | (_, Bitpix::I64) => {
+                    warn!("Only bitpix u8, i16, i32 and f32 are supported");
+                    None
+                }
+                _ => Some(tile_compressed),
+            }
+        } else {
+            None
+        };
 
         // update the value of theap if found
         let theap = if let Some(Value::Integer { value, .. }) = values.get("THEAP") {

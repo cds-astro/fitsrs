@@ -1,5 +1,5 @@
-use std::io::Read;
 use std::fmt::Debug;
+use std::io::Read;
 
 use byteorder::BigEndian;
 use serde::Serialize;
@@ -42,7 +42,7 @@ impl Value for f64 {
 }
 
 /// An iterator over the data.
-/// 
+///
 /// Values are read and interpreted as the FITS standard big endian
 /// byte order.
 #[derive(Debug, Serialize)]
@@ -54,12 +54,12 @@ pub struct It<R, T> {
     /// Number of item read
     cur_idx: usize,
     /// The type of element read from the reader
-    _t: std::marker::PhantomData<T>
+    _t: std::marker::PhantomData<T>,
 }
 
 impl<R> It<R, u8>
 where
-    R: AsRef<[u8]>
+    R: AsRef<[u8]>,
 {
     pub fn bytes(&self) -> &[u8] {
         self.reader.as_ref()
@@ -68,7 +68,7 @@ where
 
 impl<'a, R, T> It<R, T>
 where
-    R: Read
+    R: Read,
 {
     pub fn new(reader: R, limit: u64) -> Self {
         let num_items = limit as usize / std::mem::size_of::<T>();
@@ -85,7 +85,7 @@ where
 impl<'a, R, T> Iterator for It<R, T>
 where
     R: Read,
-    T: Value
+    T: Value,
 {
     type Item = T;
 
@@ -105,10 +105,10 @@ use std::io::Seek;
 impl<'a, R, T> It<R, T>
 where
     R: Read + Seek,
-    T: Value
+    T: Value,
 {
     /// Returns the value of the item from a data iterator
-    /// 
+    ///
     /// This internally perform a seek on the inner reader to directly
     /// targets and read the value
     /// This should be faster than reading the whole stream until the idx
