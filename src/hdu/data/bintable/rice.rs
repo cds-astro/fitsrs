@@ -1,6 +1,6 @@
 //! This code is a port in Rust of CFITSIO's ricecomp.c
 //!
-//! The original code can be found here: https://github.com/HEASARC/cfitsio/blob/develop/ricecomp.c#L1
+//! The original code can be found here: <https://github.com/HEASARC/cfitsio/blob/develop/ricecomp.c#L1>
 //! The port tends to provide a rust idiomatic RICE decoder reader that can operate on top of
 //! another reader coming for example from a web stream, a file, a memory-map.
 

@@ -12,23 +12,32 @@ pub struct TableRowData<R> {
 }
 
 impl<R> TableRowData<R> {
-    pub(crate) fn new(data: TableData<R>) -> Self {
+    pub fn new(data: TableData<R>) -> Self {
         Self {
             data,
             idx_row: 0,
         }
     }
 
-    pub(crate) fn get_ctx(&self) -> &BinTable {
+    pub fn get_ctx(&self) -> &BinTable {
         self.data.get_ctx()
     }
 
-    pub(crate) fn get_row_idx(&self) -> usize {
+    pub fn get_row_idx(&self) -> usize {
         self.idx_row
     }
 
     pub(crate) fn get_reader(&mut self) -> &mut R {
         self.data.get_reader()
+    }
+
+    /// Get an iterator over the binary table without interpreting its content as
+    /// a compressed tile.
+    /// 
+    /// This can be useful if you want to have access to the raw data because [TableData] has a method
+    /// to get its raw_bytes
+    pub fn table_data(self) -> TableData<R> {
+        self.data
     }
 }
 

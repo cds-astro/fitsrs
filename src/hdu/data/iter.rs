@@ -41,8 +41,12 @@ impl Value for f64 {
     }
 }
 
+/// An iterator over the data.
+/// 
+/// Values are read and interpreted as the FITS standard big endian
+/// byte order.
 #[derive(Debug, Serialize)]
-pub struct BigEndianIt<R, T> {
+pub struct It<R, T> {
     /// The reader
     reader: R,
     /// The number of items the reader must read
@@ -53,7 +57,7 @@ pub struct BigEndianIt<R, T> {
     _t: std::marker::PhantomData<T>
 }
 
-impl<R> BigEndianIt<R, u8>
+impl<R> It<R, u8>
 where
     R: AsRef<[u8]>
 {
@@ -62,7 +66,7 @@ where
     }
 }
 
-impl<'a, R, T> BigEndianIt<R, T>
+impl<'a, R, T> It<R, T>
 where
     R: Read
 {
@@ -78,7 +82,7 @@ where
     }
 }
 
-impl<'a, R, T> Iterator for BigEndianIt<R, T>
+impl<'a, R, T> Iterator for It<R, T>
 where
     R: Read,
     T: Value
@@ -98,7 +102,7 @@ where
 }
 
 use std::io::Seek;
-impl<'a, R, T> BigEndianIt<R, T>
+impl<'a, R, T> It<R, T>
 where
     R: Read + Seek,
     T: Value

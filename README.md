@@ -10,7 +10,7 @@ This crate is under development, it was initiated for reading FITS images mapped
 
 Currently, fitsrs supports reading multiple HDU and is mainly dedicated to image extension reading.
 For interpreting WCS keywords, see [wcs-rs](https://github.com/cds-astro/wcs-rs).
-A very new support of binary table extension has been added. This has been done mainly for supporting the Tile-Compressed Image convention that stores tile images inside variable length arrays of a binary table.
+A very new support of binary table extension has been added. This has been done mainly for supporting the tiled image convention for storing compressed images in binary tables. This stores tile images inside variable length arrays of a binary table.
 The ASCII table extension parsing has not been implemented but it is possible to get an iterator over the data bytes as well as its mandatory cards from the header.
 
 Contributing
@@ -38,12 +38,22 @@ To Do list
 * [X] Single HDU parsing, header and data units 
 * [X] Support FITS files that may not fit in memory (iterator, possibility to seek directly to a specific pixel index/row)
 * [X] Async reading (requires to read the whole data. Seeking is not possible)
-* [X] Parse and keep CARD comment.
+* [X] Parsing of comments, history, continued, cards.
 * [X] Keep all the cards in the original order
-* [ ] Write a FITS file
+* [X] Basic support of Bintable
+* [X] Tiled image convention for storing compressed images in FITS binary tables
+    - [X] Compression supported, GZIP, GZIP2 and RICE on u8, i16, i32 and f32.
+    - [ ] H_compress and PLI0 are not supported
+    - [X] Dithering techniques for floating point images. Not well tested (test samples are welcome)
+    - [ ] `NULL_PIXEL_MASK` column and `ZMASKCMP` keyword is not supported
+* [ ] FITS writer/serializer
 * [ ] Tile-compressed in binary table files (https://fits.gsfc.nasa.gov/registry/tilecompression.html). Only RICE and GZIP supported
-* [X] Support of multiple HDU. Image and binary tables extension support.
-* [ ] WCS parsing, see [wcs-rs](https://github.com/cds-astro/wcs-rs)
+* [X] Support of multiple HDU. Image and binary tables extension support. Provide an idiomatic Rust iterator over the list of HDU.
+* [X] WCS parsing, see [wcs-rs](https://github.com/cds-astro/wcs-rs)
+
+> [!WARNING]
+> Features not done are not planned to be done. A work for supporting them can be done only if people have use cases for those i.e. it is only at user's requests. The FITS standard and its conventions are massive and it is a huge work to support all the cases and sub cases.
+
 
 License
 -------

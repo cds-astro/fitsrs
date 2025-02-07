@@ -1,4 +1,4 @@
-const N_RANDOM: usize = 10000;
+pub(crate) const N_RANDOM: usize = 10000;
 
 /// Random generator given in annexe of the
 /// Tiles Image Convention for Storing Compressed Images in FITS Binary Tables

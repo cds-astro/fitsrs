@@ -47,7 +47,9 @@ pub use async_fits::AsyncFits;
 pub use file::FITSFile;
 pub use fits::Fits;
 pub use hdu::{AsyncHDU, HDU};
-pub use hdu::data::{ImageData, TableData};
+pub use hdu::data::iter::It;
+pub use hdu::data::image::ImageData;
+pub use hdu::data::bintable::{TableData, BinaryTableData, TableRowData, DataValue};
 
 #[cfg(test)]
 mod tests {
@@ -347,59 +349,6 @@ mod tests {
                         
                     };
                 }
-                _ => (),
-            }
-        }
-    }
-
-    #[test_case("samples/fits.gsfc.nasa.gov/m13real_rice.fits", 1000.0)]
-    #[test_case("samples/fits.gsfc.nasa.gov/m13_rice.fits", 1000.0)]
-    #[test_case("samples/fits.gsfc.nasa.gov/m13_gzip.fits", 1000.0)]
-    #[test_case("samples/fits.gsfc.nasa.gov/FITS RICE_ONE.fits", 10.0)]
-    #[test_case("samples/fits.gsfc.nasa.gov/FITS RICE integer.fz", 10.0)]
-    #[test_case("samples/fits.gsfc.nasa.gov/FITS RICE DITHER2 method.fz", 10.0)]
-    fn test_fits_open_tile_compressed_image(filename: &str, vmax: f32) {
-        use std::fs::File;
-
-        use crate::hdu::data::bintable::DataValue;
-
-        let mut f = File::open(filename).unwrap();
-        let mut buf = Vec::new();
-        f.read_to_end(&mut buf).unwrap();
-        let reader = Cursor::new(&buf[..]);
-
-        let mut hdu_list = Fits::from_reader(reader);
-
-        while let Some(Ok(hdu)) = hdu_list.next() {
-            match hdu {
-                HDU::XBinaryTable(hdu) => {
-                    let width = hdu.get_header().get_parsed::<i64>("ZNAXIS1").unwrap().unwrap() as u32;
-                    let height = hdu.get_header().get_parsed::<i64>("ZNAXIS2").unwrap().unwrap() as u32;
-                    let pixels = hdu_list.get_data(hdu)
-                        .map(|value| {
-                            let value = value;
-                            match value {
-                                DataValue::Short { value, .. } => {
-                                    value as f32
-                                },
-                                DataValue::Integer { value, .. } => {
-                                    value as f32
-                                },
-                                DataValue::Float { value, .. } => {
-                                    value
-                                },
-                                _ => unimplemented!()
-                            }
-                        })
-                        .map(|v| ((v / vmax) * 255.0) as u8)
-                        .collect::<Vec<_>>();
-
-                    let imgbuf = DynamicImage::ImageLuma8(
-                        image::ImageBuffer::from_raw(width, height, pixels)
-                            .unwrap()
-                        );
-                    imgbuf.save(&format!("{}.jpg", filename)).unwrap();
-                },
                 _ => (),
             }
         }

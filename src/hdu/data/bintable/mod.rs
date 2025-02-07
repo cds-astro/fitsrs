@@ -5,6 +5,8 @@ pub mod dithering;
 pub mod tile_compressed;
 
 pub use data::TableData;
+pub use data::BinaryTableData;
+pub use row::TableRowData;
 
 use std::fmt::Debug;
 

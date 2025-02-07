@@ -1,7 +1,7 @@
 //pub use super::Access;
 //use super::DataAsyncBufRead;
 
-use crate::hdu::data::iter::BigEndianIt;
+use crate::hdu::data::iter::It;
 use crate::hdu::header::{Header, Bitpix, Xtension};
 use async_trait::async_trait;
 use futures::AsyncReadExt;
@@ -74,12 +74,12 @@ where
 /// a file may not fit in memory
 #[derive(Serialize, Debug)]
 pub enum ImageData<R> {
-    U8(BigEndianIt<R, u8>),
-    I16(BigEndianIt<R, i16>),
-    I32(BigEndianIt<R, i32>),
-    I64(BigEndianIt<R, i64>),
-    F32(BigEndianIt<R, f32>),
-    F64(BigEndianIt<R, f64>),
+    U8(It<R, u8>),
+    I16(It<R, i16>),
+    I32(It<R, i32>),
+    I64(It<R, i64>),
+    F32(It<R, f32>),
+    F64(It<R, f64>),
 }
 
 impl<R> ImageData<R>
@@ -93,12 +93,12 @@ where
         let limit = ctx.get_num_bytes_data_block();
 
         match ctx.get_bitpix() {
-            Bitpix::U8 => ImageData::U8(BigEndianIt::new(reader, limit)),
-            Bitpix::I16 => ImageData::I16(BigEndianIt::new(reader, limit)),
-            Bitpix::I32 => ImageData::I32(BigEndianIt::new(reader, limit)),
-            Bitpix::I64 => ImageData::I64(BigEndianIt::new(reader, limit)),
-            Bitpix::F32 => ImageData::F32(BigEndianIt::new(reader, limit)),
-            Bitpix::F64 => ImageData::F64(BigEndianIt::new(reader, limit)),
+            Bitpix::U8 => ImageData::U8(It::new(reader, limit)),
+            Bitpix::I16 => ImageData::I16(It::new(reader, limit)),
+            Bitpix::I32 => ImageData::I32(It::new(reader, limit)),
+            Bitpix::I64 => ImageData::I64(It::new(reader, limit)),
+            Bitpix::F32 => ImageData::F32(It::new(reader, limit)),
+            Bitpix::F64 => ImageData::F64(It::new(reader, limit)),
         }
     }
 }

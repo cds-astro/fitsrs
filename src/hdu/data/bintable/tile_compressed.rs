@@ -1,7 +1,7 @@
 use flate2::read::GzDecoder;
 
 use super::data::TableData;
-use super::dithering::RAND_VALUES;
+use super::dithering::{RAND_VALUES, N_RANDOM};
 use super::rice::RICEDecoder;
 use crate::card::Value;
 use crate::error::Error;
@@ -56,6 +56,36 @@ struct TileCompressed {
     remaining_pixels: u64,
     /// Quantiz parameters
     quantiz: Quantiz
+}
+
+impl TileCompressed {
+    /// Unquantize the integer decoded value to the real floating point value
+    fn unquantize(&mut self, value: i32) -> f32 {
+        match &mut self.quantiz {
+            Quantiz::NoDither => (value as f32) * self.z_scale + self.z_zero,
+            Quantiz::SubtractiveDither1 { i1 } => {
+                let ri = RAND_VALUES[*i1];
+                // increment i1 for the next pixel
+                *i1 = (*i1 + 1) % N_RANDOM;
+
+                ((value as f32) - ri + 0.5) * self.z_scale + self.z_zero
+            },
+            Quantiz::SubtractiveDither2 { i1 } => {
+                // FIXME: i32::MIN is -2147483648 !
+                if value == -2147483647 {
+                    *i1 = (*i1 + 1) % N_RANDOM;
+
+                    0.0
+                } else {
+                    let ri = RAND_VALUES[*i1];
+                    // increment i1 for the next pixel
+                    *i1 = (*i1 + 1) % N_RANDOM;
+
+                    ((value as f32) - ri + 0.5) * self.z_scale + self.z_zero
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -128,10 +158,7 @@ impl<R> TileCompressedData<R> {
     }
 }
 
-impl<R> TileCompressedData<R>
-where
-    R: Debug + Read
-{
+impl<R> TileCompressedData<R> {
     pub(crate) fn new(header: &Header<BinTable>, mut data: TableData<R>, config: &TileCompressedImage) -> Self {
         // This buffer is only used if tile compressed image in the gzip compression is to be found
         let mut buf = vec![];
@@ -217,6 +244,15 @@ where
             z_quantiz: z_quantiz.clone()
         }
     }
+
+    /// Get an iterator over the binary table without interpreting its content as
+    /// a compressed tile.
+    /// 
+    /// This can be useful if you want to have access to the raw data because [TableData] has a method
+    /// to get its raw_bytes
+    pub fn table_data(self) -> TableData<R> {
+        self.row_it.table_data()
+    }
 }
 
 use super::{DataValue, ColumnId};
@@ -249,18 +285,22 @@ where
             self.tile.n_pixels = num_pixels;
             self.tile.remaining_pixels = num_pixels;
             self.tile.quantiz = match (&self.z_quantiz, self.z_dither_0) {
-                (Some(ZQuantiz::NoDither), _) => Quantiz::NoDither,
+                (Some(ZQuantiz::NoDither), _) => {
+                    Quantiz::NoDither
+                },
                 (Some(ZQuantiz::SubtractiveDither1), Some(zdither0)) => {
                     let i0 = (row_idx - 1 + (zdither0 as usize)) % 10000;
-                    let i1 = (RAND_VALUES[i0] * 500.0) as usize;
+                    let i1 = (RAND_VALUES[i0] * 500.0).floor() as usize;
                     Quantiz::SubtractiveDither1 { i1 }
                 },
                 (Some(ZQuantiz::SubtractiveDither2), Some(zdither0)) => {
                     let i0 = (row_idx - 1 + (zdither0 as usize)) % 10000;
-                    let i1 = (RAND_VALUES[i0] * 500.0) as usize;
+                    let i1 = (RAND_VALUES[i0] * 500.0).floor() as usize;
                     Quantiz::SubtractiveDither2 { i1 }
                 },
-                _ => Quantiz::NoDither
+                _ => {
+                    Quantiz::NoDither
+                }
             };
 
             self.tile.z_scale = if let Some(idx) = self.z_scale_idx {
@@ -366,31 +406,7 @@ where
                 // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
                 let off = 4 * idx;
                 let value = i32::from_be_bytes([self.buf[off], self.buf[off + 1], self.buf[off + 2], self.buf[off + 3]]);
-
-                let value = match &mut self.tile.quantiz {
-                    Quantiz::NoDither => (value as f32) * self.tile.z_scale + self.tile.z_zero,
-                    Quantiz::SubtractiveDither1 { i1 } => {
-                        let ri = RAND_VALUES[*i1];
-                        // increment i1 for the next pixel
-                        *i1 = (*i1 + 1) % 10000;
-
-                        ((value as f32) - ri + 0.5) * self.tile.z_scale + self.tile.z_zero
-                    },
-                    Quantiz::SubtractiveDither2 { i1 } => {
-                        // FIXME: i32::MIN is -2147483648 !
-                        if value <= -2147483647 {
-                            *i1 = (*i1 + 1) % 10000;
-
-                            0.0
-                        } else {
-                            let ri = RAND_VALUES[*i1];
-                            // increment i1 for the next pixel
-                            *i1 = (*i1 + 1) % 10000;
-
-                            ((value as f32) - ri + 0.5) * self.tile.z_scale + self.tile.z_zero
-                        }
-                    }
-                };
+                let value = self.tile.unquantize(value);
 
                 DataValue::Float { value, column, idx }
             }
@@ -430,30 +446,7 @@ where
                     ((self.buf[idx + 2 * step_msb] as i32) << 8) |
                     (self.buf[idx + 3 * step_msb] as i32);
 
-                let value = match &mut self.tile.quantiz {
-                    Quantiz::NoDither => (value as f32) * self.tile.z_scale + self.tile.z_zero,
-                    Quantiz::SubtractiveDither1 { i1 } => {
-                        let ri = RAND_VALUES[*i1];
-                        // increment i1 for the next pixel
-                        *i1 = (*i1 + 1) % 10000;
-
-                        ((value as f32) - ri + 0.5) * self.tile.z_scale + self.tile.z_zero
-                    },
-                    Quantiz::SubtractiveDither2 { i1 } => {
-                        // FIXME: i32::MIN is -2147483648 !
-                        if value <= -2147483647 {
-                            *i1 = (*i1 + 1) % 10000;
-
-                            0.0
-                        } else {
-                            let ri = RAND_VALUES[*i1];
-                            // increment i1 for the next pixel
-                            *i1 = (*i1 + 1) % 10000;
-
-                            ((value as f32) - ri + 0.5) * self.tile.z_scale + self.tile.z_zero
-                        }
-                    }
-                };
+                let value = self.tile.unquantize(value);
 
                 DataValue::Float { value, column, idx }
             }
@@ -485,30 +478,7 @@ where
                 let off = 4 * idx;
                 let value = i32::from_ne_bytes([self.buf[off], self.buf[off + 1], self.buf[off + 2], self.buf[off + 3]]);
 
-                let value = match &mut self.tile.quantiz {
-                    Quantiz::NoDither => (value as f32) * self.tile.z_scale + self.tile.z_zero,
-                    Quantiz::SubtractiveDither1 { i1 } => {
-                        let ri = RAND_VALUES[*i1];
-                        // increment i1 for the next pixel
-                        *i1 = (*i1 + 1) % 10000;
-
-                        ((value as f32) - ri + 0.5) * self.tile.z_scale + self.tile.z_zero
-                    },
-                    Quantiz::SubtractiveDither2 { i1 } => {
-                        // FIXME: i32::MIN is -2147483648 !
-                        if value <= -2147483647 {
-                            *i1 = (*i1 + 1) % 10000;
-
-                            0.0
-                        } else {
-                            let ri = RAND_VALUES[*i1];
-                            // increment i1 for the next pixel
-                            *i1 = (*i1 + 1) % 10000;
-
-                            ((value as f32) - ri + 0.5) * self.tile.z_scale + self.tile.z_zero
-                        }
-                    }
-                };
+                let value = self.tile.unquantize(value);
 
                 DataValue::Float { value, column, idx }
             }
@@ -540,7 +510,16 @@ where
     }
 }
 
+#[cfg(test)]
 mod tests {
+    use std::io::{Cursor, Read};
+
+    use image::DynamicImage;
+    use test_case::test_case;
+
+
+    use crate::{Fits, HDU};
+
     #[test]
     fn test_tile_size_from_row_idx() {
         let ground_truth = [
@@ -585,6 +564,158 @@ mod tests {
         for i in 0..ground_truth.len() {
             let tile_s = tile_size_from_row_idx(&[300, 200, 150], &[1000, 500, 350], i);
             assert_eq!([tile_s[0], tile_s[1], tile_s[2]], ground_truth[i]);
+        }
+    }
+
+    #[test_case("samples/fits.gsfc.nasa.gov/m13real_rice.fits", 1000.0)]
+    #[test_case("samples/fits.gsfc.nasa.gov/m13_rice.fits", 1000.0)]
+    #[test_case("samples/fits.gsfc.nasa.gov/m13_gzip.fits", 1000.0)]
+    fn test_fits_without_dithering(filename: &str, vmax: f32) {
+        use std::fs::File;
+
+        use crate::hdu::data::bintable::DataValue;
+
+        let mut f = File::open(filename).unwrap();
+        let mut buf = Vec::new();
+        f.read_to_end(&mut buf).unwrap();
+        let reader = Cursor::new(&buf[..]);
+
+        let mut hdu_list = Fits::from_reader(reader);
+
+        while let Some(Ok(hdu)) = hdu_list.next() {
+            match hdu {
+                HDU::XBinaryTable(hdu) => {
+                    let width = hdu.get_header().get_parsed::<i64>("ZNAXIS1").unwrap().unwrap() as u32;
+                    let height = hdu.get_header().get_parsed::<i64>("ZNAXIS2").unwrap().unwrap() as u32;
+                    let pixels = hdu_list.get_data(hdu)
+                        .map(|value| {
+                            let value = value;
+                            match value {
+                                DataValue::Short { value, .. } => value as f32,
+                                DataValue::Integer { value, .. } => value as f32,
+                                DataValue::Float { value, .. } => value,
+                                _ => unimplemented!()
+                            }
+                        })
+                        .map(|v| ((v / vmax) * 255.0) as u8)
+                        .collect::<Vec<_>>();
+
+                    let imgbuf = DynamicImage::ImageLuma8(
+                        image::ImageBuffer::from_raw(width, height, pixels)
+                            .unwrap()
+                        );
+                    imgbuf.save(&format!("{}.jpg", filename)).unwrap();
+                },
+                _ => (),
+            }
+        }
+    }
+
+    #[test_case("samples/fits.gsfc.nasa.gov/FITS RICE integer.fz")]
+    fn test_fits_rice_integer(filename: &str) {
+        use std::fs::File;
+
+        use crate::hdu::data::bintable::DataValue;
+
+        let mut f = File::open(filename).unwrap();
+        let mut buf = Vec::new();
+        f.read_to_end(&mut buf).unwrap();
+        let reader = Cursor::new(&buf[..]);
+
+        let mut hdu_list = Fits::from_reader(reader);
+
+        while let Some(Ok(hdu)) = hdu_list.next() {
+            match hdu {
+                HDU::XBinaryTable(hdu) => {
+                    let width = hdu.get_header().get_parsed::<i64>("ZNAXIS1").unwrap().unwrap() as u32;
+                    let height = hdu.get_header().get_parsed::<i64>("ZNAXIS2").unwrap().unwrap() as u32;
+                    let bscale = hdu.get_header().get_parsed::<f64>("BSCALE").unwrap().unwrap() as f32;
+                    let bzero = hdu.get_header().get_parsed::<f64>("BZERO").unwrap().unwrap() as f32;
+
+                    let pixels = hdu_list.get_data(hdu)
+                        .map(|value| {
+                            let value = value;
+                            match value {
+                                DataValue::Short { value, .. } => value as f32,
+                                DataValue::Integer { value, .. } => value as f32,
+                                DataValue::Float { value, .. } => value,
+                                _ => unimplemented!()
+                            }
+                        })
+                        .map(|v| (((v * bscale + bzero) / 100.0) * 255.0) as u8)
+                        .collect::<Vec<_>>();
+
+                    let imgbuf = DynamicImage::ImageLuma8(
+                        image::ImageBuffer::from_raw(width, height, pixels)
+                            .unwrap()
+                        );
+                    imgbuf.save(&format!("{}.jpg", filename)).unwrap();
+                },
+                _ => (),
+            }
+        }
+    }
+
+    //#[test_case("samples/fits.gsfc.nasa.gov/FITS RICE_ONE.fits")]
+    #[test_case("samples/fits.gsfc.nasa.gov/FITS RICE DITHER2 method.fz")]
+    fn test_fits_f32_with_dithering(filename: &str) {
+        use std::fs::File;
+
+        use crate::hdu::data::bintable::DataValue;
+
+        let mut f = File::open(filename).unwrap();
+        let mut buf = Vec::new();
+        f.read_to_end(&mut buf).unwrap();
+        let reader = Cursor::new(&buf[..]);
+
+        let mut hdu_list = Fits::from_reader(reader);
+
+        while let Some(Ok(hdu)) = hdu_list.next() {
+            match hdu {
+                HDU::XBinaryTable(hdu) => {
+                    let width = hdu.get_header().get_parsed::<i64>("ZNAXIS1").unwrap().unwrap() as u32;
+                    let height = hdu.get_header().get_parsed::<i64>("ZNAXIS2").unwrap().unwrap() as u32;
+
+                    let mut buf = vec![0_u8; (width as usize) * (height as usize)];
+
+                    let tile_w = 100;
+                    let tile_h = 100;
+                    let num_tile_per_w = width / tile_w;
+
+                    for (i, pixel) in hdu_list.get_data(hdu)
+                        .map(|value| {
+                            let value = value;
+                            match value {
+                                DataValue::Short { value, .. } => value as f32,
+                                DataValue::Integer { value, .. } => value as f32,
+                                DataValue::Float { value, .. } => value,
+                                _ => unimplemented!()
+                            }
+                        })
+                        .map(|v| (v * 255.0) as u8).enumerate() {
+
+                        let tile_idx = (i as u64) / ((tile_w * tile_h) as u64);
+                        let x_tile_idx = tile_idx % (num_tile_per_w as u64); 
+                        let y_tile_idx = tile_idx / (num_tile_per_w as u64);
+
+                        let pixel_inside_tile_idx = (i as u64) % ((tile_w * tile_h) as u64);
+                        let x_pixel_inside_tile_idx = pixel_inside_tile_idx % (tile_w as u64);
+                        let y_pixel_inside_tile_idx = pixel_inside_tile_idx / (tile_w as u64);
+
+                        let x = x_tile_idx * (tile_w as u64) + x_pixel_inside_tile_idx;
+                        let y = y_tile_idx * (tile_h as u64) + y_pixel_inside_tile_idx;
+
+                        buf[(y * (width as u64) + x) as usize] = pixel;
+                    }
+
+                    let imgbuf = DynamicImage::ImageLuma8(
+                        image::ImageBuffer::from_raw(width, height, buf)
+                            .unwrap()
+                        );
+                    imgbuf.save(&format!("{}.jpg", filename)).unwrap();
+                },
+                _ => (),
+            }
         }
     }
 }

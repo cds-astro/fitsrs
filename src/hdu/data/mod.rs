@@ -6,6 +6,9 @@ pub mod stream;
 
 pub use image::ImageData;
 pub use bintable::TableData;
+pub use bintable::BinaryTableData;
+
+pub use iter::It;
 
 use std::fmt::Debug;
 

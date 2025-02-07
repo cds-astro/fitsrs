@@ -134,7 +134,7 @@ impl Bitpix {
     }
 }
 
-/// The header part of an [HDU].
+/// The header part of an [crate::hdu::HDU].
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct Header<X> {
     /// All cards in the order they appear in the header.
