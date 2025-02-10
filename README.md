@@ -38,22 +38,26 @@ Features
 * [X] Single HDU parsing, header and data units 
 * [X] Support FITS files that may not fit in memory (iterator, possibility to seek directly to a specific pixel index/row)
 * [X] Async reading (requires to read the whole data. Seeking is not possible)
-* [X] Parsing of comments, history, continued, cards.
+* [X] Keeping COMMENTS, HISTORY and cards in the same order.
+* [X] CONTINUE Long String Keyword convention
 * [X] Keep all the cards in the original order
 * [X] Basic support of Bintable
 * [X] Tiled image convention for storing compressed images in FITS binary tables
     - [X] Compression supported, GZIP, GZIP2 and RICE on u8, i16, i32 and f32.
-    - [ ] H_compress and PLI0 are not supported
+    - [ ] H_compress and PLI0 compressions
     - [X] Dithering techniques for floating point images. Not well tested (test samples are welcome)
     - [ ] `NULL_PIXEL_MASK` column and `ZMASKCMP` keyword is not supported
 * [ ] FITS writer/serializer
+* [ ] ESO HIERARCH keyword convention
 * [ ] ASCII table extension parsing
 * [ ] Tile-compressed in binary table files (https://fits.gsfc.nasa.gov/registry/tilecompression.html). Only RICE and GZIP supported
 * [X] Support of multiple HDU. Image and binary tables extension support. Provide an idiomatic Rust iterator over the list of HDU.
 * [X] WCS parsing, see [wcs-rs](https://github.com/cds-astro/wcs-rs)
+    - [X] Simple Imaging Polynomial (SIP) supported but not well tested
+    - [ ] TNX, TPV, ZPX (non-standard conventions)
 
 > [!WARNING]
-> Features not done are not planned to be done. A work for supporting them can be done only if people have use cases for those i.e. it is only at user's requests. The FITS standard and its conventions are massive and it is a huge work to support all the cases and sub cases.
+> Features not done are not planned to be done. If you want fitsrs to support a specific convention, please open an issue or send us a mail to inform us of your use case(s) and we can manage to support them. The FITS standard and its conventions are massive and it is a huge work to support all of it.
 
 
 License
