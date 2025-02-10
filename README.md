@@ -56,7 +56,7 @@ Features
     - [X] Simple Imaging Polynomial (SIP) supported but not well tested
     - [ ] TNX, TPV, ZPX (non-standard conventions)
 
-> [!WARNING]
+> [!NOTE]
 > Features not done are not planned to be done. If you want fitsrs to support a specific convention, please open an issue or send us a mail to inform us of your use case(s) and we can manage to support them. The FITS standard and its conventions are massive and it is a huge work to support all of it.
 
 
