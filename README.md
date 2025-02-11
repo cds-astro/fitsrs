@@ -6,11 +6,11 @@ FITS file reader written in pure Rust
 [![API Documentation on docs.rs](https://docs.rs/fitsrs/badge.svg)](https://docs.rs/fitsrs/)
 ![testing CI](https://github.com/cds-astro/fitsrs/actions/workflows/rust.yml/badge.svg)
 
-This crate is under development, it was initiated for reading FITS images mapped onto HEALPix cell in the sky (See the [HiPS IVOA](https://www.ivoa.net/documents/HiPS/) standard) for using inside the [Aladin Lite](https://github.com/cds-astro/aladin-lite) web sky atlas.
+This parser was initiated for reading FITS images mapped onto HEALPix cells in the sky (See the [HiPS IVOA](https://www.ivoa.net/documents/HiPS/) standard) in order to use it in the [Aladin Lite](https://github.com/cds-astro/aladin-lite) web sky atlas.
 
 Currently, fitsrs supports reading multiple HDU and is mainly dedicated to image extension reading.
 For interpreting WCS keywords, see [wcs-rs](https://github.com/cds-astro/wcs-rs).
-A very new support of binary table extension has been added. This has been done mainly for supporting the tiled image convention for storing compressed images in binary tables. This stores tile images inside variable length arrays of a binary table.
+A very new support of binary table extension has been added. This has been done mainly for supporting the [tiled compressed image convention](https://fits.gsfc.nasa.gov/registry/tilecompression.html) that describes the storing of tile images in variable length arrays of a binary table.
 The ASCII table extension parsing has not been implemented but it is possible to get an iterator over the data bytes as well as its mandatory cards from the header.
 
 Contributing
@@ -50,7 +50,6 @@ Features
 * [ ] FITS writer/serializer
 * [ ] ESO HIERARCH keyword convention
 * [ ] ASCII table extension parsing
-* [ ] Tile-compressed in binary table files (https://fits.gsfc.nasa.gov/registry/tilecompression.html). Only RICE and GZIP supported
 * [X] Support of multiple HDU. Image and binary tables extension support. Provide an idiomatic Rust iterator over the list of HDU.
 * [X] WCS parsing, see [wcs-rs](https://github.com/cds-astro/wcs-rs)
     - [X] Simple Imaging Polynomial (SIP) supported but not well tested
@@ -63,9 +62,9 @@ Features
 License
 -------
 
-fitsrs has the double the MIT/Apache-2.0 license.
+fitsrs has the double license MIT/Apache-2.0.
 
-It uses code adapted from the famous [CFITSIO](https://github.com/HEASARC/cfitsio/blob/main/licenses/License.txt) library.Especially the RICE compression/decompression source code has been ported from the original cfitsio [code](https://github.com/HEASARC/cfitsio/blob/main/ricecomp.c) to Rust.
+It uses code adapted from the famous [CFITSIO](https://github.com/HEASARC/cfitsio/blob/main/licenses/License.txt) library. Especially the RICE decompression source code has been ported from the original cfitsio [code](https://github.com/HEASARC/cfitsio/blob/main/ricecomp.c) to Rust.
 
 Example
 ----------
