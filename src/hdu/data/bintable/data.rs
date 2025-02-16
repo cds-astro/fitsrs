@@ -571,6 +571,8 @@ where
                 if self.byte_offset == self.main_data_table_byte_size {
                     None
                 } else {
+                    let idx = self.item_idx;
+
                     // Retrieve its tform to know which type to read from the reader
                     match &self.ctx.tforms[col_idx] {
                         // Logical
@@ -586,7 +588,7 @@ where
                             Some(DataValue::Logical {
                                 value: byte != 0,
                                 column: ColumnId::Index(col_idx),
-                                idx: self.item_idx - 1,
+                                idx,
                             }) // Determine the count idx inside the field
                         }
                         // Bit
@@ -603,7 +605,7 @@ where
                                 byte,
                                 bit_idx: 0,
                                 column: ColumnId::Index(col_idx),
-                                idx: self.item_idx - 1,
+                                idx,
                             }) // Determine the count idx inside the field
                         }
                         // Unsigned byte
@@ -619,7 +621,7 @@ where
                             Some(DataValue::UnsignedByte {
                                 value: byte,
                                 column: ColumnId::Index(col_idx),
-                                idx: self.item_idx - 1,
+                                idx,
                             }) // Determine the count idx inside the field
                         }
                         // 16-bit integer
@@ -635,7 +637,7 @@ where
                             Some(DataValue::Short {
                                 value: short,
                                 column: ColumnId::Index(col_idx),
-                                idx: self.item_idx - 1,
+                                idx,
                             }) // Determine the count idx inside the field
                         }
                         // 32-bit integer
@@ -651,7 +653,7 @@ where
                             Some(DataValue::Integer {
                                 value: int,
                                 column: ColumnId::Index(col_idx),
-                                idx: self.item_idx - 1,
+                                idx,
                             }) // Determine the count idx inside the field
                         }
                         // 64-bit integer
@@ -667,7 +669,7 @@ where
                             Some(DataValue::Long {
                                 value: long,
                                 column: ColumnId::Index(col_idx),
-                                idx: self.item_idx - 1,
+                                idx,
                             }) // Determine the count idx inside the field
                         }
                         // Character
@@ -683,7 +685,7 @@ where
                             Some(DataValue::Character {
                                 value: c as char,
                                 column: ColumnId::Index(col_idx),
-                                idx: self.item_idx - 1,
+                                idx,
                             }) // Determine the count idx inside the field
                         }
                         // Single-precision floating point
@@ -699,7 +701,7 @@ where
                             Some(DataValue::Float {
                                 value: float,
                                 column: ColumnId::Index(col_idx),
-                                idx: self.item_idx - 1,
+                                idx,
                             }) // Determine the count idx inside the field
                         }
                         // Double-precision floating point
@@ -715,7 +717,7 @@ where
                             Some(DataValue::Double {
                                 value: double,
                                 column: ColumnId::Index(col_idx),
-                                idx: self.item_idx - 1,
+                                idx,
                             }) // Determine the count idx inside the field
                         }
                         // Single-precision complex
@@ -733,7 +735,7 @@ where
                                 real,
                                 imag,
                                 column: ColumnId::Index(col_idx),
-                                idx: self.item_idx - 1,
+                                idx,
                             }) // Determine the count idx inside the field
                         }
                         // Double-precision complex
@@ -751,7 +753,7 @@ where
                                 real,
                                 imag,
                                 column: ColumnId::Index(col_idx),
-                                idx: self.item_idx - 1,
+                                idx,
                             }) // Determine the count idx inside the field
                         }
                         // Array Descriptor (32-bit)

@@ -321,6 +321,28 @@ mod tests {
         assert_eq!(177 * 23, data.len());
     }
 
+    #[test]
+    fn test_fits_bintable_corr() {
+        use std::fs::File;
+
+        let f = File::open("samples/astrometry.net/corr.fits").unwrap();
+
+        let reader = BufReader::new(f);
+        let mut hdu_list = Fits::from_reader(reader);
+        let mut data = vec![];
+        while let Some(Ok(hdu)) = dbg!(hdu_list.next()) {
+            match dbg!(hdu) {
+                HDU::XBinaryTable(hdu) => {
+                    let _ = hdu.get_header().get_xtension();
+                    data = hdu_list.get_data(&hdu).collect::<Vec<_>>();
+                }
+                _ => (),
+            }
+        }
+
+        dbg!(data);
+    }
+
     #[test_case("samples/misc/SN2923fxjA.fits.gz", 5415.0, 6386.0)]
     #[test_case("samples/misc/SN2923fxjA.fits", 5415.0, 6386.0)]
     fn test_fits_open_external_gzipped_file(filename: &str, min: f32, max: f32) {
