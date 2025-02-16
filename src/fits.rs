@@ -108,7 +108,7 @@ where
 {
     // Retrieve the iterator or in memory data from the reader
     // This has the effect of consuming the HDU
-    pub fn get_data<X>(&'a mut self, hdu: HDU<X>) -> <R as FitsRead<'a, X>>::Data
+    pub fn get_data<X>(&'a mut self, hdu: &HDU<X>) -> <R as FitsRead<'a, X>>::Data
     where
         X: Xtension + Debug,
         R: FitsRead<'a, X> + 'a,

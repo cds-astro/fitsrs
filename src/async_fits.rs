@@ -90,7 +90,7 @@ where
         Ok(eof)
     }
 
-    pub fn get_data<X>(&'a mut self, hdu: AsyncHDU<X>) -> <R as AsyncDataBufRead<'a, X>>::Data
+    pub fn get_data<X>(&'a mut self, hdu: &AsyncHDU<X>) -> <R as AsyncDataBufRead<'a, X>>::Data
     where
         X: Xtension + Debug,
         R: AsyncDataBufRead<'a, X>,

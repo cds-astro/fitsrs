@@ -93,7 +93,7 @@ while let Some(Ok(hdu)) = hdu_list.next() {
 
             let num_pixels = (naxis2 * naxis1) as usize;
 
-            match hdu_list.get_data(hdu) {
+            match hdu_list.get_data(&hdu) {
                 ImageData::U8(it) => {
                     let data = it.collect::<Vec<_>>();
                     assert_eq!(num_pixels, data.len())
@@ -125,7 +125,7 @@ while let Some(Ok(hdu)) = hdu_list.next() {
                 .get_xtension()
                 .get_num_rows();
 
-            let rows = hdu_list.get_data(hdu)
+            let rows = hdu_list.get_data(&hdu)
                 .row_iter()
                 .collect::<Vec<_>>();
 
@@ -136,7 +136,7 @@ while let Some(Ok(hdu)) = hdu_list.next() {
                 .get_xtension()
                 .get_num_bytes_data_block();
 
-            let data = hdu_list.get_data(hdu)
+            let data = hdu_list.get_data(&hdu)
                 .collect::<Vec<_>>();
 
             assert_eq!(num_bytes as usize, data.len());

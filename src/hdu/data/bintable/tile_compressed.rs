@@ -635,7 +635,7 @@ mod tests {
                         .unwrap()
                         .unwrap() as u32;
                     let pixels = hdu_list
-                        .get_data(hdu)
+                        .get_data(&hdu)
                         .map(|value| {
                             let value = value;
                             match value {
@@ -696,7 +696,7 @@ mod tests {
                         .unwrap() as f32;
 
                     let pixels = hdu_list
-                        .get_data(hdu)
+                        .get_data(&hdu)
                         .map(|value| {
                             let value = value;
                             match value {
@@ -754,7 +754,7 @@ mod tests {
                     let num_tile_per_w = width / tile_w;
 
                     for (i, pixel) in hdu_list
-                        .get_data(hdu)
+                        .get_data(&hdu)
                         .map(|value| {
                             let value = value;
                             match value {
