@@ -16,7 +16,7 @@ pub enum ColumnId {
     /// The user can give a column index
     Index(usize),
     /// Or a name to refer a specific TTYPE keyword
-    Name(String),
+    Name(&'static str),
 }
 
 #[derive(Debug)]
