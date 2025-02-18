@@ -58,6 +58,7 @@ mod tests {
     use crate::hdu::AsyncHDU;
     use crate::{FITSFile, ImageData};
 
+    use crate::hdu::data::bintable::ColumnId;
     use crate::hdu::header::extension::Xtension;
     use crate::hdu::header::Bitpix;
 
@@ -329,18 +330,26 @@ mod tests {
 
         let reader = BufReader::new(f);
         let mut hdu_list = Fits::from_reader(reader);
-        let mut data = vec![];
-        while let Some(Ok(hdu)) = dbg!(hdu_list.next()) {
-            match dbg!(hdu) {
+        while let Some(Ok(hdu)) = hdu_list.next() {
+            match hdu {
                 HDU::XBinaryTable(hdu) => {
-                    let _ = hdu.get_header().get_xtension();
-                    data = hdu_list.get_data(&hdu).collect::<Vec<_>>();
+                    let data: Vec<_> = hdu_list
+                        .get_data(&hdu)
+                        .table_data()
+                        .select_fields(&[
+                            ColumnId::Name("mag"),
+                            ColumnId::Name("phot_bp_mean_mag"),
+                            ColumnId::Name("phot_rp_mean_mag"),
+                        ])
+                        .collect();
+
+                    let data = dbg!(data);
+
+                    assert_eq!(data.len(), 3 * 52);
                 }
                 _ => (),
             }
         }
-
-        dbg!(data);
     }
 
     #[test_case("samples/misc/SN2923fxjA.fits.gz", 5415.0, 6386.0)]

@@ -63,6 +63,13 @@ where
             BinaryTableData::Table(data)
         }
     }
+
+    pub fn table_data(self) -> TableData<R> {
+        match self {
+            BinaryTableData::TileCompressed(tile) => tile.table_data(),
+            BinaryTableData::Table(table) => table,
+        }
+    }
 }
 
 impl<R> BinaryTableData<R> {
@@ -127,6 +134,8 @@ pub struct TableData<R> {
     main_data_table_byte_size: usize,
     /// Start byte position of the data unit
     start_pos: u64,
+    /// Seek to first col
+    seek_to_first_col: bool,
 
     /// current row index, is read from the row iterator
     pub(crate) row_idx: usize,
@@ -206,6 +215,7 @@ impl<R> TableData<R> {
             item_idx,
             cols_idx,
             col_byte_offsets,
+            seek_to_first_col: false,
             byte_offset,
             main_data_table_byte_size,
             start_pos,
@@ -213,43 +223,6 @@ impl<R> TableData<R> {
             row_idx,
             heap,
         }
-    }
-
-    /// Select fields to look, by default when not calling this method,
-    /// all field values are returned
-    pub fn select_fields(&mut self, cols: &[ColumnId]) -> &mut Self {
-        self.cols_idx = cols.iter().filter_map(|col| {
-            match col {
-                ColumnId::Index(index) => {
-                    // check that the index does not exceed the number of columns
-                    if *index >= self.ctx.tforms.len() {
-                        warn!("{} index provided exceeds the number of valid columns found in the table. This index will be discarded.", index);
-                        None
-                    } else {
-                        Some(*index)
-                    }
-                },
-                ColumnId::Name(name) => {
-                    // If the column is given by its name, then we must search
-                    // in the ttypes keywords to get its correct index
-                    match self.ctx.ttypes.iter().position(|ttype| {
-                        if let Some(ttype) = ttype {
-                            ttype == name
-                        } else {
-                            false
-                        }
-                    }) {
-                        Some(idx) => Some(idx),
-                        None => {
-                            warn!("{} field name has not been found. Its value is discarded", name);
-                            None
-                        }
-                    }
-                }
-            }
-        }).collect();
-
-        self
     }
 
     pub(crate) fn read_the_heap(&mut self, heap: bool) {
@@ -263,6 +236,49 @@ impl<R> TableData<R> {
     pub(crate) fn get_reader(&mut self) -> &mut R {
         &mut self.reader
     }
+
+    /// Select fields to look, by default when not calling this method,
+    /// all field values are returned
+    pub fn select_fields(&mut self, cols: &[ColumnId]) -> &mut Self {
+        self.cols_idx = cols
+            .iter()
+            .filter_map(|col| {
+                match col {
+                    ColumnId::Index(index) => {
+                        // check that the index does not exceed the number of columns
+                        if *index >= self.ctx.tforms.len() {
+                            warn!("{} index provided exceeds the number of valid columns found in the table. This index will be discarded.", index);
+                            None
+                        } else {
+                            Some(*index)
+                        }
+                    },
+                    ColumnId::Name(name) => {
+                        // If the column is given by its name, then we must search
+                        // in the ttypes keywords to get its correct index
+                        match self.ctx.ttypes.iter().position(|ttype| {
+                            if let Some(ttype) = ttype {
+                                ttype == name
+                            } else {
+                                false
+                            }
+                        }) {
+                            Some(idx) => Some(idx),
+                            None => {
+                                warn!("{} field name has not been found. Its value is discarded", name);
+                                None
+                            }
+                        }
+                    }
+                }
+            }
+        ).collect();
+
+        // We must go to the first column at this point
+        self.seek_to_first_col = true;
+
+        self
+    }
 }
 
 impl<R> TableData<R>
@@ -270,35 +286,44 @@ where
     R: Seek,
 {
     fn seek_to_next_col(&mut self) -> Result<(), Error> {
-        // detect if we jump of row
-        if self.col_idx == self.cols_idx.len() - 1 {
+        let last_col = self.col_idx == self.cols_idx.len() - 1;
+        let last_row = self.row_idx == self.ctx.naxis2 as usize - 1;
+
+        if last_col {
             self.row_idx += 1;
         }
 
-        self.col_idx = (self.col_idx + 1) % self.cols_idx.len();
-        self.item_idx = 0;
-
-        let col_idx = self.cols_idx[self.col_idx];
-
-        let next_row_byte_off = self.col_byte_offsets[col_idx] as i64;
-        let cur_row_byte_off = (self.byte_offset as i64) % (self.ctx.naxis1 as i64);
-
-        let off = if next_row_byte_off > cur_row_byte_off {
-            // next col is on the same row
-            next_row_byte_off - cur_row_byte_off
-        } else if next_row_byte_off < cur_row_byte_off {
-            // next col is on the next row
-            // get to the end of the current row
-            (self.ctx.naxis1 as i64) - cur_row_byte_off
-            // add the off the the start of the next row
-                + next_row_byte_off
+        // If we are at the last row and the last col, then we go to the end of the main data table
+        let off = if last_col && last_row {
+            // seek to the end of the main data table
+            self.main_data_table_byte_size as i64 - self.byte_offset as i64
         } else {
-            // we are at the good location where the next col is
-            0
+            self.col_idx = (self.col_idx + 1) % self.cols_idx.len();
+            self.item_idx = 0;
+    
+            let col_idx = self.cols_idx[self.col_idx];
+    
+            let next_row_byte_off = self.col_byte_offsets[col_idx] as i64;
+            let cur_row_byte_off = (self.byte_offset as i64) % (self.ctx.naxis1 as i64);
+    
+            if next_row_byte_off > cur_row_byte_off {
+                // next col is on the same row
+                next_row_byte_off - cur_row_byte_off
+            } else if next_row_byte_off < cur_row_byte_off {
+                // next col is on the next row
+                // get to the end of the current row
+                (self.ctx.naxis1 as i64) - cur_row_byte_off
+                // add the off the the start of the next row
+                    + next_row_byte_off
+            } else {
+                // we are at the good location where the next col is
+                0
+            }
         };
 
-        // seek to the next col location
         self.reader.seek_relative(off)?;
+        // update the byte offset as well
+        self.byte_offset += off as usize;
 
         Ok(())
     }
@@ -428,6 +453,17 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         // First get the column index in the main data table where the reader is
         let col_idx = self.cols_idx[self.col_idx];
+
+        // a select fields has been done, we must offset to the first col
+        if self.seek_to_first_col {
+            self.seek_to_first_col = false;
+
+            let off = self.col_byte_offsets[col_idx] as i64;
+            // seek to the next col location
+            self.reader.seek_relative(off).ok()?;
+            // update the byte offset as well
+            self.byte_offset += off as usize;
+        }
 
         match &mut self.state {
             DataReaderState::HEAP {
