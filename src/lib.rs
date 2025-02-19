@@ -30,7 +30,7 @@
 
 #[doc = include_str!("../README.md")]
 extern crate async_trait;
-extern crate byteorder;
+//extern crate byteorder;
 #[macro_use]
 extern crate quick_error;
 
@@ -39,6 +39,7 @@ pub mod card;
 pub mod error;
 pub mod file;
 pub mod fits;
+mod wcs;
 mod gz;
 pub mod hdu;
 

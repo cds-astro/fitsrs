@@ -193,7 +193,7 @@ where
                         b = (b << 8) | (self.reader.read_u8()? as u32);
                         nbits += 8;
                     }
-                    let fs = ((b >> nbits) - 1) as i32;
+                    let fs = (b >> nbits) as i32 - 1;
 
                     b &= (1 << nbits) - 1;
                     /* loop over the next block */
@@ -266,7 +266,7 @@ where
                 } => {
                     while j < buf.len() && i < imax {
                         let mut k = T::BBITS - nbits;
-                        let mut diff = b << k;
+                        let mut diff = ((b as u64) << k) as u32;
 
                         k -= 8;
                         while k >= 0 {

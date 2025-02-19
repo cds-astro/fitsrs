@@ -20,6 +20,10 @@ quick_error! {
         FailFindingKeyword(keyword: String) {
             display("{} keyword has not been found.", keyword)
         }
+        WCS {
+            from(wcs::error::Error)
+            display("WCS parsing")
+        }
         ValueBadParsing {
             display("A value could not be parsed correctly")
         }

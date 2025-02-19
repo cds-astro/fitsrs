@@ -30,12 +30,16 @@ use crate::async_fits;
 use crate::fits;
 use crate::hdu::primary::consume_next_card;
 use log::error;
-/// An enueration of the supported FITS Header Data Unit types.
+/// An enumeration of the supported FITS Header Data Unit types.
 #[derive(Debug, PartialEq)]
 pub enum HDU {
+    /// The primary HDU refers to an image
     Primary(fits::HDU<Image>),
+    /// HDU image extension
     XImage(fits::HDU<Image>),
+    /// HDU binary table extension
     XBinaryTable(fits::HDU<BinTable>),
+    /// HDU ASCII table extension
     XASCIITable(fits::HDU<AsciiTable>),
 }
 

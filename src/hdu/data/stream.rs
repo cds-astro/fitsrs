@@ -8,7 +8,7 @@ use futures::AsyncReadExt;
 /// The data part is expressed as a `DataOwned` structure
 /// for non in-memory readers (typically BufReader) that ensures
 /// a file may not fit in memory
-#[derive(Serialize, Debug)]
+#[derive(Debug)]
 pub enum DataStream<'a, R>
 where
     R: AsyncBufRead + Unpin,
@@ -21,7 +21,7 @@ where
     F64(St<'a, R, f64>),
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Debug)]
 pub struct St<'a, R, T>
 where
     R: AsyncBufRead + Unpin,
@@ -48,7 +48,7 @@ use futures::task::Context;
 use futures::task::Poll;
 use futures::AsyncBufRead;
 use futures::Future;
-use serde::Serialize;
+//use serde::Serialize;
 use std::pin::Pin;
 
 //use super::Access;

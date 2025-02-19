@@ -194,6 +194,7 @@ where
     }
 }
 
+/// A generic over a HDU type
 #[derive(Debug, PartialEq)]
 pub struct HDU<X>
 where
