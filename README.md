@@ -73,6 +73,7 @@ Example
 use std::fs::File;
 use std::io::Cursor;
 use fitsrs::{Fits, ImageData, HDU, hdu::header::Xtension};
+use fitsrs::wcs::{ImgXY, LonLat};
 
 use std::io::{BufReader, Read};
 
@@ -93,6 +94,23 @@ while let Some(Ok(hdu)) = hdu_list.next() {
 
             let num_pixels = (naxis2 * naxis1) as usize;
 
+            // Try to access the WCS for an HDU image
+            if let Ok(wcs) = hdu.wcs() {
+                // Get the lonlat position on the sky of the pixel located at (0, 0) on the image
+                let xy = ImgXY::new(0.0, 0.0);
+                let lonlat = wcs
+                    .unproj_lonlat(&xy)
+                    .unwrap();
+
+                // Get the pixel position in the image of a sky location
+                let xy_2 = wcs
+                    .proj_lonlat(&lonlat)
+                    .unwrap();
+
+                assert!((xy.x() - xy_2.x()).abs() <= 1e-9);
+                assert!((xy.y() - xy_2.y()).abs() <= 1e-9);
+            }
+           
             match hdu_list.get_data(&hdu) {
                 ImageData::U8(it) => {
                     let data = it.collect::<Vec<_>>();
@@ -121,13 +139,24 @@ while let Some(Ok(hdu)) = hdu_list.next() {
             }
         },
         HDU::XBinaryTable(hdu) => {
+            /*let data: Vec<_> = hdu_list
+                .get_data(&hdu)
+                .table_data()
+                // Select specific fields with the select_fields method
+                .select_fields(&[
+                    ColumnId::Name("mag"),
+                    ColumnId::Name("phot_bp_mean_mag"),
+                    ColumnId::Name("phot_rp_mean_mag"),
+                ])
+                .collect();
+            */
             let num_rows = hdu.get_header()
                 .get_xtension()
                 .get_num_rows();
-
-            let rows = hdu_list.get_data(&hdu)
+            let rows: Vec<_> = hdu_list
+                .get_data(&hdu)
                 .row_iter()
-                .collect::<Vec<_>>();
+                .collect();
 
             assert_eq!(num_rows, rows.len());
         },

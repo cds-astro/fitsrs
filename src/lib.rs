@@ -39,7 +39,8 @@ pub mod card;
 pub mod error;
 pub mod file;
 pub mod fits;
-mod wcs;
+pub mod wcs;
+
 mod gz;
 pub mod hdu;
 
@@ -58,6 +59,7 @@ mod tests {
     use crate::hdu::data::DataStream;
     use crate::hdu::AsyncHDU;
     use crate::{FITSFile, ImageData};
+    use crate::wcs::ImgXY;
 
     use crate::hdu::data::bintable::ColumnId;
     use crate::hdu::header::extension::Xtension;
@@ -236,7 +238,6 @@ mod tests {
     fn test_fits_not_fitting_in_memory() {
         use std::fs::File;
         use std::io::BufReader;
-
         let f = File::open("samples/fits.gsfc.nasa.gov/EUVE.fits").unwrap();
         let reader = BufReader::new(f);
         let mut hdu_list = Fits::from_reader(reader);
@@ -247,6 +248,15 @@ mod tests {
             let naxis2 = *xtension.get_naxisn(2).unwrap();
 
             let num_pixels = (naxis1 * naxis2) as usize;
+
+            // Try to access the WCS on a specific HDU image
+            if let Ok(wcs) = hdu.wcs() {
+                // and perform projection/unprojection using that image WCS
+                let xy = ImgXY::new(0.0, 0.0);
+                let _lonlat = wcs
+                    .unproj_lonlat(&xy)
+                    .unwrap();
+            }
 
             match hdu_list.get_data(&hdu) {
                 ImageData::I16(it) => {
@@ -310,8 +320,8 @@ mod tests {
         let reader = BufReader::new(f);
         let mut hdu_list = Fits::from_reader(reader);
         let mut data = vec![];
-        while let Some(Ok(hdu)) = dbg!(hdu_list.next()) {
-            match dbg!(hdu) {
+        while let Some(Ok(hdu)) = hdu_list.next() {
+            match hdu {
                 HDU::XBinaryTable(hdu) => {
                     let _ = hdu.get_header().get_xtension();
                     data = hdu_list.get_data(&hdu).collect::<Vec<_>>();
@@ -343,8 +353,6 @@ mod tests {
                             ColumnId::Name("phot_rp_mean_mag"),
                         ])
                         .collect();
-
-                    let data = dbg!(data);
 
                     assert_eq!(data.len(), 3 * 52);
                 }

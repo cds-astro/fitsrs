@@ -6,6 +6,9 @@ use crate::error::Error;
 use crate::card::CardValue;
 use std::str::FromStr;
 
+pub type ImgXY = wcs::ImgXY;
+pub type LonLat = wcs::LonLat;
+
 use wcs::WCS;
 use crate::fits::HDU;
 use std::convert::TryInto;
