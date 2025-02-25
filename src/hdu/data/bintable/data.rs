@@ -144,7 +144,7 @@ pub struct TableData<R> {
     heap: bool,
 }
 
-impl<R> TableData<Cursor<R>>
+impl<'a, R> TableData<&'a mut Cursor<R>>
 where
     R: AsRef<[u8]>,
 {
@@ -161,7 +161,7 @@ where
 
 use std::io::Cursor;
 /// Get a reference to the inner reader for in-memory readers
-impl<R> TableData<Cursor<R>> {
+impl<'a, R> TableData<&'a mut Cursor<R>> {
     pub const fn get_ref(&self) -> &R {
         self.reader.get_ref()
     }

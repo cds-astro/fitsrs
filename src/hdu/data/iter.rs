@@ -48,7 +48,7 @@ impl Value for f64 {
 #[derive(Debug, Serialize)]
 pub struct It<R, T> {
     /// The reader
-    reader: R,
+    pub(crate) reader: R,
     /// The number of items the reader must read
     num_items: usize,
     /// Number of item read

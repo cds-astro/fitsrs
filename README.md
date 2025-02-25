@@ -72,7 +72,7 @@ Example
 ```rust
 use std::fs::File;
 use std::io::Cursor;
-use fitsrs::{Fits, ImageData, HDU, hdu::header::Xtension};
+use fitsrs::{Fits, ImageData, Pixels, HDU, hdu::header::Xtension};
 use fitsrs::wcs::{ImgXY, LonLat};
 
 use std::io::{BufReader, Read};
@@ -110,29 +110,29 @@ while let Some(Ok(hdu)) = hdu_list.next() {
                 assert!((xy.x() - xy_2.x()).abs() <= 1e-9);
                 assert!((xy.y() - xy_2.y()).abs() <= 1e-9);
             }
-           
-            match hdu_list.get_data(&hdu) {
-                ImageData::U8(it) => {
+            let image = hdu_list.get_data(&hdu);
+            match image.pixels() {
+                Pixels::U8(it) => {
                     let data = it.collect::<Vec<_>>();
                     assert_eq!(num_pixels, data.len())
                 },
-                ImageData::I16(it) => {
+                Pixels::I16(it) => {
                     let data = it.collect::<Vec<_>>();
                     assert_eq!(num_pixels, data.len())
                 },
-                ImageData::I32(it) => {
+                Pixels::I32(it) => {
                     let data = it.collect::<Vec<_>>();
                     assert_eq!(num_pixels, data.len())
                 },
-                ImageData::I64(it) => {
+                Pixels::I64(it) => {
                     let data = it.collect::<Vec<_>>();
                     assert_eq!(num_pixels, data.len())
                 },
-                ImageData::F32(it) => {
+                Pixels::F32(it) => {
                     let data = it.collect::<Vec<_>>();
                     assert_eq!(num_pixels, data.len())
                 },
-                ImageData::F64(it) => {
+                Pixels::F64(it) => {
                     let data = it.collect::<Vec<_>>();
                     assert_eq!(num_pixels, data.len())
                 },
