@@ -310,7 +310,7 @@ impl Xtension for BinTable {
             let mut z_naxisn = Vec::with_capacity(z_naxis as usize);
             let mut z_tilen = Vec::with_capacity(z_naxis as usize);
 
-            for i in 1..=(z_naxis as i64) {
+            for i in 1..=z_naxis {
                 let naxisn =
                     if let Some(Value::Integer { value, .. }) = values.get(&format!("ZNAXIS{i}")) {
                         Some(*value)
@@ -376,7 +376,7 @@ impl Xtension for BinTable {
         // floating-point pixel values. The value may range from 1 to 10000, inclusive. See section 4 for
         // further discussion of this keyword.
         let z_dither_0 =
-            if let Some(Value::Integer { value, .. }) = values.get(&format!("ZDITHER0")) {
+            if let Some(Value::Integer { value, .. }) = values.get(&"ZDITHER0".to_string()) {
                 Some(*value)
             } else {
                 None
@@ -408,7 +408,7 @@ impl Xtension for BinTable {
 
                 let count = tform
                     .chars()
-                    .take_while(|c| c.is_digit(10))
+                    .take_while(|c| c.is_ascii_digit())
                     .collect::<String>();
 
                 let num_count_digits = count.len();
@@ -609,7 +609,7 @@ pub trait TForm {
     /// Number of bit associated to the TFORM
     const BITS_SIZE: usize;
     /// Number of bytes needed to store the tform
-    const BYTES_SIZE: usize = (Self::BITS_SIZE as usize + 8 - 1) / 8;
+    const BYTES_SIZE: usize = Self::BITS_SIZE.div_ceil(8);
 
     /// Rust type associated to the TFORM
     type Ty;
@@ -853,7 +853,7 @@ impl TFormType {
     }
 
     pub(crate) fn num_bytes_field(&self) -> usize {
-        (self.num_bits_field() as usize + 8 - 1) / 8
+        self.num_bits_field().div_ceil(8)
     }
 }
 
@@ -866,7 +866,7 @@ mod tests {
     };
 
     fn compare_bintable_ext(filename: &str, bin_table: BinTable) {
-        let f = FITSFile::open(filename).unwrap();
+        let mut f = FITSFile::open(filename).unwrap();
 
         //let reader = BufReader::new(f);
         //let hdu_list = Fits::from_reader(reader);
@@ -874,9 +874,8 @@ mod tests {
         // Get the first HDU extension,
         // this should be the table for these fits examples
         let hdu = f
-            // skip the primary hdu
-            .skip(1)
-            .next()
+            // get the second HDU
+            .nth(1)
             .expect("Should contain an extension HDU")
             .unwrap();
 

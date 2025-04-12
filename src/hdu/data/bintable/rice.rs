@@ -95,7 +95,7 @@ impl<R, T> RICEDecoder<R, T> {
 use std::io::Error;
 /// A trait to define constant for possible output types from a
 /// RICE decoder/encoder
-trait RICE: Sized {
+trait RICE: Sized + Into<i32> {
     const FSBITS: i32;
     const FSMAX: i32;
     const BBITS: i32 = 1 << Self::FSBITS;
@@ -107,10 +107,6 @@ trait RICE: Sized {
 
     /// Utilitary method for reading the first T elem that is not encoded
     fn from_be_bytes<R: Read>(reader: &mut R) -> Result<Self, Error>;
-
-    /// As the RICE algorithm computes values on integer we need to have a cast method
-    /// FIXME: the num crate would maybe the best option
-    fn as_i32(self) -> i32;
 }
 
 impl RICE for u8 {
@@ -119,10 +115,6 @@ impl RICE for u8 {
 
     fn from_be_bytes<R: Read>(reader: &mut R) -> Result<Self, Error> {
         reader.read_u8()
-    }
-
-    fn as_i32(self) -> i32 {
-        self as i32
     }
 }
 
@@ -133,10 +125,6 @@ impl RICE for i16 {
     fn from_be_bytes<R: Read>(reader: &mut R) -> Result<Self, Error> {
         reader.read_i16::<BigEndian>()
     }
-
-    fn as_i32(self) -> i32 {
-        self as i32
-    }
 }
 
 impl RICE for i32 {
@@ -145,10 +133,6 @@ impl RICE for i32 {
 
     fn from_be_bytes<R: Read>(reader: &mut R) -> Result<Self, Error> {
         reader.read_i32::<BigEndian>()
-    }
-
-    fn as_i32(self) -> i32 {
-        self
     }
 }
 
@@ -167,7 +151,7 @@ where
         loop {
             match self.state {
                 RICEState::Start => {
-                    let lastpix = T::from_be_bytes(&mut self.reader)?.as_i32();
+                    let lastpix = T::from_be_bytes(&mut self.reader)?.into();
 
                     /* bit buffer			*/
                     let b = self.reader.read_u8()? as u32;
@@ -289,7 +273,7 @@ where
                          * out to give the right answers in the output file.
                          */
                         if (diff & 1) == 0 {
-                            diff = diff >> 1;
+                            diff >>= 1;
                         } else {
                             diff = !(diff >> 1);
                         }
@@ -347,7 +331,7 @@ where
 
                         /* undo mapping and differencing */
                         if (diff & 1) == 0 {
-                            diff = diff >> 1;
+                            diff >>= 1;
                         } else {
                             diff = !(diff >> 1);
                         }

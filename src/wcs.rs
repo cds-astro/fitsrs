@@ -1,17 +1,17 @@
-use wcs::WCSParams;
+use crate::card::CardValue;
+use crate::error::Error;
 use crate::hdu::header::extension::image::Image;
 use crate::hdu::header::Header;
 use std::convert::TryFrom;
-use crate::error::Error;
-use crate::card::CardValue;
 use std::str::FromStr;
+use wcs::WCSParams;
 
 pub type ImgXY = wcs::ImgXY;
 pub type LonLat = wcs::LonLat;
 
-use wcs::WCS;
 use crate::fits::HDU;
 use std::convert::TryInto;
+use wcs::WCS;
 impl HDU<Image> {
     /// Try to look for a WCS in the image header and return a [WCS](https://crates.io/crates/wcs) object
     pub fn wcs(&self) -> Result<WCS, Error> {
@@ -19,17 +19,17 @@ impl HDU<Image> {
     }
 }
 
-fn parse_optional_card_with_type<T: CardValue + FromStr>(header: &Header<Image>, key: &'static str) -> Result<Option<T>, Error> {
-    match  header.get_parsed::<T>(key).transpose() {
+fn parse_optional_card_with_type<T: CardValue + FromStr>(
+    header: &Header<Image>,
+    key: &'static str,
+) -> Result<Option<T>, Error> {
+    match header.get_parsed::<T>(key).transpose() {
         Ok(v) => Ok(v),
         _ => {
-            let str = header.get_parsed::<String>(key).transpose()
-                .unwrap_or(None);
+            let str = header.get_parsed::<String>(key).transpose().unwrap_or(None);
 
             Ok(if let Some(ss) = str {
-                ss.trim().parse::<T>()
-                    .map(|v| Some(v))
-                    .unwrap_or(None)
+                ss.trim().parse::<T>().map(|v| Some(v)).unwrap_or(None)
             } else {
                 // card not found but it is ok as it is not mandatory
                 None
@@ -38,18 +38,17 @@ fn parse_optional_card_with_type<T: CardValue + FromStr>(header: &Header<Image>,
     }
 }
 
-fn parse_mandatory_card_with_type<T: CardValue>(header: &Header<Image>, key: &'static str) -> Result<T, Error> {
+fn parse_mandatory_card_with_type<T: CardValue>(
+    header: &Header<Image>,
+    key: &'static str,
+) -> Result<T, Error> {
     match header.get_parsed::<T>(key) {
         // No parsing error and found
-        Some(Ok(v)) => {
-            Ok(v)
-        },
+        Some(Ok(v)) => Ok(v),
         // No error but not found, we return an error
         None => Err(Error::WCS),
         // Return the parsing error
-        Some(Err(e)) => {
-            Err(e.into())
-        }
+        Some(Err(e)) => Err(e),
     }
 }
 

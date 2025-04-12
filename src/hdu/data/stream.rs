@@ -53,7 +53,7 @@ use std::pin::Pin;
 
 //use super::Access;
 
-impl<'a, R> futures::Stream for St<'a, R, u8>
+impl<R> futures::Stream for St<'_, R, u8>
 where
     R: AsyncBufRead + Unpin,
 {
@@ -83,7 +83,7 @@ where
     }
 }
 
-impl<'a, R> futures::Stream for St<'a, R, i16>
+impl<R> futures::Stream for St<'_, R, i16>
 where
     R: AsyncBufRead + Unpin,
 {
@@ -113,7 +113,7 @@ where
     }
 }
 
-impl<'a, R> futures::Stream for St<'a, R, i32>
+impl<R> futures::Stream for St<'_, R, i32>
 where
     R: AsyncBufRead + Unpin,
 {
@@ -144,7 +144,7 @@ where
     }
 }
 
-impl<'a, R> futures::Stream for St<'a, R, i64>
+impl<R> futures::Stream for St<'_, R, i64>
 where
     R: AsyncBufRead + Unpin,
 {
@@ -174,7 +174,7 @@ where
     }
 }
 
-impl<'a, R> futures::Stream for St<'a, R, f32>
+impl<R> futures::Stream for St<'_, R, f32>
 where
     R: AsyncBufRead + Unpin,
 {
@@ -204,7 +204,7 @@ where
     }
 }
 
-impl<'a, R> futures::Stream for St<'a, R, f64>
+impl<R> futures::Stream for St<'_, R, f64>
 where
     R: AsyncBufRead + Unpin,
 {

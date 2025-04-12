@@ -1,3 +1,5 @@
+#![allow(clippy::upper_case_acronyms)]
+
 pub mod data;
 pub mod dithering;
 pub mod rice;

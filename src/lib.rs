@@ -60,8 +60,8 @@ mod tests {
     use crate::hdu::data::image::Pixels;
     use crate::hdu::data::DataStream;
     use crate::hdu::AsyncHDU;
-    use crate::FITSFile;
     use crate::wcs::ImgXY;
+    use crate::FITSFile;
 
     use crate::hdu::data::bintable::ColumnId;
     use crate::hdu::header::extension::Xtension;
@@ -227,11 +227,8 @@ mod tests {
 
         let mut corrupted = false;
         for hdu in hdu_list {
-            match hdu {
-                Err(_) => {
-                    corrupted = true;
-                }
-                _ => (),
+            if hdu.is_err() {
+                corrupted = true;
             }
         }
 
@@ -257,9 +254,7 @@ mod tests {
             if let Ok(wcs) = hdu.wcs() {
                 // and perform projection/unprojection using that image WCS
                 let xy = ImgXY::new(0.0, 0.0);
-                let _lonlat = wcs
-                    .unproj_lonlat(&xy)
-                    .unwrap();
+                let _lonlat = wcs.unproj_lonlat(&xy).unwrap();
             }
 
             let image = hdu_list.get_data(&hdu);
@@ -327,12 +322,9 @@ mod tests {
         let mut hdu_list = Fits::from_reader(reader);
         let mut data = vec![];
         while let Some(Ok(hdu)) = hdu_list.next() {
-            match hdu {
-                HDU::XBinaryTable(hdu) => {
-                    let _ = hdu.get_header().get_xtension();
-                    data = hdu_list.get_data(&hdu).collect::<Vec<_>>();
-                }
-                _ => (),
+            if let HDU::XBinaryTable(hdu) = hdu {
+                let _ = hdu.get_header().get_xtension();
+                data = hdu_list.get_data(&hdu).collect::<Vec<_>>();
             }
         }
 
@@ -348,21 +340,18 @@ mod tests {
         let reader = BufReader::new(f);
         let mut hdu_list = Fits::from_reader(reader);
         while let Some(Ok(hdu)) = hdu_list.next() {
-            match hdu {
-                HDU::XBinaryTable(hdu) => {
-                    let data: Vec<_> = hdu_list
-                        .get_data(&hdu)
-                        .table_data()
-                        .select_fields(&[
-                            ColumnId::Name("mag"),
-                            ColumnId::Name("phot_bp_mean_mag"),
-                            ColumnId::Name("phot_rp_mean_mag"),
-                        ])
-                        .collect();
+            if let HDU::XBinaryTable(hdu) = hdu {
+                let data: Vec<_> = hdu_list
+                    .get_data(&hdu)
+                    .table_data()
+                    .select_fields(&[
+                        ColumnId::Name("mag"),
+                        ColumnId::Name("phot_bp_mean_mag"),
+                        ColumnId::Name("phot_rp_mean_mag"),
+                    ])
+                    .collect();
 
-                    assert_eq!(data.len(), 3 * 52);
-                }
-                _ => (),
+                assert_eq!(data.len(), 3 * 52);
             }
         }
     }
@@ -381,19 +370,15 @@ mod tests {
                     let naxis2 = *xtension.get_naxisn(2).unwrap();
 
                     let image = hdu_list.get_data(&hdu);
-                    match image.pixels() {
-                        Pixels::F32(it) => {
-                            let c = it
-                                .map(|v| (((v - min) / (max - min)) * 255.0) as u8)
-                                .collect::<Vec<_>>();
+                    if let Pixels::F32(it) = image.pixels() {
+                        let c = it
+                            .map(|v| (((v - min) / (max - min)) * 255.0) as u8)
+                            .collect::<Vec<_>>();
 
-                            let imgbuf = DynamicImage::ImageLuma8(
-                                image::ImageBuffer::from_raw(naxis1 as u32, naxis2 as u32, c)
-                                    .unwrap(),
-                            );
-                            imgbuf.save(&format!("{}.jpg", filename)).unwrap();
-                        }
-                        _ => (),
+                        let imgbuf = DynamicImage::ImageLuma8(
+                            image::ImageBuffer::from_raw(naxis1 as u32, naxis2 as u32, c).unwrap(),
+                        );
+                        imgbuf.save(format!("{}.jpg", filename)).unwrap();
                     };
                 }
                 _ => (),
@@ -421,33 +406,30 @@ mod tests {
                     let naxis1 = xtension.get_naxisn(1);
                     let naxis2 = xtension.get_naxisn(2);
 
-                    match (naxis1, naxis2) {
-                        (Some(naxis1), Some(naxis2)) => {
-                            let num_pixels = (naxis2 * naxis1) as usize;
+                    if let (Some(naxis1), Some(naxis2)) = (naxis1, naxis2) {
+                        let num_pixels = (naxis2 * naxis1) as usize;
 
-                            let image = hdu_list.get_data(&hdu);
-                            match image.pixels() {
-                                Pixels::U8(it) => {
-                                    assert_eq!(num_pixels, it.collect::<Vec<_>>().len())
-                                }
-                                Pixels::I16(it) => {
-                                    assert_eq!(num_pixels, it.collect::<Vec<_>>().len())
-                                }
-                                Pixels::I32(it) => {
-                                    assert_eq!(num_pixels, it.collect::<Vec<_>>().len())
-                                }
-                                Pixels::I64(it) => {
-                                    assert_eq!(num_pixels, it.collect::<Vec<_>>().len())
-                                }
-                                Pixels::F32(it) => {
-                                    assert_eq!(num_pixels, it.collect::<Vec<_>>().len())
-                                }
-                                Pixels::F64(it) => {
-                                    assert_eq!(num_pixels, it.collect::<Vec<_>>().len())
-                                }
+                        let image = hdu_list.get_data(&hdu);
+                        match image.pixels() {
+                            Pixels::U8(it) => {
+                                assert_eq!(num_pixels, it.collect::<Vec<_>>().len())
+                            }
+                            Pixels::I16(it) => {
+                                assert_eq!(num_pixels, it.collect::<Vec<_>>().len())
+                            }
+                            Pixels::I32(it) => {
+                                assert_eq!(num_pixels, it.collect::<Vec<_>>().len())
+                            }
+                            Pixels::I64(it) => {
+                                assert_eq!(num_pixels, it.collect::<Vec<_>>().len())
+                            }
+                            Pixels::F32(it) => {
+                                assert_eq!(num_pixels, it.collect::<Vec<_>>().len())
+                            }
+                            Pixels::F64(it) => {
+                                assert_eq!(num_pixels, it.collect::<Vec<_>>().len())
                             }
                         }
-                        _ => (),
                     };
                 }
                 HDU::XBinaryTable(hdu) => {

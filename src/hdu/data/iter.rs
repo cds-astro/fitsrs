@@ -66,7 +66,7 @@ where
     }
 }
 
-impl<'a, R, T> It<R, T>
+impl<R, T> It<R, T>
 where
     R: Read,
 {
@@ -82,7 +82,7 @@ where
     }
 }
 
-impl<'a, R, T> Iterator for It<R, T>
+impl<R, T> Iterator for It<R, T>
 where
     R: Read,
     T: Value,
@@ -102,7 +102,7 @@ where
 }
 
 use std::io::Seek;
-impl<'a, R, T> It<R, T>
+impl<R, T> It<R, T>
 where
     R: Read + Seek,
     T: Value,

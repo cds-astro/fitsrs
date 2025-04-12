@@ -7,15 +7,12 @@ fn open_headers(filename: &str) {
 
     let mut corrupted = false;
     for hdu in hdu_list {
-        match hdu {
-            Err(_) => {
-                corrupted = true;
-            }
-            _ => (),
+        if hdu.is_err() {
+            corrupted = true;
         }
     }
 
-    assert!(corrupted == false);
+    assert!(!corrupted);
 }
 
 fn criterion_benchmark_parse_only_headers(c: &mut Criterion) {
@@ -53,14 +50,14 @@ fn criterion_benchmark_parse_only_headers(c: &mut Criterion) {
         "samples/misc/SN2923fxjA.fits"
     ];
     for filename in filenames {
-        group.bench_function(&format!("open {:?}", filename), |b| b.iter(|| open_headers(filename)));
+        group.bench_function(format!("open {:?}", filename), |b| {
+            b.iter(|| open_headers(filename))
+        });
     }
 
     group.finish();
 }
 
-
 criterion_group!(benches, criterion_benchmark_parse_only_headers);
-
 
 criterion_main!(benches);

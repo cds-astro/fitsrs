@@ -129,19 +129,12 @@ fn tile_size_from_row_idx(z_tile: &[usize], z_naxis: &[usize], n: usize) -> Box<
                 - u[0]
                 - (1..=(i - 1))
                     .map(|k| {
-                        let mut prod_sk = 1;
-                        for l in 0..=(k - 1) {
-                            prod_sk *= s[l];
-                        }
-
+                        let prod_sk = s.iter().take(k).product::<usize>();
                         u[k] * prod_sk
                     })
                     .sum::<usize>();
 
-            let mut prod_si = 1;
-            for k in 0..=(i - 1) {
-                prod_si *= s[k];
-            }
+            let prod_si = s.iter().take(i).product::<usize>();
 
             u[i] = (u[i] / prod_si) % s[i];
         }
@@ -219,12 +212,10 @@ impl<R> TileCompressedData<R> {
                         } else {
                             None
                         }
+                    } else if let Some(Value::Integer { value, .. }) = header.get("BLANK") {
+                        Some(ZBLANK::Value(*value as f64))
                     } else {
-                        if let Some(Value::Integer { value, .. }) = header.get("BLANK") {
-                            Some(ZBLANK::Value(*value as f64))
-                        } else {
-                            None
-                        }
+                        None
                     }
                 },
                 |field_idx| Some(ZBLANK::ColumnIdx(field_idx)),
@@ -286,7 +277,7 @@ where
                 DataValue::VariableLengthArray64 {
                     num_elems,
                     offset_byte,
-                } => (num_elems as u64, offset_byte as u64),
+                } => (num_elems, offset_byte),
                 _ => unreachable!(),
             };
 
@@ -600,9 +591,9 @@ mod tests {
             [100, 100, 50],
         ];
         use super::tile_size_from_row_idx;
-        for i in 0..ground_truth.len() {
+        for (i, &ground_truth) in ground_truth.iter().enumerate() {
             let tile_s = tile_size_from_row_idx(&[300, 200, 150], &[1000, 500, 350], i);
-            assert_eq!([tile_s[0], tile_s[1], tile_s[2]], ground_truth[i]);
+            assert_eq!([tile_s[0], tile_s[1], tile_s[2]], ground_truth);
         }
     }
 
@@ -622,38 +613,32 @@ mod tests {
         let mut hdu_list = Fits::from_reader(reader);
 
         while let Some(Ok(hdu)) = hdu_list.next() {
-            match hdu {
-                HDU::XBinaryTable(hdu) => {
-                    let width = hdu
-                        .get_header()
-                        .get_parsed::<i64>("ZNAXIS1")
-                        .unwrap()
-                        .unwrap() as u32;
-                    let height = hdu
-                        .get_header()
-                        .get_parsed::<i64>("ZNAXIS2")
-                        .unwrap()
-                        .unwrap() as u32;
-                    let pixels = hdu_list
-                        .get_data(&hdu)
-                        .map(|value| {
-                            let value = value;
-                            match value {
-                                DataValue::Short { value, .. } => value as f32,
-                                DataValue::Integer { value, .. } => value as f32,
-                                DataValue::Float { value, .. } => value,
-                                _ => unimplemented!(),
-                            }
-                        })
-                        .map(|v| ((v / vmax) * 255.0) as u8)
-                        .collect::<Vec<_>>();
+            if let HDU::XBinaryTable(hdu) = hdu {
+                let width = hdu
+                    .get_header()
+                    .get_parsed::<i64>("ZNAXIS1")
+                    .unwrap()
+                    .unwrap() as u32;
+                let height = hdu
+                    .get_header()
+                    .get_parsed::<i64>("ZNAXIS2")
+                    .unwrap()
+                    .unwrap() as u32;
+                let pixels = hdu_list
+                    .get_data(&hdu)
+                    .map(|value| match value {
+                        DataValue::Short { value, .. } => value as f32,
+                        DataValue::Integer { value, .. } => value as f32,
+                        DataValue::Float { value, .. } => value,
+                        _ => unimplemented!(),
+                    })
+                    .map(|v| ((v / vmax) * 255.0) as u8)
+                    .collect::<Vec<_>>();
 
-                    let imgbuf = DynamicImage::ImageLuma8(
-                        image::ImageBuffer::from_raw(width, height, pixels).unwrap(),
-                    );
-                    imgbuf.save(&format!("{}.jpg", filename)).unwrap();
-                }
-                _ => (),
+                let imgbuf = DynamicImage::ImageLuma8(
+                    image::ImageBuffer::from_raw(width, height, pixels).unwrap(),
+                );
+                imgbuf.save(format!("{}.jpg", filename)).unwrap();
             }
         }
     }
@@ -672,49 +657,43 @@ mod tests {
         let mut hdu_list = Fits::from_reader(reader);
 
         while let Some(Ok(hdu)) = hdu_list.next() {
-            match hdu {
-                HDU::XBinaryTable(hdu) => {
-                    let width = hdu
-                        .get_header()
-                        .get_parsed::<i64>("ZNAXIS1")
-                        .unwrap()
-                        .unwrap() as u32;
-                    let height = hdu
-                        .get_header()
-                        .get_parsed::<i64>("ZNAXIS2")
-                        .unwrap()
-                        .unwrap() as u32;
-                    let bscale = hdu
-                        .get_header()
-                        .get_parsed::<f64>("BSCALE")
-                        .unwrap()
-                        .unwrap() as f32;
-                    let bzero = hdu
-                        .get_header()
-                        .get_parsed::<f64>("BZERO")
-                        .unwrap()
-                        .unwrap() as f32;
+            if let HDU::XBinaryTable(hdu) = hdu {
+                let width = hdu
+                    .get_header()
+                    .get_parsed::<i64>("ZNAXIS1")
+                    .unwrap()
+                    .unwrap() as u32;
+                let height = hdu
+                    .get_header()
+                    .get_parsed::<i64>("ZNAXIS2")
+                    .unwrap()
+                    .unwrap() as u32;
+                let bscale = hdu
+                    .get_header()
+                    .get_parsed::<f64>("BSCALE")
+                    .unwrap()
+                    .unwrap() as f32;
+                let bzero = hdu
+                    .get_header()
+                    .get_parsed::<f64>("BZERO")
+                    .unwrap()
+                    .unwrap() as f32;
 
-                    let pixels = hdu_list
-                        .get_data(&hdu)
-                        .map(|value| {
-                            let value = value;
-                            match value {
-                                DataValue::Short { value, .. } => value as f32,
-                                DataValue::Integer { value, .. } => value as f32,
-                                DataValue::Float { value, .. } => value,
-                                _ => unimplemented!(),
-                            }
-                        })
-                        .map(|v| (((v * bscale + bzero) / 100.0) * 255.0) as u8)
-                        .collect::<Vec<_>>();
+                let pixels = hdu_list
+                    .get_data(&hdu)
+                    .map(|value| match value {
+                        DataValue::Short { value, .. } => value as f32,
+                        DataValue::Integer { value, .. } => value as f32,
+                        DataValue::Float { value, .. } => value,
+                        _ => unimplemented!(),
+                    })
+                    .map(|v| (((v * bscale + bzero) / 100.0) * 255.0) as u8)
+                    .collect::<Vec<_>>();
 
-                    let imgbuf = DynamicImage::ImageLuma8(
-                        image::ImageBuffer::from_raw(width, height, pixels).unwrap(),
-                    );
-                    imgbuf.save(&format!("{}.jpg", filename)).unwrap();
-                }
-                _ => (),
+                let imgbuf = DynamicImage::ImageLuma8(
+                    image::ImageBuffer::from_raw(width, height, pixels).unwrap(),
+                );
+                imgbuf.save(format!("{}.jpg", filename)).unwrap();
             }
         }
     }
@@ -734,59 +713,53 @@ mod tests {
         let mut hdu_list = Fits::from_reader(reader);
 
         while let Some(Ok(hdu)) = hdu_list.next() {
-            match hdu {
-                HDU::XBinaryTable(hdu) => {
-                    let width = hdu
-                        .get_header()
-                        .get_parsed::<i64>("ZNAXIS1")
-                        .unwrap()
-                        .unwrap() as u32;
-                    let height = hdu
-                        .get_header()
-                        .get_parsed::<i64>("ZNAXIS2")
-                        .unwrap()
-                        .unwrap() as u32;
+            if let HDU::XBinaryTable(hdu) = hdu {
+                let width = hdu
+                    .get_header()
+                    .get_parsed::<i64>("ZNAXIS1")
+                    .unwrap()
+                    .unwrap() as u32;
+                let height = hdu
+                    .get_header()
+                    .get_parsed::<i64>("ZNAXIS2")
+                    .unwrap()
+                    .unwrap() as u32;
 
-                    let mut buf = vec![0_u8; (width as usize) * (height as usize)];
+                let mut buf = vec![0_u8; (width as usize) * (height as usize)];
 
-                    let tile_w = 100;
-                    let tile_h = 100;
-                    let num_tile_per_w = width / tile_w;
+                let tile_w = 100;
+                let tile_h = 100;
+                let num_tile_per_w = width / tile_w;
 
-                    for (i, pixel) in hdu_list
-                        .get_data(&hdu)
-                        .map(|value| {
-                            let value = value;
-                            match value {
-                                DataValue::Short { value, .. } => value as f32,
-                                DataValue::Integer { value, .. } => value as f32,
-                                DataValue::Float { value, .. } => value,
-                                _ => unimplemented!(),
-                            }
-                        })
-                        .map(|v| (v * 255.0) as u8)
-                        .enumerate()
-                    {
-                        let tile_idx = (i as u64) / ((tile_w * tile_h) as u64);
-                        let x_tile_idx = tile_idx % (num_tile_per_w as u64);
-                        let y_tile_idx = tile_idx / (num_tile_per_w as u64);
+                for (i, pixel) in hdu_list
+                    .get_data(&hdu)
+                    .map(|value| match value {
+                        DataValue::Short { value, .. } => value as f32,
+                        DataValue::Integer { value, .. } => value as f32,
+                        DataValue::Float { value, .. } => value,
+                        _ => unimplemented!(),
+                    })
+                    .map(|v| (v * 255.0) as u8)
+                    .enumerate()
+                {
+                    let tile_idx = (i as u64) / ((tile_w * tile_h) as u64);
+                    let x_tile_idx = tile_idx % (num_tile_per_w as u64);
+                    let y_tile_idx = tile_idx / (num_tile_per_w as u64);
 
-                        let pixel_inside_tile_idx = (i as u64) % ((tile_w * tile_h) as u64);
-                        let x_pixel_inside_tile_idx = pixel_inside_tile_idx % (tile_w as u64);
-                        let y_pixel_inside_tile_idx = pixel_inside_tile_idx / (tile_w as u64);
+                    let pixel_inside_tile_idx = (i as u64) % ((tile_w * tile_h) as u64);
+                    let x_pixel_inside_tile_idx = pixel_inside_tile_idx % (tile_w as u64);
+                    let y_pixel_inside_tile_idx = pixel_inside_tile_idx / (tile_w as u64);
 
-                        let x = x_tile_idx * (tile_w as u64) + x_pixel_inside_tile_idx;
-                        let y = y_tile_idx * (tile_h as u64) + y_pixel_inside_tile_idx;
+                    let x = x_tile_idx * (tile_w as u64) + x_pixel_inside_tile_idx;
+                    let y = y_tile_idx * (tile_h as u64) + y_pixel_inside_tile_idx;
 
-                        buf[(y * (width as u64) + x) as usize] = pixel;
-                    }
-
-                    let imgbuf = DynamicImage::ImageLuma8(
-                        image::ImageBuffer::from_raw(width, height, buf).unwrap(),
-                    );
-                    imgbuf.save(&format!("{}.jpg", filename)).unwrap();
+                    buf[(y * (width as u64) + x) as usize] = pixel;
                 }
-                _ => (),
+
+                let imgbuf = DynamicImage::ImageLuma8(
+                    image::ImageBuffer::from_raw(width, height, buf).unwrap(),
+                );
+                imgbuf.save(format!("{}.jpg", filename)).unwrap();
             }
         }
     }
