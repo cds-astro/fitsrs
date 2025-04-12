@@ -23,18 +23,18 @@ fn parse_optional_card_with_type<T: CardValue + FromStr>(
     header: &Header<Image>,
     key: &'static str,
 ) -> Result<Option<T>, Error> {
-    match header.get_parsed::<T>(key).transpose() {
-        Ok(v) => Ok(v),
-        _ => {
-            let str = header.get_parsed::<String>(key).transpose().unwrap_or(None);
-
-            Ok(if let Some(ss) = str {
-                ss.trim().parse::<T>().map(|v| Some(v)).unwrap_or(None)
-            } else {
-                // card not found but it is ok as it is not mandatory
-                None
-            })
-        }
+    let Some(value) = header.get(key) else {
+        // card not found but it is ok as it is not mandatory
+        return Ok(None);
+    };
+    if let Ok(v) = T::parse(value) {
+        return Ok(Some(v));
+    }
+    // if the value is a string, we try to fallback to parsing that string
+    // TODO: is this really necessary?
+    match value.check_for_string()?.trim().parse() {
+        Ok(v) => Ok(Some(v)),
+        Err(_) => Err(Error::ValueBadParsing),
     }
 }
 
@@ -42,14 +42,7 @@ fn parse_mandatory_card_with_type<T: CardValue>(
     header: &Header<Image>,
     key: &'static str,
 ) -> Result<T, Error> {
-    match header.get_parsed::<T>(key) {
-        // No parsing error and found
-        Some(Ok(v)) => Ok(v),
-        // No error but not found, we return an error
-        None => Err(Error::WCS),
-        // Return the parsing error
-        Some(Err(e)) => Err(e),
-    }
+    header.get_parsed::<T>(key)
 }
 
 impl<'a> TryFrom<&'a Header<Image>> for WCS {
