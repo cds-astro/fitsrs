@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fmt::Debug;
 
 use crate::error::Error;
@@ -15,6 +14,7 @@ use serde::Serialize;
 
 use super::Xtension;
 
+use crate::hdu::header::ValueMap;
 use log::warn;
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
@@ -184,7 +184,7 @@ impl Xtension for BinTable {
         self.naxis1 * self.naxis2 + self.pcount
     }
 
-    fn parse(values: &HashMap<String, Value>) -> Result<Self, Error> {
+    fn parse(values: &ValueMap) -> Result<Self, Error> {
         // BITPIX
         let bitpix = check_for_bitpix(values)?;
         if bitpix != Bitpix::U8 {
@@ -372,12 +372,11 @@ impl Xtension for BinTable {
         // gives the seed value for the random dithering pattern that was used when quantizing the
         // floating-point pixel values. The value may range from 1 to 10000, inclusive. See section 4 for
         // further discussion of this keyword.
-        let z_dither_0 =
-            if let Some(Value::Integer { value, .. }) = values.get(&"ZDITHER0".to_string()) {
-                Some(*value)
-            } else {
-                None
-            };
+        let z_dither_0 = if let Some(Value::Integer { value, .. }) = values.get("ZDITHER0") {
+            Some(*value)
+        } else {
+            None
+        };
 
         // TFORMS & TTYPES
         let (tforms, ttypes): (Vec<_>, Vec<_>) = (1..=tfields)

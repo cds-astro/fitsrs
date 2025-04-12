@@ -7,10 +7,8 @@ use std::convert::TryFrom;
 use async_trait::async_trait;
 use serde::Serialize;
 
-use crate::card::Value;
+use super::ValueMap;
 use crate::error::Error;
-
-use std::collections::HashMap;
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Serialize)]
 pub enum XtensionType {
@@ -49,7 +47,7 @@ pub trait Xtension {
 
     // Parse the Xtension keywords
     // During the parsing, some checks will be made
-    fn parse(values: &HashMap<String, Value>) -> Result<Self, Error>
+    fn parse(values: &ValueMap) -> Result<Self, Error>
     where
         Self: Sized;
 }

@@ -418,28 +418,28 @@ fn parse_empty_keyword_card(buf: &[u8; 80]) -> Card {
 }
 
 pub trait CardValue {
-    fn parse(value: Value) -> Result<Self, Error>
+    fn parse(value: &Value) -> Result<Self, Error>
     where
         Self: Sized;
 }
 
 impl CardValue for f64 {
-    fn parse(value: Value) -> Result<Self, Error> {
+    fn parse(value: &Value) -> Result<Self, Error> {
         Value::check_for_float(value)
     }
 }
 impl CardValue for i64 {
-    fn parse(value: Value) -> Result<Self, Error> {
+    fn parse(value: &Value) -> Result<Self, Error> {
         Value::check_for_integer(value)
     }
 }
 impl CardValue for String {
-    fn parse(value: Value) -> Result<Self, Error> {
-        Value::check_for_string(value)
+    fn parse(value: &Value) -> Result<Self, Error> {
+        Value::check_for_string(value).map(|s| s.to_owned())
     }
 }
 impl CardValue for bool {
-    fn parse(value: Value) -> Result<Self, Error> {
+    fn parse(value: &Value) -> Result<Self, Error> {
         Value::check_for_boolean(value)
     }
 }
@@ -514,27 +514,27 @@ fn parse_unit(comment: &Option<String>) -> Option<&str> {
 }
 
 impl Value {
-    pub fn check_for_integer(self) -> Result<i64, Error> {
+    pub fn check_for_integer(&self) -> Result<i64, Error> {
         match self {
-            Value::Integer { value: num, .. } => Ok(num),
+            Value::Integer { value: num, .. } => Ok(*num),
             _ => Err(Error::ValueBadParsing),
         }
     }
-    pub fn check_for_boolean(self) -> Result<bool, Error> {
+    pub fn check_for_boolean(&self) -> Result<bool, Error> {
         match self {
-            Value::Logical { value: logical, .. } => Ok(logical),
+            Value::Logical { value: logical, .. } => Ok(*logical),
             _ => Err(Error::ValueBadParsing),
         }
     }
-    pub fn check_for_string(self) -> Result<String, Error> {
+    pub fn check_for_string(&self) -> Result<&str, Error> {
         match self {
             Value::String { value: s, .. } => Ok(s),
             _ => Err(Error::ValueBadParsing),
         }
     }
-    pub fn check_for_float(self) -> Result<f64, Error> {
+    pub fn check_for_float(&self) -> Result<f64, Error> {
         match self {
-            Value::Float { value: f, .. } => Ok(f),
+            Value::Float { value: f, .. } => Ok(*f),
             _ => Err(Error::ValueBadParsing),
         }
     }

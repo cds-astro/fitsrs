@@ -3,6 +3,7 @@
 //! A header consists of a list a of [cards](Card) where each card is a line of
 //! 80 ASCII characters.
 use futures::{AsyncRead, AsyncReadExt};
+use indexmap::map::{IndexMap, Keys};
 use log::warn;
 use serde::Serialize;
 
@@ -10,10 +11,9 @@ pub mod extension;
 
 pub use extension::Xtension;
 
-use std::collections::hash_map::Keys;
-use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::io::Read;
+use std::ops::Deref;
 
 use crate::{
     card::{self, *},
@@ -61,7 +61,7 @@ pub fn check_card_keyword(card: &[u8; 80], keyword: &[u8; 8]) -> Result<card::Va
 }
 
 /* Mandatory keywords parsing */
-fn check_for_bitpix(values: &HashMap<String, Value>) -> Result<Bitpix, Error> {
+fn check_for_bitpix(values: &ValueMap) -> Result<Bitpix, Error> {
     if let Some(Value::Integer { value, .. }) = values.get("BITPIX") {
         match value {
             8 => Ok(Bitpix::U8),
@@ -77,7 +77,7 @@ fn check_for_bitpix(values: &HashMap<String, Value>) -> Result<Bitpix, Error> {
     }
 }
 
-fn check_for_naxis(values: &HashMap<String, Value>) -> Result<u64, Error> {
+fn check_for_naxis(values: &ValueMap) -> Result<u64, Error> {
     if let Some(Value::Integer { value, .. }) = values.get("NAXIS") {
         Ok(*value as u64)
     } else {
@@ -85,7 +85,7 @@ fn check_for_naxis(values: &HashMap<String, Value>) -> Result<u64, Error> {
     }
 }
 
-fn check_for_naxisi(values: &HashMap<String, Value>, i: usize) -> Result<u64, Error> {
+fn check_for_naxisi(values: &ValueMap, i: usize) -> Result<u64, Error> {
     let naxisi = format!("NAXIS{i}");
     if let Some(Value::Integer { value, .. }) = values.get(&naxisi) {
         Ok(*value as u64)
@@ -94,7 +94,7 @@ fn check_for_naxisi(values: &HashMap<String, Value>, i: usize) -> Result<u64, Er
     }
 }
 
-fn check_for_gcount(values: &HashMap<String, Value>) -> Result<u64, Error> {
+fn check_for_gcount(values: &ValueMap) -> Result<u64, Error> {
     if let Some(Value::Integer { value, .. }) = values.get("GCOUNT") {
         Ok(*value as u64)
     } else {
@@ -102,7 +102,7 @@ fn check_for_gcount(values: &HashMap<String, Value>) -> Result<u64, Error> {
     }
 }
 
-fn check_for_pcount(values: &HashMap<String, Value>) -> Result<u64, Error> {
+fn check_for_pcount(values: &ValueMap) -> Result<u64, Error> {
     if let Some(Value::Integer { value, .. }) = values.get("PCOUNT") {
         Ok(*value as u64)
     } else {
@@ -110,7 +110,7 @@ fn check_for_pcount(values: &HashMap<String, Value>) -> Result<u64, Error> {
     }
 }
 
-fn check_for_tfields(values: &HashMap<String, Value>) -> Result<usize, Error> {
+fn check_for_tfields(values: &ValueMap) -> Result<usize, Error> {
     if let Some(Value::Integer { value, .. }) = values.get("TFIELDS") {
         Ok(*value as usize)
     } else {
@@ -134,6 +134,78 @@ impl Bitpix {
     }
 }
 
+#[derive(Debug, PartialEq, Serialize, Clone)]
+#[serde(transparent)]
+pub struct ValueMap {
+    values: IndexMap<String, Value>,
+}
+
+impl ValueMap {
+    /// Get the value of a card, returns `None` if the card is not
+    /// found or is not a value card.
+    pub fn get(&self, key: &str) -> Option<&Value> {
+        self.values.get(key)
+    }
+
+    /// Get the value a specific card and try to parse the value. Returns an
+    /// error if the asking type does not match the true inner type of the value.
+    ///
+    /// # Params
+    /// * `key` - The key of a card
+    pub fn try_get_parsed<T>(&self, key: &str) -> Result<Option<T>, Error>
+    where
+        T: CardValue,
+    {
+        self.get(key)
+            .map(|value| {
+                <T as CardValue>::parse(value).map_err(|_| {
+                    Error::FailTypeCardParsing(
+                        key.to_string(),
+                        std::any::type_name::<T>().to_string(),
+                    )
+                })
+            })
+            .transpose()
+    }
+
+    /// Get the value a specific card and try to parse the value. Returns an
+    /// error if the value is not in the map or the asking type does not match
+    /// the true inner type of the value.
+    ///
+    /// # Params
+    /// * `key` - The key of a card
+    pub fn get_parsed<T>(&self, key: &str) -> Result<T, Error>
+    where
+        T: CardValue,
+    {
+        self.try_get_parsed(key)?
+            .ok_or_else(|| Error::FailFindingKeyword(key.to_string()))
+    }
+
+    /// Return an iterator over all key-[value](Card::Value) pairs in the FITS
+    /// header.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &Value)> {
+        self.values.iter().map(|(k, v)| (k.as_str(), v))
+    }
+
+    /// Get the keyword corresponding to a specific value, returns `None` if
+    /// no card are found with that value. If multiple cards do have the same value
+    /// then the first found card's keyword will be returned.
+    ///
+    /// # Params
+    /// * `value` - The value of a card
+    pub fn get_keyword(&self, val: &Value) -> Option<&str> {
+        self.iter()
+            .find_map(|(name, value)| (value == val).then_some(name))
+    }
+
+    /// Return an iterator over all keywords representing a FITS [Card::Value]
+    /// in the FITS header.
+    pub fn keywords(&self) -> Keys<String, Value> {
+        self.values.keys()
+    }
+}
+
 /// The header part of an [crate::hdu::HDU].
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct Header<X> {
@@ -146,9 +218,17 @@ pub struct Header<X> {
     ///   buffer used on the [Card].
     /// * If contrary to the FITS standard, a keyword appears more than once in
     ///   the header, the value of the last [Card::Value] is returned.
-    values: HashMap<String, Value>,
+    values: ValueMap,
     /// Mandatory keywords for fits ext parsing.
     xtension: X,
+}
+
+impl<X> Deref for Header<X> {
+    type Target = ValueMap;
+
+    fn deref(&self) -> &Self::Target {
+        &self.values
+    }
 }
 
 impl<X> Header<X>
@@ -233,8 +313,8 @@ where
     }
 }
 
-fn process_cards(cards: &[Card]) -> Result<HashMap<String, Value>, Error> {
-    let mut values = HashMap::new();
+fn process_cards(cards: &[Card]) -> Result<ValueMap, Error> {
+    let mut values = IndexMap::new();
     let mut kw: Option<String> = None;
 
     for (i, card) in cards.iter().enumerate() {
@@ -289,7 +369,7 @@ fn process_cards(cards: &[Card]) -> Result<HashMap<String, Value>, Error> {
             }
             Card::End => {
                 if i + 1 == cards.len() {
-                    return Ok(values);
+                    return Ok(ValueMap { values });
                 } else {
                     unreachable!("cards trailing after the END card")
                 }

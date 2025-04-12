@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use async_trait::async_trait;
 
 use log::warn;
@@ -16,6 +14,7 @@ use crate::hdu::header::check_for_pcount;
 use crate::hdu::header::check_for_tfields;
 use crate::hdu::header::Bitpix;
 
+use crate::hdu::header::ValueMap;
 use crate::hdu::header::Xtension;
 use std::num::ParseIntError;
 use std::str::FromStr;
@@ -107,7 +106,7 @@ impl Xtension for AsciiTable {
         self.naxis1 * self.naxis2
     }
 
-    fn parse(values: &HashMap<String, Value>) -> Result<Self, Error> {
+    fn parse(values: &ValueMap) -> Result<Self, Error> {
         // BITPIX
         let bitpix = check_for_bitpix(values)?;
         if bitpix != Bitpix::U8 {

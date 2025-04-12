@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use serde::Serialize;
-use std::collections::HashMap;
 
 use crate::card::Value;
 use crate::error::Error;
@@ -8,6 +7,7 @@ use crate::hdu::header::check_for_bitpix;
 use crate::hdu::header::check_for_naxis;
 use crate::hdu::header::Bitpix;
 
+use crate::hdu::header::ValueMap;
 use crate::hdu::header::Xtension;
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
@@ -44,7 +44,7 @@ impl Xtension for Image {
         self.bitpix.byte_size() as u64 * self.get_num_pixels()
     }
 
-    fn parse(values: &HashMap<String, Value>) -> Result<Self, Error> {
+    fn parse(values: &ValueMap) -> Result<Self, Error> {
         // BITPIX
         let bitpix = check_for_bitpix(values)?;
         // NAXIS
