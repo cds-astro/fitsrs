@@ -29,7 +29,8 @@
 //! }
 //! ```
 
-#[doc = include_str!("../README.md")]
+#![doc = include_str!("../README.md")]
+
 extern crate async_trait;
 //extern crate byteorder;
 #[macro_use]
