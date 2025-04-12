@@ -29,7 +29,7 @@ pub struct AsyncFits<R> {
 }
 
 use crate::error::Error;
-impl<'a, R> AsyncFits<R> {
+impl<R> AsyncFits<R> {
     /// Parse a FITS file
     /// # Params
     /// * `reader` - a reader created i.e. from the opening of a file
@@ -72,7 +72,7 @@ where
         if is_remaining_bytes {
             let mut block_mem_buf: [u8; 2880] = [0; 2880];
 
-            let num_off_bytes = (2880 - (self.num_bytes_in_cur_hdu % 2880)) as usize;
+            let num_off_bytes = 2880 - (self.num_bytes_in_cur_hdu % 2880);
             match self
                 .reader
                 .read_exact(&mut block_mem_buf[..num_off_bytes])
@@ -232,7 +232,7 @@ where
         if is_remaining_bytes {
             let mut block_mem_buf: [u8; 2880] = [0; 2880];
 
-            let num_off_bytes = (2880 - ((*num_bytes_read) % 2880)) as usize;
+            let num_off_bytes = 2880 - ((*num_bytes_read) % 2880);
             reader
                 .read_exact(&mut block_mem_buf[..num_off_bytes])
                 .await

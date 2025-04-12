@@ -31,7 +31,7 @@ pub fn consume_next_card<R: Read>(
     Ok(())
 }
 
-pub async fn consume_next_card_async<'a, R: AsyncRead + std::marker::Unpin>(
+pub async fn consume_next_card_async<R: AsyncRead + std::marker::Unpin>(
     reader: &mut R,
     buf: &mut [u8; 80],
     bytes_read: &mut usize,
@@ -130,7 +130,7 @@ pub enum Bitpix {
 
 impl Bitpix {
     pub fn byte_size(&self) -> usize {
-        ((*self as i8).abs() as usize) >> 3
+        ((*self as i8).unsigned_abs() as usize) >> 3
     }
 }
 
@@ -155,8 +155,8 @@ impl<X> Header<X>
 where
     X: Xtension + std::fmt::Debug,
 {
-    pub(crate) fn parse(mut cards: Vec<Card>) -> Result<Self, Error> {
-        let values = process_cards(&mut cards)?;
+    pub(crate) fn parse(cards: Vec<Card>) -> Result<Self, Error> {
+        let values = process_cards(&cards)?;
 
         let xtension: X = Xtension::parse(&values)?;
 

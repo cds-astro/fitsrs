@@ -49,7 +49,7 @@ where
 
 use crate::error::Error;
 
-impl<'a, R> Fits<R> {
+impl<R> Fits<R> {
     /// Parse a FITS file
     /// # Params
     /// * `reader` - a reader created i.e. from the opening of a file
@@ -85,7 +85,7 @@ where
         let offset_in_2880_block = self.num_bytes_in_cur_du % 2880;
         let is_aligned_on_block = offset_in_2880_block == 0;
         if !is_aligned_on_block {
-            num_bytes_to_skip += (2880 - offset_in_2880_block) as usize;
+            num_bytes_to_skip += 2880 - offset_in_2880_block;
         }
         self.reader.seek_relative(num_bytes_to_skip as i64)?;
 
@@ -93,7 +93,7 @@ where
     }
 }
 
-impl<'a, R> Fits<R> {
+impl<R> Fits<R> {
     /// Get the byte index where the data for the current processed HDU is
     ///
     /// At least one next call has to be done
@@ -226,7 +226,7 @@ where
         if is_remaining_bytes {
             let mut block_mem_buf: [u8; 2880] = [0; 2880];
 
-            let num_off_bytes = (2880 - ((*num_bytes_read) % 2880)) as usize;
+            let num_off_bytes = 2880 - ((*num_bytes_read) % 2880);
             reader
                 .read_exact(&mut block_mem_buf[..num_off_bytes])
                 .map_err(|_| Error::StaticError("EOF reached"))?;

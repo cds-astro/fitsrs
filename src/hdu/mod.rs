@@ -55,10 +55,8 @@ where
     loop {
         consume_next_card(reader, &mut card_80_bytes_buf, num_bytes_read)
             // Precise the error that we did not encounter the END stopping card
-            .map_err(|e| {
+            .inspect_err(|_e| {
                 error!("Fail reading the header without encountering the END card");
-
-                e
             })?;
 
         if let Ok(card) = Card::try_from(&card_80_bytes_buf) {

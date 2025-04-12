@@ -25,7 +25,6 @@ where
     }
 }
 
-
 #[derive(Serialize, Debug)]
 pub struct ImageData<R> {
     start_pos: u64,
@@ -66,7 +65,11 @@ where
             Bitpix::F64 => Pixels::F64(It::new(reader, limit)),
         };
 
-        Self { start_pos, num_bytes_data_block: limit, pixels }
+        Self {
+            start_pos,
+            num_bytes_data_block: limit,
+            pixels,
+        }
     }
 
     /// Get the pixels iterator of the image
@@ -76,7 +79,7 @@ where
 }
 
 use std::io::Cursor;
-impl<'a, R> ImageData<&'a mut Cursor<R>>
+impl<R> ImageData<&mut Cursor<R>>
 where
     R: AsRef<[u8]>,
 {
@@ -84,12 +87,12 @@ where
     /// You might need to convert the data from big to little endian at some point
     pub fn raw_bytes(&self) -> &[u8] {
         let inner = match &self.pixels {
-            Pixels::U8(It { reader, ..}) => reader.get_ref(),
-            Pixels::I16(It { reader, ..}) => reader.get_ref(),
-            Pixels::I32(It { reader, ..}) => reader.get_ref(),
-            Pixels::I64(It { reader, ..}) => reader.get_ref(),
-            Pixels::F32(It { reader, ..}) => reader.get_ref(),
-            Pixels::F64(It { reader, ..}) => reader.get_ref(),
+            Pixels::U8(It { reader, .. }) => reader.get_ref(),
+            Pixels::I16(It { reader, .. }) => reader.get_ref(),
+            Pixels::I32(It { reader, .. }) => reader.get_ref(),
+            Pixels::I64(It { reader, .. }) => reader.get_ref(),
+            Pixels::F32(It { reader, .. }) => reader.get_ref(),
+            Pixels::F64(It { reader, .. }) => reader.get_ref(),
         };
         let raw_bytes = inner.as_ref();
 

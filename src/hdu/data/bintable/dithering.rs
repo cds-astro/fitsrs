@@ -21,7 +21,7 @@ pub(crate) const fn random_generator() -> [f32; N_RANDOM] {
     rand_value
 }
 
-pub(crate) const RAND_VALUES: [f32; N_RANDOM] = random_generator();
+pub(crate) static RAND_VALUES: [f32; N_RANDOM] = random_generator();
 
 mod tests {
     #[test]

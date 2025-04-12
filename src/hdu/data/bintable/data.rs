@@ -58,7 +58,7 @@ where
         let data = TableData::new(reader, header, start_pos);
 
         if let Some(tile_compressed) = &ctx.z_image {
-            BinaryTableData::TileCompressed(TileCompressedData::new(header, data, &tile_compressed))
+            BinaryTableData::TileCompressed(TileCompressedData::new(header, data, tile_compressed))
         } else {
             BinaryTableData::Table(data)
         }
@@ -144,7 +144,7 @@ pub struct TableData<R> {
     heap: bool,
 }
 
-impl<'a, R> TableData<&'a mut Cursor<R>>
+impl<R> TableData<&mut Cursor<R>>
 where
     R: AsRef<[u8]>,
 {
@@ -161,7 +161,7 @@ where
 
 use std::io::Cursor;
 /// Get a reference to the inner reader for in-memory readers
-impl<'a, R> TableData<&'a mut Cursor<R>> {
+impl<R> TableData<&mut Cursor<R>> {
     pub const fn get_ref(&self) -> &R {
         self.reader.get_ref()
     }
@@ -300,25 +300,21 @@ where
         } else {
             self.col_idx = (self.col_idx + 1) % self.cols_idx.len();
             self.item_idx = 0;
-    
+
             let col_idx = self.cols_idx[self.col_idx];
-    
+
             let next_row_byte_off = self.col_byte_offsets[col_idx] as i64;
             let cur_row_byte_off = (self.byte_offset as i64) % (self.ctx.naxis1 as i64);
-    
-            if next_row_byte_off > cur_row_byte_off {
-                // next col is on the same row
-                next_row_byte_off - cur_row_byte_off
-            } else if next_row_byte_off < cur_row_byte_off {
+
+            let mut rel_row_byte_off = next_row_byte_off - cur_row_byte_off;
+
+            if rel_row_byte_off < 0 {
                 // next col is on the next row
                 // get to the end of the current row
-                (self.ctx.naxis1 as i64) - cur_row_byte_off
-                // add the off the the start of the next row
-                    + next_row_byte_off
-            } else {
-                // we are at the good location where the next col is
-                0
+                rel_row_byte_off += self.ctx.naxis1 as i64;
             }
+
+            rel_row_byte_off
         };
 
         self.reader.seek_relative(off)?;
@@ -353,7 +349,7 @@ where
                 // go back to the beginning of the main table data block
                 - (self.byte_offset as i64) + new_byte_offset;
 
-            let _ = self.reader.seek_relative(off)?;
+            self.reader.seek_relative(off)?;
 
             self.byte_offset = new_byte_offset as usize;
 
@@ -401,7 +397,7 @@ where
                 let pos = SeekFrom::Start(self.reader.stream_position()?);
 
                 // Go to the HEAP
-                let _ = self.reader.seek_relative(off)?;
+                self.reader.seek_relative(off)?;
 
                 let num_bytes_to_read = n_elems * t_byte_size;
                 self.state = DataReaderState::HEAP {
@@ -833,13 +829,8 @@ where
                             self.byte_offset += Q::BYTES_SIZE;
 
                             if self.heap {
-                                self.jump_to_heap(
-                                    *ty,
-                                    offset_byte as u64,
-                                    num_elems as u64,
-                                    *t_byte_size,
-                                )
-                                .ok()?;
+                                self.jump_to_heap(*ty, offset_byte, num_elems, *t_byte_size)
+                                    .ok()?;
 
                                 self.next()
                             } else {
