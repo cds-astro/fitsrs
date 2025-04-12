@@ -192,21 +192,21 @@ impl Xtension for BinTable {
         }
 
         // NAXIS
-        let naxis = check_for_naxis(values)? as u64;
+        let naxis = check_for_naxis(values)?;
         if naxis != 2 {
             return Err(Error::StaticError("Binary Table HDU must have NAXIS = 2"));
         }
 
         // NAXIS1
-        let naxis1 = check_for_naxisi(values, 1)? as u64;
+        let naxis1 = check_for_naxisi(values, 1)?;
         // NAXIS2
-        let naxis2 = check_for_naxisi(values, 2)? as u64;
+        let naxis2 = check_for_naxisi(values, 2)?;
 
         // PCOUNT
-        let pcount = check_for_pcount(values)? as u64;
+        let pcount = check_for_pcount(values)?;
 
         // GCOUNT
-        let gcount = check_for_gcount(values)? as u64;
+        let gcount = check_for_gcount(values)?;
         if gcount != 1 {
             return Err(Error::StaticError("Ascii Table HDU must have GCOUNT = 1"));
         }
@@ -451,7 +451,7 @@ impl Xtension for BinTable {
                     Some((t_byte_size, ty))
                 };
 
-                let tformty = match field_ty as char {
+                let tformty = match field_ty {
                     // Logical
                     'L' => TFormType::L { repeat_count },
                     // Bit

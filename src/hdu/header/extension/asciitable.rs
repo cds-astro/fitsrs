@@ -119,8 +119,8 @@ impl Xtension for AsciiTable {
         }
 
         // NAXIS1
-        let naxis1 = check_for_naxisi(values, 1)? as u64;
-        let naxis2 = check_for_naxisi(values, 2)? as u64;
+        let naxis1 = check_for_naxisi(values, 1)?;
+        let naxis2 = check_for_naxisi(values, 2)?;
 
         // PCOUNT
         let pcount = check_for_pcount(values)?;
