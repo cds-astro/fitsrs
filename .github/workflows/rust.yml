@@ -22,3 +22,7 @@ jobs:
     # the (--lib) argument only execute tests from the library and not the doctest (which open a file not in the repo)
     - name: Run tests
       run: cargo test --lib --verbose -- --skip "test_fits"
+    - name: Lint checks
+      run: cargo clippy --all-targets --all-features -- -D warnings
+    - name: Format check
+      run: cargo fmt --all -- --check
