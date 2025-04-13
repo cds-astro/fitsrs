@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 use serde::Serialize;
 
-use crate::card::Value;
 use crate::error::Error;
 use crate::hdu::header::check_for_bitpix;
 use crate::hdu::header::check_for_naxis;
@@ -52,12 +51,9 @@ impl Xtension for Image {
         // The size of each NAXIS
         let naxisn = (1..=naxis)
             .map(|naxis_i| {
-                let naxis = format!("NAXIS{naxis_i}");
-                if let Some(Value::Integer { value, .. }) = values.get(&naxis) {
-                    Ok(*value as u64)
-                } else {
-                    Err(Error::FailFindingKeyword(naxis))
-                }
+                values
+                    .get_parsed(&format!("NAXIS{naxis_i}"))
+                    .map(|value: i64| value as _)
             })
             .collect::<Result<_, _>>()?;
 
