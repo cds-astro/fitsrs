@@ -638,7 +638,7 @@ mod tests {
                 let imgbuf = DynamicImage::ImageLuma8(
                     image::ImageBuffer::from_raw(width, height, pixels).unwrap(),
                 );
-                imgbuf.save(format!("{}.jpg", filename)).unwrap();
+                imgbuf.save(format!("{filename}.jpg")).unwrap();
             }
         }
     }
@@ -693,7 +693,7 @@ mod tests {
                 let imgbuf = DynamicImage::ImageLuma8(
                     image::ImageBuffer::from_raw(width, height, pixels).unwrap(),
                 );
-                imgbuf.save(format!("{}.jpg", filename)).unwrap();
+                imgbuf.save(format!("{filename}.jpg")).unwrap();
             }
         }
     }
@@ -759,7 +759,7 @@ mod tests {
                 let imgbuf = DynamicImage::ImageLuma8(
                     image::ImageBuffer::from_raw(width, height, buf).unwrap(),
                 );
-                imgbuf.save(format!("{}.jpg", filename)).unwrap();
+                imgbuf.save(format!("{filename}.jpg")).unwrap();
             }
         }
     }

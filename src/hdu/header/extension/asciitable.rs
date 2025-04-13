@@ -142,7 +142,7 @@ impl Xtension for AsciiTable {
             .filter_map(|idx_field| {
                 let idx_field = idx_field + 1;
                 let tbcol = if let Some(Value::Integer { value, .. }) =
-                    values.get(&format!("TBCOL{idx_field:?}"))
+                    values.get(&format!("TBCOL{idx_field}"))
                 {
                     Some(value.to_owned())
                 } else {
@@ -150,7 +150,7 @@ impl Xtension for AsciiTable {
                 };
 
                 let tform = if let Some(Value::String { value, .. }) =
-                    values.get(&format!("TFORM{idx_field:?}"))
+                    values.get(&format!("TFORM{idx_field}"))
                 {
                     Some(value.to_owned())
                 } else {

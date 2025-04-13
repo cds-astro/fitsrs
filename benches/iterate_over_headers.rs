@@ -50,7 +50,7 @@ fn criterion_benchmark_parse_only_headers(c: &mut Criterion) {
         "samples/misc/SN2923fxjA.fits"
     ];
     for filename in filenames {
-        group.bench_function(format!("open {:?}", filename), |b| {
+        group.bench_function(format!("open {filename:?}"), |b| {
             b.iter(|| open_headers(filename))
         });
     }

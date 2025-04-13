@@ -66,7 +66,7 @@ pub fn read(bytes: Vec<u8>) -> Result<js_sys::Object, JsValue> {
                 size,
                 ..
             } => {
-                let key = format!("NAXIS{:?}", idx);
+                let key = format!("NAXIS{idx}");
                 (key, JsValue::from_f64(size as f64))
             }
             FITSHeaderKeyword::Blank(value) => {

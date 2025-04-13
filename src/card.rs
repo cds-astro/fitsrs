@@ -170,8 +170,7 @@ fn parse_extension(buf: &[u8; 80]) -> Result<Card, Error> {
         Ok(Card::Xtension { x, comment })
     } else {
         let msg = format!(
-            "XTENSION value must be enclosed in single quotes, found: {}",
-            value
+            "XTENSION value must be enclosed in single quotes, found: {value}"
         );
         Err(Error::DynamicError(msg))
     }
@@ -689,7 +688,7 @@ mod tests {
         if let Card::Comment(comment) = card {
             assert_eq!(comment, "comment starts / ends here...�");
         } else {
-            return Err(Error::DynamicError(format!("{:?}", card)));
+            return Err(Error::DynamicError(format!("{card:?}")));
         }
         Ok(())
     }

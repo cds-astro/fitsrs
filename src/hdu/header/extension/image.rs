@@ -60,9 +60,9 @@ impl Xtension for Image {
         // NAXIS
         let naxis = check_for_naxis(values)?;
         // The size of each NAXIS
-        let naxisn = (0..naxis)
+        let naxisn = (1..=naxis)
             .map(|naxis_i| {
-                let naxis = format!("NAXIS{}", (naxis_i + 1));
+                let naxis = format!("NAXIS{naxis_i}");
                 if let Some(Value::Integer { value, .. }) = values.get(&naxis) {
                     Ok(*value as u64)
                 } else {
