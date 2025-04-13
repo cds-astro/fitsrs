@@ -138,9 +138,8 @@ impl Xtension for AsciiTable {
         let tfields = check_for_tfields(values)?;
 
         // TFORMS
-        let (tbcols, tforms) = (0..tfields)
+        let (tbcols, tforms) = (1..=tfields)
             .filter_map(|idx_field| {
-                let idx_field = idx_field + 1;
                 let tbcol = if let Some(Value::Integer { value, .. }) =
                     values.get(&format!("TBCOL{idx_field}"))
                 {
