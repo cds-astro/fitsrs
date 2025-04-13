@@ -390,8 +390,7 @@ impl Xtension for BinTable {
                 let tform = if let Some(Value::String{value, ..}) = values.get(&tform_kw) {
                     Some(value.to_owned())
                 } else {
-                    warn!("{} has not been found. It will be discarded", &tform_kw);
-
+                    warn!("{tform_kw} has not been found. It will be discarded");
                     None
                 }?;
                 // try to find a ttype (optional keyword)
@@ -402,7 +401,7 @@ impl Xtension for BinTable {
                 };
 
                 if ttype.is_none() {
-                    warn!("Field {:?} does not have a TTYPE name.", tform_kw);
+                    warn!("Field {tform_kw:?} does not have a TTYPE name.");
                 }
 
                 let count = tform
@@ -415,7 +414,7 @@ impl Xtension for BinTable {
                 // If the field type is not found, discard it as well
                 let field_ty = tform.chars().nth(num_count_digits);
                 if field_ty.is_none() {
-                    warn!("Cannot extract the field type of {}", &tform_kw);
+                    warn!("Cannot extract the field type of {tform_kw}");
                 }
                 let field_ty = field_ty?;
 
@@ -424,7 +423,7 @@ impl Xtension for BinTable {
                     let elem_ty = tform.chars().nth(num_count_digits + 1);
 
                     if elem_ty.is_none() {
-                        warn!("Could not extract the type from the array descriptor field. Discard {}", &tform_kw);
+                        warn!("Could not extract the type from the array descriptor field. Discard {tform_kw}");
                     }
 
                     let elem_ty = elem_ty?;
@@ -442,7 +441,7 @@ impl Xtension for BinTable {
                         'C' => (C::BYTES_SIZE, VariableArrayTy::C),
                         'M' => (M::BYTES_SIZE, VariableArrayTy::M),
                         _ => {
-                            warn!("Type not recognized. Discard {}", &tform_kw);
+                            warn!("Type not recognized. Discard {tform_kw}");
                             return None;
                         },
                     };
@@ -494,7 +493,7 @@ impl Xtension for BinTable {
                         }
                     },
                     _ => {
-                        warn!("Field type not recognized. Discard {}", tform_kw);
+                        warn!("Field type not recognized. Discard {tform_kw}");
                         return None;
                     }
                 };

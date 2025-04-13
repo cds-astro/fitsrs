@@ -4,11 +4,11 @@ quick_error! {
         /// General error case
         StaticError(message: &'static str) {
             from()
-            display("{}", message)
+            display("{message}")
         }
         DynamicError(message: String) {
             from()
-            display("{}", message)
+            display("{message}")
         }
         BitpixBadValue {
             display("Bitpix value found is not valid. Standard values are: -64, -32, 8, 16, 32 and 64.")
@@ -18,7 +18,7 @@ quick_error! {
             display("A 80 bytes card could not be read. A fits file must have a multiple of 80 characters.")
         }
         FailFindingKeyword(keyword: String) {
-            display("{} keyword has not been found.", keyword)
+            display("{keyword} keyword has not been found.")
         }
         WCS {
             from(wcs::error::Error)
@@ -28,10 +28,10 @@ quick_error! {
             display("A value could not be parsed correctly")
         }
         FailTypeCardParsing(card: String, t: String) {
-            display("{} card is not of type {}", card, t)
+            display("{card} card is not of type {t}")
         }
         NotSupportedXtensionType(extension: String) {
-            display("`{}` extension is not supported. Only BINTABLE, TABLE and IMAGE are.", extension)
+            display("{extension} extension is not supported. Only BINTABLE, TABLE and IMAGE are.")
         }
         Utf8 {
             from(std::str::Utf8Error)
