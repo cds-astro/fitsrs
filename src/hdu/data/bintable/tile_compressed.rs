@@ -3,7 +3,6 @@ use flate2::read::GzDecoder;
 use super::data::TableData;
 use super::dithering::{N_RANDOM, RAND_VALUES};
 use super::rice::RICEDecoder;
-use crate::card::Value;
 use crate::error::Error;
 use crate::hdu::header::extension::bintable::{BinTable, TileCompressedImage, ZCmpType, ZQuantiz};
 use crate::hdu::header::{Bitpix, Header};
@@ -201,18 +200,14 @@ impl<R> TileCompressedData<R> {
             // If no ZBLANK colum has been found then check the header keywords (ZBLANK for float, BLANK for integer)
             .map_or_else(
                 || {
-                    // integers
                     if (*z_bitpix as i32) < 0 {
-                        if let Some(Value::Float { value, .. }) = header.get("ZBLANK") {
-                            Some(ZBLANK::Value(*value))
-                        } else {
-                            None
-                        }
-                    } else if let Some(Value::Integer { value, .. }) = header.get("BLANK") {
-                        Some(ZBLANK::Value(*value as f64))
+                        header.get_parsed("ZBLANK")
                     } else {
-                        None
+                        header.get_parsed("BLANK").map(|value: i64| value as f64)
                     }
+                    // TODO: we should probably propagate errors from here if ZBLANK/BLANK exist but are of a wrong type.
+                    .ok()
+                    .map(ZBLANK::Value)
                 },
                 |field_idx| Some(ZBLANK::ColumnIdx(field_idx)),
             );

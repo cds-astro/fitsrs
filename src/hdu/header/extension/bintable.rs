@@ -234,8 +234,8 @@ impl Xtension for BinTable {
                                 if value == "BLOCKSIZE" && zname.starts_with("ZNAME") {
                                     let zval = zname.replace("NAME", "VAL");
 
-                                    if let Some(Value::Integer { value, .. }) = values.get(&zval) {
-                                        Some(*value as u8)
+                                    if let Ok(value) = values.get_parsed::<i64>(&zval) {
+                                        Some(value as u8)
                                     } else {
                                         None
                                     }
@@ -265,30 +265,19 @@ impl Xtension for BinTable {
             None
         };
 
-        let z_bitpix = if let Some(Value::Integer {
-            value: z_bitpix, ..
-        }) = values.get("ZBITPIX")
-        {
-            match z_bitpix {
-                8 => Some(Bitpix::U8),
-                16 => Some(Bitpix::I16),
-                32 => Some(Bitpix::I32),
-                64 => Some(Bitpix::I64),
-                -32 => Some(Bitpix::F32),
-                -64 => Some(Bitpix::F64),
-                _ => {
-                    warn!("ZBITPIX is not valid. The tile compressed image column will be discarded if any");
-                    None
-                }
+        let z_bitpix = match values.try_get_parsed::<Bitpix>("ZBITPIX") {
+            Ok(Some(z_bitpix)) => Some(z_bitpix),
+            Ok(None) => None,
+            Err(err) => {
+                warn!("ZBITPIX is not valid. The tile compressed image column will be discarded if any: {}", err);
+                None
             }
-        } else {
-            None
         };
 
         // ZNAXIS (required keyword) The value field of this keyword shall contain an integer that gives
         // the value of the NAXIS keyword in the uncompressed FITS image.
-        let z_naxis = if let Some(Value::Integer { value, .. }) = values.get("ZNAXIS") {
-            Some(*value as usize)
+        let z_naxis = if let Ok(value) = values.get_parsed::<i64>("ZNAXIS") {
+            Some(value as usize)
         } else {
             None
         };
@@ -313,23 +302,24 @@ impl Xtension for BinTable {
             let mut z_tilen = Vec::with_capacity(z_naxis);
 
             for i in 1..=z_naxis {
-                let naxisn =
-                    if let Some(Value::Integer { value, .. }) = values.get(&format!("ZNAXIS{i}")) {
-                        *value
-                    } else {
-                        warn!("ZNAXISN is mandatory. Tile compressed image discarded");
-                        break;
-                    };
+                let naxisn = if let Ok(value) = values.get_parsed::<i64>(&format!("ZNAXIS{i}")) {
+                    value
+                } else {
+                    warn!("ZNAXISN is mandatory. Tile compressed image discarded");
+                    break;
+                };
 
                 // If not found, z_tilen equals z_naxisn
-                let tilen = match (values.get(&format!("ZTILE{i}")), i) {
+                let tilen = if let Ok(value) = values.get_parsed(&format!("ZTILE{i}")) {
                     // ZTILEi has been found
-                    (Some(&Value::Integer { value, .. }), _) => value,
+                    value
+                } else if i == 1 {
                     // ZTILEi has not been found or is not set to an integer => default behavior
                     // * i == 1, ZTILE1 = NAXIS1
+                    naxisn
+                } else {
                     // * i > 1, ZTILEi = 1
-                    (_, 1) => naxisn,
-                    _ => 1,
+                    1
                 };
 
                 z_naxisn.push(naxisn as usize);
@@ -372,8 +362,8 @@ impl Xtension for BinTable {
         // gives the seed value for the random dithering pattern that was used when quantizing the
         // floating-point pixel values. The value may range from 1 to 10000, inclusive. See section 4 for
         // further discussion of this keyword.
-        let z_dither_0 = if let Some(Value::Integer { value, .. }) = values.get("ZDITHER0") {
-            Some(*value)
+        let z_dither_0 = if let Ok(value) = values.get_parsed("ZDITHER0") {
+            Some(value)
         } else {
             None
         };
@@ -383,7 +373,7 @@ impl Xtension for BinTable {
             .filter_map(|idx_field| {
                 // discard the tform if it was not found and raise a warning
                 let tform_kw = format!("TFORM{idx_field}");
-                let tform = if let Some(Value::String{value, ..}) = values.get(&tform_kw) {
+                let tform = if let Ok(value) = values.get_parsed(&tform_kw) {
                     Some(value)
                 } else {
                     warn!("{tform_kw} has not been found. It will be discarded");
@@ -391,8 +381,8 @@ impl Xtension for BinTable {
                 }?;
 
                 // try to find a ttype (optional keyword)
-                let ttype = if let Some(Value::String{value, ..}) = values.get(&format!("TTYPE{idx_field}")) {
-                    Some(value.to_owned())
+                let ttype = if let Ok(value) = values.get_parsed(&format!("TTYPE{idx_field}")) {
+                    Some(value)
                 } else {
                     warn!("Field {tform_kw:?} does not have a TTYPE name.");
                     None
@@ -539,8 +529,8 @@ impl Xtension for BinTable {
         };
 
         // update the value of theap if found
-        let theap = if let Some(Value::Integer { value, .. }) = values.get("THEAP") {
-            *value as usize
+        let theap = if let Ok(value) = values.get_parsed("THEAP") {
+            value as usize
         } else {
             (naxis1 as usize) * (naxis2 as usize)
         };

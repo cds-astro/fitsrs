@@ -3,7 +3,6 @@ use async_trait::async_trait;
 use log::warn;
 use serde::Serialize;
 
-use crate::card::Value;
 use crate::error::Error;
 
 use crate::hdu::header::check_for_bitpix;
@@ -14,10 +13,10 @@ use crate::hdu::header::check_for_pcount;
 use crate::hdu::header::check_for_tfields;
 use crate::hdu::header::Bitpix;
 
+use crate::card::CardValue;
+use crate::card::Value;
 use crate::hdu::header::ValueMap;
 use crate::hdu::header::Xtension;
-use std::num::ParseIntError;
-use std::str::FromStr;
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct AsciiTable {
@@ -139,29 +138,28 @@ impl Xtension for AsciiTable {
         let tfields = check_for_tfields(values)?;
 
         // TFORMS
-        let (tbcols, tforms) = (1..=tfields)
-            .filter_map(|idx_field| {
-                let tbcol = if let Some(Value::Integer { value, .. }) =
-                    values.get(&format!("TBCOL{idx_field}"))
-                {
-                    *value as u64
-                } else {
-                    warn!("Discard field {idx_field}");
-                    return None;
-                };
+        let mut tbcols = Vec::with_capacity(tfields);
+        let mut tforms = Vec::with_capacity(tfields);
+        for idx_field in 1..=tfields {
+            let tbcol = match values.get_parsed::<i64>(&format!("TBCOL{idx_field}")) {
+                Ok(tbcol) => tbcol,
+                Err(err) => {
+                    warn!("Discard field {idx_field}: {err}");
+                    continue;
+                }
+            };
 
-                let tform = if let Some(Value::String { value, .. }) =
-                    values.get(&format!("TFORM{idx_field}"))
-                {
-                    TFormAsciiTable::from_str(value).ok()?
-                } else {
-                    warn!("Discard field {idx_field}");
-                    return None;
-                };
+            let tform = match values.get_parsed::<TFormAsciiTable>(&format!("TFORM{idx_field}")) {
+                Ok(tform) => tform,
+                Err(err) => {
+                    warn!("Discard field {idx_field}: {err}");
+                    continue;
+                }
+            };
 
-                Some((tbcol, tform))
-            })
-            .unzip();
+            tbcols.push(tbcol as _);
+            tforms.push(tform);
+        }
 
         Ok(AsciiTable {
             bitpix,
@@ -193,47 +191,35 @@ pub enum TFormAsciiTable {
     DFloatingPointExp { w: usize, d: usize },
 }
 
-#[derive(Debug)]
-pub enum TFormAsciiTableParseError {
-    ParseInt(ParseIntError),
-    StringFormat,
-}
-
-impl From<ParseIntError> for TFormAsciiTableParseError {
-    fn from(err: ParseIntError) -> Self {
-        TFormAsciiTableParseError::ParseInt(err)
-    }
-}
-
-impl FromStr for TFormAsciiTable {
-    type Err = TFormAsciiTableParseError;
-
-    fn from_str(tform: &str) -> Result<Self, Self::Err> {
-        let mut chars = tform.trim_end().chars();
+impl CardValue for TFormAsciiTable {
+    fn parse(value: &Value) -> Result<Self, Error> {
+        let mut chars = value.check_for_string()?.trim_end().chars();
         let first_char = chars
             .next()
-            .ok_or(TFormAsciiTableParseError::StringFormat)?;
+            .ok_or(Error::StaticError("TFORM string is empty"))?;
         let rest = chars.as_str();
 
+        let parse = |s: &str| {
+            s.parse()
+                .map_err(|_| Error::StaticError("Failed to parse an integer from the TFORM string"))
+        };
+
         let parse_split = || {
-            let (w, d) = rest
-                .split_once('.')
-                .ok_or(TFormAsciiTableParseError::StringFormat)?;
+            let (w, d) = rest.split_once('.').ok_or(Error::StaticError(
+                "Expected to find `.` in the TFORM string",
+            ))?;
 
-            let w = w.parse()?;
-            let d = d.parse()?;
-
-            Ok::<_, Self::Err>((w, d))
+            Ok::<_, Error>((parse(w)?, parse(d)?))
         };
 
         Ok(match first_char {
             'A' => {
-                let w = rest.parse()?;
+                let w = parse(rest)?;
 
                 TFormAsciiTable::Character { w }
             }
             'I' => {
-                let w = rest.parse()?;
+                let w = parse(rest)?;
 
                 TFormAsciiTable::DecimalInteger { w }
             }
@@ -252,7 +238,7 @@ impl FromStr for TFormAsciiTable {
 
                 TFormAsciiTable::DFloatingPointExp { w, d }
             }
-            _ => return Err(TFormAsciiTableParseError::StringFormat),
+            _ => return Err(Error::StaticError("Invalid TFORM prefix")),
         })
     }
 }
