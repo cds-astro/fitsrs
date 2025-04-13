@@ -362,18 +362,14 @@ impl Xtension for BinTable {
         // gives the seed value for the random dithering pattern that was used when quantizing the
         // floating-point pixel values. The value may range from 1 to 10000, inclusive. See section 4 for
         // further discussion of this keyword.
-        let z_dither_0 = if let Ok(value) = values.get_parsed("ZDITHER0") {
-            Some(value)
-        } else {
-            None
-        };
+        let z_dither_0 = values.get_parsed("ZDITHER0").ok();
 
         // TFORMS & TTYPES
         let (tforms, ttypes): (Vec<_>, Vec<_>) = (1..=tfields)
             .filter_map(|idx_field| {
                 // discard the tform if it was not found and raise a warning
                 let tform_kw = format!("TFORM{idx_field}");
-                let tform = if let Ok(value) = values.get_parsed(&tform_kw) {
+                let tform = if let Ok(value) = values.get_parsed::<String>(&tform_kw) {
                     Some(value)
                 } else {
                     warn!("{tform_kw} has not been found. It will be discarded");
@@ -529,7 +525,7 @@ impl Xtension for BinTable {
         };
 
         // update the value of theap if found
-        let theap = if let Ok(value) = values.get_parsed("THEAP") {
+        let theap = if let Ok(value) = values.get_parsed::<i64>("THEAP") {
             value as usize
         } else {
             (naxis1 as usize) * (naxis2 as usize)
