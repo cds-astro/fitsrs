@@ -62,60 +62,28 @@ pub fn check_card_keyword(card: &[u8; 80], keyword: &[u8; 8]) -> Result<card::Va
 
 /* Mandatory keywords parsing */
 fn check_for_bitpix(values: &ValueMap) -> Result<Bitpix, Error> {
-    if let Some(Value::Integer { value, .. }) = values.get("BITPIX") {
-        match value {
-            8 => Ok(Bitpix::U8),
-            16 => Ok(Bitpix::I16),
-            32 => Ok(Bitpix::I32),
-            64 => Ok(Bitpix::I64),
-            -32 => Ok(Bitpix::F32),
-            -64 => Ok(Bitpix::F64),
-            _ => Err(Error::BitpixBadValue),
-        }
-    } else {
-        Err(Error::FailFindingKeyword("BITPIX".to_owned()))
-    }
+    values.get_parsed("BITPIX")
 }
 
 fn check_for_naxis(values: &ValueMap) -> Result<u64, Error> {
-    if let Some(Value::Integer { value, .. }) = values.get("NAXIS") {
-        Ok(*value as u64)
-    } else {
-        Err(Error::FailFindingKeyword("NAXIS".to_owned()))
-    }
+    values.get_parsed("NAXIS").map(|value: i64| value as _)
 }
 
 fn check_for_naxisi(values: &ValueMap, i: usize) -> Result<u64, Error> {
     let naxisi = format!("NAXIS{i}");
-    if let Some(Value::Integer { value, .. }) = values.get(&naxisi) {
-        Ok(*value as u64)
-    } else {
-        Err(Error::FailFindingKeyword(naxisi))
-    }
+    values.get_parsed(&naxisi).map(|value: i64| value as _)
 }
 
 fn check_for_gcount(values: &ValueMap) -> Result<u64, Error> {
-    if let Some(Value::Integer { value, .. }) = values.get("GCOUNT") {
-        Ok(*value as u64)
-    } else {
-        Err(Error::FailFindingKeyword("GCOUNT".to_owned()))
-    }
+    values.get_parsed("GCOUNT").map(|value: i64| value as _)
 }
 
 fn check_for_pcount(values: &ValueMap) -> Result<u64, Error> {
-    if let Some(Value::Integer { value, .. }) = values.get("PCOUNT") {
-        Ok(*value as u64)
-    } else {
-        Err(Error::FailFindingKeyword("PCOUNT".to_owned()))
-    }
+    values.get_parsed("PCOUNT").map(|value: i64| value as _)
 }
 
 fn check_for_tfields(values: &ValueMap) -> Result<usize, Error> {
-    if let Some(Value::Integer { value, .. }) = values.get("TFIELDS") {
-        Ok(*value as usize)
-    } else {
-        Err(Error::FailFindingKeyword("TFIELDS".to_owned()))
-    }
+    values.get_parsed("TFIELDS").map(|value: i64| value as _)
 }
 
 #[derive(Debug, PartialEq, Serialize, Clone, Copy)]
@@ -126,6 +94,20 @@ pub enum Bitpix {
     I64 = 64,
     F32 = -32,
     F64 = -64,
+}
+
+impl CardValue for Bitpix {
+    fn parse(value: &Value) -> Result<Self, Error> {
+        Ok(match i64::parse(value)? {
+            8 => Bitpix::U8,
+            16 => Bitpix::I16,
+            32 => Bitpix::I32,
+            64 => Bitpix::I64,
+            -32 => Bitpix::F32,
+            -64 => Bitpix::F64,
+            _ => return Err(Error::BitpixBadValue),
+        })
+    }
 }
 
 impl Bitpix {
