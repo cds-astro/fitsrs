@@ -247,7 +247,7 @@ impl<R> TableData<R> {
                     ColumnId::Index(index) => {
                         // check that the index does not exceed the number of columns
                         if *index >= self.ctx.tforms.len() {
-                            warn!("{} index provided exceeds the number of valid columns found in the table. This index will be discarded.", index);
+                            warn!("{index} index provided exceeds the number of valid columns found in the table. This index will be discarded.");
                             None
                         } else {
                             Some(*index)
@@ -265,7 +265,7 @@ impl<R> TableData<R> {
                         }) {
                             Some(idx) => Some(idx),
                             None => {
-                                warn!("{} field name has not been found. Its value is discarded", name);
+                                warn!("{name} field name has not been found. Its value is discarded");
                                 None
                             }
                         }

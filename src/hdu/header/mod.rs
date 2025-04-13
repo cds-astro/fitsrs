@@ -273,7 +273,7 @@ fn process_cards(cards: &[Card]) -> Result<HashMap<String, Value>, Error> {
                     // as it may introduce an error with repect to what the author of the file meant
                     warn!("Orphaned CONTINUE found (i.e. which is not preceded by a '&' character).
                           The parser will consider it as a COMMENT record as stated by the FITS document 4.2.1.2.
-                          Card is found at index {}", i
+                          Card is found at index {i}"
                     );
                 }
             }

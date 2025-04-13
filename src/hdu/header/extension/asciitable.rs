@@ -157,11 +157,11 @@ impl Xtension for AsciiTable {
                 };
 
                 if tbcol.is_none() {
-                    warn!("Discard field {}", idx_field);
+                    warn!("Discard field {idx_field}");
                 }
 
                 if tform.is_none() {
-                    warn!("Discard field {}", idx_field);
+                    warn!("Discard field {idx_field}");
                 }
 
                 let tbcol = tbcol? as u64;
