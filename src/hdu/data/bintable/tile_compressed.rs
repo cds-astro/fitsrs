@@ -184,10 +184,7 @@ impl<R> TileCompressedData<R> {
         // Allocation of a buffer at init of the iterator that is the size of the biggest tiles we can found
         // on the tile compressed image. This is simply given by the ZTILEi keyword.
         // Some tiles found on the border of the image can be smaller
-        let n_elems_max = z_tilen.iter().fold(1, |mut tile_size, z_tilei| {
-            tile_size *= *z_tilei;
-            tile_size
-        });
+        let n_elems_max = z_tilen.iter().product::<usize>();
 
         // FIXME
         // A little precision. The gzdecoder from flate2 seems to unzip data in a stream of u32 i.e. even if the type of data
@@ -287,10 +284,7 @@ where
             // Update the tile compressed currently decompressed
             let num_pixels = tile_size_from_row_idx(&self.z_tile[..], &self.z_naxis[..], row_idx)
                 .iter()
-                .fold(1, |mut n, &tile| {
-                    n *= tile;
-                    n
-                }) as u64;
+                .product::<usize>() as u64;
             self.tile.n_pixels = num_pixels;
             self.tile.remaining_pixels = num_pixels;
             self.tile.quantiz = match (&self.z_quantiz, self.z_dither_0) {

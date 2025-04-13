@@ -126,10 +126,7 @@ where
         // At this point the header is valid
         let num_pixels = (0..header.get_naxis())
             .map(|idx| header.get_axis_size(idx + 1).unwrap())
-            .fold(1, |mut total, val| {
-                total *= val;
-                total
-            });
+            .product();
         let bitpix = header.get_bitpix();
 
         /* 2. Skip the next bytes to a new 2880 multiple of bytes

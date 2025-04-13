@@ -44,10 +44,7 @@ impl Xtension for Image {
         let num_pixels = if self.naxisn.is_empty() {
             0
         } else {
-            self.naxisn.iter().fold(1, |mut total, val| {
-                total *= val;
-                total
-            })
+            self.naxisn.iter().product()
         };
 
         let num_bits = ((self.bitpix as i32).unsigned_abs() as u64) * num_pixels;
