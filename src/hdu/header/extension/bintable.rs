@@ -313,17 +313,12 @@ impl Xtension for BinTable {
             for i in 1..=z_naxis {
                 let naxisn =
                     if let Some(Value::Integer { value, .. }) = values.get(&format!("ZNAXIS{i}")) {
-                        Some(*value)
+                        *value
                     } else {
-                        None
+                        warn!("ZNAXISN is mandatory. Tile compressed image discarded");
+                        break;
                     };
 
-                if naxisn.is_none() {
-                    warn!("ZNAXISN is mandatory. Tile compressed image discarded");
-                    break;
-                }
-
-                let naxisn = naxisn.unwrap();
                 // If not found, z_tilen equals z_naxisn
                 let tilen = match (values.get(&format!("ZTILE{i}")), i) {
                     // ZTILEi has been found
@@ -393,16 +388,14 @@ impl Xtension for BinTable {
                     warn!("{tform_kw} has not been found. It will be discarded");
                     None
                 }?;
+
                 // try to find a ttype (optional keyword)
                 let ttype = if let Some(Value::String{value, ..}) = values.get(&format!("TTYPE{idx_field}")) {
                     Some(value.to_owned())
                 } else {
+                    warn!("Field {tform_kw:?} does not have a TTYPE name.");
                     None
                 };
-
-                if ttype.is_none() {
-                    warn!("Field {tform_kw:?} does not have a TTYPE name.");
-                }
 
                 let count = tform
                     .chars()
@@ -412,21 +405,17 @@ impl Xtension for BinTable {
                 let num_count_digits = count.len();
                 let repeat_count = count.parse::<i64>().unwrap_or(1) as usize;
                 // If the field type is not found, discard it as well
-                let field_ty = tform.chars().nth(num_count_digits);
-                if field_ty.is_none() {
+                let Some(field_ty) = tform.chars().nth(num_count_digits) else {
                     warn!("Cannot extract the field type of {tform_kw}");
-                }
-                let field_ty = field_ty?;
+                    return None;
+                };
 
                 let compute_ty_array_desc = || {
                     // Get the type element of the stored array
-                    let elem_ty = tform.chars().nth(num_count_digits + 1);
-
-                    if elem_ty.is_none() {
+                    let Some(elem_ty) = tform.chars().nth(num_count_digits + 1) else {
                         warn!("Could not extract the type from the array descriptor field. Discard {tform_kw}");
-                    }
-
-                    let elem_ty = elem_ty?;
+                        return None;
+                    };
 
                     let (t_byte_size, ty) = match elem_ty {
                         'L' => (L::BYTES_SIZE, VariableArrayTy::L),

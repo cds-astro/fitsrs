@@ -143,29 +143,20 @@ impl Xtension for AsciiTable {
                 let tbcol = if let Some(Value::Integer { value, .. }) =
                     values.get(&format!("TBCOL{idx_field}"))
                 {
-                    Some(value.to_owned())
+                    *value as u64
                 } else {
-                    None
+                    warn!("Discard field {}", idx_field);
+                    return None;
                 };
 
                 let tform = if let Some(Value::String { value, .. }) =
                     values.get(&format!("TFORM{idx_field}"))
                 {
-                    Some(value.to_owned())
+                    value.to_owned()
                 } else {
-                    None
+                    warn!("Discard field {idx_field}");
+                    return None;
                 };
-
-                if tbcol.is_none() {
-                    warn!("Discard field {idx_field}");
-                }
-
-                if tform.is_none() {
-                    warn!("Discard field {idx_field}");
-                }
-
-                let tbcol = tbcol? as u64;
-                let tform = tform?;
 
                 let first_char = &tform[0..1];
                 let tform = match first_char {
