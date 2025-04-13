@@ -12,7 +12,7 @@ fn criterion_benchmark_decompression(c: &mut Criterion) {
     group.bench_function("original file m13.fits".to_string(), |b| b.iter(read_image));
 
     for filename in filenames {
-        group.bench_function(format!("decompress {:?}", filename), |b| {
+        group.bench_function(format!("decompress {filename:?}"), |b| {
             b.iter(|| decompress(filename))
         });
     }

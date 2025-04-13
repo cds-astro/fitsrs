@@ -86,7 +86,7 @@ fn check_for_naxis(values: &HashMap<String, Value>) -> Result<u64, Error> {
 }
 
 fn check_for_naxisi(values: &HashMap<String, Value>, i: usize) -> Result<u64, Error> {
-    let naxisi = format!("NAXIS{:?}", i);
+    let naxisi = format!("NAXIS{i}");
     if let Some(Value::Integer { value, .. }) = values.get(&naxisi) {
         Ok(*value as u64)
     } else {

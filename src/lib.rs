@@ -31,7 +31,7 @@
 
 #![doc = include_str!("../README.md")]
 
-#![warn(trivial_casts, trivial_numeric_casts)]
+#![warn(trivial_casts, trivial_numeric_casts, clippy::uninlined_format_args)]
 
 extern crate async_trait;
 //extern crate byteorder;
@@ -381,7 +381,7 @@ mod tests {
                         let imgbuf = DynamicImage::ImageLuma8(
                             image::ImageBuffer::from_raw(naxis1 as u32, naxis2 as u32, c).unwrap(),
                         );
-                        imgbuf.save(format!("{}.jpg", filename)).unwrap();
+                        imgbuf.save(format!("{filename}.jpg")).unwrap();
                     };
                 }
                 _ => (),
