@@ -286,7 +286,7 @@ impl Xtension for BinTable {
         // ZNAXIS (required keyword) The value field of this keyword shall contain an integer that gives
         // the value of the NAXIS keyword in the uncompressed FITS image.
         let z_naxis = if let Some(Value::Integer { value, .. }) = values.get("ZNAXIS") {
-            Some(*value)
+            Some(*value as usize)
         } else {
             None
         };
@@ -307,8 +307,8 @@ impl Xtension for BinTable {
         // in the first row of the table, and the tile containing the last pixel in the image appears in the
         // last row of the binary table.
         let (z_naxisn, z_tilen) = if let Some(z_naxis) = z_naxis {
-            let mut z_naxisn = Vec::with_capacity(z_naxis as usize);
-            let mut z_tilen = Vec::with_capacity(z_naxis as usize);
+            let mut z_naxisn = Vec::with_capacity(z_naxis);
+            let mut z_tilen = Vec::with_capacity(z_naxis);
 
             for i in 1..=z_naxis {
                 let naxisn =
@@ -334,7 +334,7 @@ impl Xtension for BinTable {
                 z_tilen.push(tilen as usize)
             }
 
-            if z_naxisn.len() != z_naxis as usize {
+            if z_naxisn.len() != z_naxis {
                 (None, None)
             } else {
                 (
@@ -529,7 +529,7 @@ impl Xtension for BinTable {
             let tile_compressed = TileCompressedImage {
                 z_cmp_type,
                 z_bitpix,
-                z_naxis: z_naxis as usize,
+                z_naxis,
                 z_naxisn,
                 z_tilen,
                 z_quantiz,
