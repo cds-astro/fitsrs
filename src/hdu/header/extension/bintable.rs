@@ -403,7 +403,7 @@ impl Xtension for BinTable {
                     .collect::<String>();
 
                 let num_count_digits = count.len();
-                let repeat_count = count.parse::<i64>().unwrap_or(1) as usize;
+                let repeat_count = count.parse::<usize>().unwrap_or(1);
                 // If the field type is not found, discard it as well
                 let Some(field_ty) = tform.chars().nth(num_count_digits) else {
                     warn!("Cannot extract the field type of {tform_kw}");

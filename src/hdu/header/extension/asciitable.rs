@@ -158,50 +158,41 @@ impl Xtension for AsciiTable {
                     return None;
                 };
 
-                let first_char = &tform[0..1];
+                let (first_char, rest) = tform.trim_end().split_at(1);
                 let tform = match first_char {
                     "A" => {
-                        let w = tform[1..].trim_end().parse::<i32>().ok()?;
+                        let w = rest.parse().ok()?;
 
-                        TFormAsciiTable::Character { w: w as usize }
+                        TFormAsciiTable::Character { w }
                     }
                     "I" => {
-                        let w = tform[1..].trim_end().parse::<i32>().ok()?;
+                        let w = rest.parse().ok()?;
 
-                        TFormAsciiTable::DecimalInteger { w: w as usize }
+                        TFormAsciiTable::DecimalInteger { w }
                     }
                     "F" => {
-                        let wd = tform[1..].trim_end().split('.').collect::<Vec<_>>();
+                        let (w, d) = rest.split_once('.')?;
 
-                        let w = wd[0].parse::<i32>().ok()?;
-                        let d = wd[1].parse::<i32>().ok()?;
+                        let w = w.parse().ok()?;
+                        let d = d.parse().ok()?;
 
-                        TFormAsciiTable::FloatingPointFixed {
-                            w: w as usize,
-                            d: d as usize,
-                        }
+                        TFormAsciiTable::FloatingPointFixed { w, d }
                     }
                     "E" => {
-                        let wd = tform[1..].trim_end().split('.').collect::<Vec<_>>();
+                        let (w, d) = rest.split_once('.')?;
 
-                        let w = wd[0].parse::<i32>().ok()?;
-                        let d = wd[1].parse::<i32>().ok()?;
+                        let w = w.parse().ok()?;
+                        let d = d.parse().ok()?;
 
-                        TFormAsciiTable::EFloatingPointExp {
-                            w: w as usize,
-                            d: d as usize,
-                        }
+                        TFormAsciiTable::EFloatingPointExp { w, d }
                     }
                     "D" => {
-                        let wd = tform[1..].trim_end().split('.').collect::<Vec<_>>();
+                        let (w, d) = rest.split_once('.')?;
 
-                        let w = wd[0].parse::<i32>().ok()?;
-                        let d = wd[1].parse::<i32>().ok()?;
+                        let w = w.parse().ok()?;
+                        let d = d.parse().ok()?;
 
-                        TFormAsciiTable::DFloatingPointExp {
-                            w: w as usize,
-                            d: d as usize,
-                        }
+                        TFormAsciiTable::DFloatingPointExp { w, d }
                     }
                     _ => {
                         return None;
