@@ -124,10 +124,10 @@ fn tile_size_from_row_idx(z_tile: &[usize], z_naxis: &[usize], n: usize) -> Box<
         // Compute the position inside the first dimension
         u[0] = n % s[0];
 
-        for i in 1..=(d - 1) {
+        for i in 1..d {
             u[i] = n
                 - u[0]
-                - (1..=(i - 1))
+                - (1..i)
                     .map(|k| {
                         let prod_sk = s.iter().take(k).product::<usize>();
                         u[k] * prod_sk
