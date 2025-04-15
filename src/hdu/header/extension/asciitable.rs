@@ -145,7 +145,7 @@ impl Xtension for AsciiTable {
                 {
                     *value as u64
                 } else {
-                    warn!("Discard field {}", idx_field);
+                    warn!("Discard field {idx_field}");
                     return None;
                 };
 
