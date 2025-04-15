@@ -17,6 +17,8 @@ use crate::hdu::header::check_for_tfields;
 use crate::hdu::header::Bitpix;
 
 use crate::hdu::header::Xtension;
+use std::num::ParseIntError;
+use std::str::FromStr;
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct AsciiTable {
@@ -152,51 +154,10 @@ impl Xtension for AsciiTable {
                 let tform = if let Some(Value::String { value, .. }) =
                     values.get(&format!("TFORM{idx_field}"))
                 {
-                    value.to_owned()
+                    TFormAsciiTable::from_str(value).ok()?
                 } else {
                     warn!("Discard field {idx_field}");
                     return None;
-                };
-
-                let (first_char, rest) = tform.trim_end().split_at(1);
-                let tform = match first_char {
-                    "A" => {
-                        let w = rest.parse().ok()?;
-
-                        TFormAsciiTable::Character { w }
-                    }
-                    "I" => {
-                        let w = rest.parse().ok()?;
-
-                        TFormAsciiTable::DecimalInteger { w }
-                    }
-                    "F" => {
-                        let (w, d) = rest.split_once('.')?;
-
-                        let w = w.parse().ok()?;
-                        let d = d.parse().ok()?;
-
-                        TFormAsciiTable::FloatingPointFixed { w, d }
-                    }
-                    "E" => {
-                        let (w, d) = rest.split_once('.')?;
-
-                        let w = w.parse().ok()?;
-                        let d = d.parse().ok()?;
-
-                        TFormAsciiTable::EFloatingPointExp { w, d }
-                    }
-                    "D" => {
-                        let (w, d) = rest.split_once('.')?;
-
-                        let w = w.parse().ok()?;
-                        let d = d.parse().ok()?;
-
-                        TFormAsciiTable::DFloatingPointExp { w, d }
-                    }
-                    _ => {
-                        return None;
-                    }
                 };
 
                 Some((tbcol, tform))
@@ -232,6 +193,70 @@ pub enum TFormAsciiTable {
     FloatingPointFixed { w: usize, d: usize },
     EFloatingPointExp { w: usize, d: usize },
     DFloatingPointExp { w: usize, d: usize },
+}
+
+#[derive(Debug)]
+pub enum TFormAsciiTableParseError {
+    ParseInt(ParseIntError),
+    StringFormat,
+}
+
+impl From<ParseIntError> for TFormAsciiTableParseError {
+    fn from(err: ParseIntError) -> Self {
+        TFormAsciiTableParseError::ParseInt(err)
+    }
+}
+
+impl FromStr for TFormAsciiTable {
+    type Err = TFormAsciiTableParseError;
+
+    fn from_str(tform: &str) -> Result<Self, Self::Err> {
+        let mut chars = tform.trim_end().chars();
+        let first_char = chars
+            .next()
+            .ok_or(TFormAsciiTableParseError::StringFormat)?;
+        let rest = chars.as_str();
+
+        let parse_split = || {
+            let (w, d) = rest
+                .split_once('.')
+                .ok_or(TFormAsciiTableParseError::StringFormat)?;
+
+            let w = w.parse()?;
+            let d = d.parse()?;
+
+            Ok::<_, Self::Err>((w, d))
+        };
+
+        Ok(match first_char {
+            'A' => {
+                let w = rest.parse()?;
+
+                TFormAsciiTable::Character { w }
+            }
+            'I' => {
+                let w = rest.parse()?;
+
+                TFormAsciiTable::DecimalInteger { w }
+            }
+            'F' => {
+                let (w, d) = parse_split()?;
+
+                TFormAsciiTable::FloatingPointFixed { w, d }
+            }
+            'E' => {
+                let (w, d) = parse_split()?;
+
+                TFormAsciiTable::EFloatingPointExp { w, d }
+            }
+            'D' => {
+                let (w, d) = parse_split()?;
+
+                TFormAsciiTable::EFloatingPointExp { w, d }
+            }
+            _ => return Err(TFormAsciiTableParseError::StringFormat),
+        })
+    }
 }
 
 #[cfg(test)]
