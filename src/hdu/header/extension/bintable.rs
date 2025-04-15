@@ -20,8 +20,6 @@ use log::warn;
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct BinTable {
     bitpix: Bitpix,
-    /// Number of axis, Should be 2,
-    naxis: u64,
     /// A non-negative integer, giving the number of eight-bit bytes in each row of the
     /// table.
     pub(crate) naxis1: u64,
@@ -108,10 +106,6 @@ pub(crate) struct TileCompressedImage {
     /// ZBITPIX (required keyword) The value field of this keyword shall contain an integer that gives
     /// the value of the BITPIX keyword in the uncompressed FITS image.
     pub(crate) z_bitpix: Bitpix,
-
-    /// ZNAXIS (required keyword) The value field of this keyword shall contain an integer that gives
-    /// the value of the NAXIS keyword in the uncompressed FITS image.
-    pub(crate) z_naxis: usize,
 
     /// ZNAXISn (required keywords) The value field of these keywords shall contain a positive integer
     /// that gives the value of the NAXISn keywords in the uncompressed FITS image.
@@ -507,18 +501,11 @@ impl Xtension for BinTable {
         let z_image = if let (
             Some(z_cmp_type),
             Some(z_bitpix),
-            Some(z_naxis),
             Some(z_naxisn),
             Some(z_tilen),
             Some(data_compressed_idx),
-        ) = (
-            z_cmp_type,
-            z_bitpix,
-            z_naxis,
-            z_naxisn,
-            z_tilen,
-            data_compressed_idx,
-        ) {
+        ) = (z_cmp_type, z_bitpix, z_naxisn, z_tilen, data_compressed_idx)
+        {
             // FIXME here we only support GZIP1/GZIP2 and RICE compression
             // If other compression are found, I disable the zimage
             // so that the binary table is considered as normal i.e. it does not follow
@@ -526,7 +513,6 @@ impl Xtension for BinTable {
             let tile_compressed = TileCompressedImage {
                 z_cmp_type,
                 z_bitpix,
-                z_naxis,
                 z_naxisn,
                 z_tilen,
                 z_quantiz,
@@ -572,7 +558,6 @@ impl Xtension for BinTable {
 
         Ok(BinTable {
             bitpix,
-            naxis,
             naxis1,
             naxis2,
             tfields,
@@ -880,7 +865,6 @@ mod tests {
             "samples/fits.gsfc.nasa.gov/IUE_LWP.fits",
             BinTable {
                 bitpix: Bitpix::U8,
-                naxis: 2,
                 naxis1: 11535,
                 naxis2: 1,
                 tfields: 9,

@@ -36,15 +36,15 @@ fn decompress(filename: &str) {
                 .get_header()
                 .get_parsed::<i64>("ZNAXIS1")
                 .unwrap()
-                .unwrap() as u32;
+                .unwrap() as usize;
             let height = hdu
                 .get_header()
                 .get_parsed::<i64>("ZNAXIS2")
                 .unwrap()
-                .unwrap() as u32;
-            let pixels = hdu_list.get_data(&hdu).collect::<Vec<_>>();
+                .unwrap() as usize;
+            let pixels = hdu_list.get_data(&hdu).count();
 
-            assert!(width * height == pixels.len() as u32);
+            assert!(width * height == pixels);
         }
     }
 }

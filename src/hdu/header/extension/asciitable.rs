@@ -24,8 +24,6 @@ use std::str::FromStr;
 pub struct AsciiTable {
     // Should be 1
     bitpix: Bitpix,
-    // Number of axis, Should be 2,
-    naxis: u64,
     // A non-negative integer, giving the number of ASCII characters in each row of
     // the table. This includes all the characters in the defined fields
     // plus any characters that are not included in any field.
@@ -54,12 +52,6 @@ impl AsciiTable {
     #[inline]
     pub fn get_bitpix(&self) -> Bitpix {
         self.bitpix
-    }
-
-    /// Get the number of axis given by the "NAXIS" card
-    #[inline]
-    pub fn get_naxis(&self) -> u64 {
-        self.naxis
     }
 
     /// Get the size of an axis given by the "NAXISX" card
@@ -174,7 +166,6 @@ impl Xtension for AsciiTable {
 
         Ok(AsciiTable {
             bitpix,
-            naxis,
             naxis1,
             naxis2,
             tbcols,
@@ -306,7 +297,6 @@ mod tests {
             "samples/fits.gsfc.nasa.gov/HST_FGS.fits",
             AsciiTable {
                 bitpix: Bitpix::U8,
-                naxis: 2,
                 naxis1: 99,
                 naxis2: 7,
                 tfields: 6,
@@ -330,7 +320,6 @@ mod tests {
             "samples/fits.gsfc.nasa.gov/HST_FOC.fits",
             AsciiTable {
                 bitpix: Bitpix::U8,
-                naxis: 2,
                 naxis1: 312,
                 naxis2: 1,
                 tfields: 18,
@@ -369,7 +358,6 @@ mod tests {
             "samples/fits.gsfc.nasa.gov/HST_HRS.fits",
             AsciiTable {
                 bitpix: Bitpix::U8,
-                naxis: 2,
                 naxis1: 412,
                 naxis2: 4,
                 tfields: 25,
@@ -415,7 +403,6 @@ mod tests {
             "samples/fits.gsfc.nasa.gov/HST_WFPC_II.fits",
             AsciiTable {
                 bitpix: Bitpix::U8,
-                naxis: 2,
                 naxis1: 796,
                 naxis2: 4,
                 tfields: 49,
