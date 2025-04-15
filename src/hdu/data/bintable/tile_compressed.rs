@@ -142,8 +142,7 @@ fn tile_size_from_row_idx(z_tile: &[usize], z_naxis: &[usize], n: usize) -> Box<
         u.iter()
             .zip(z_naxis.iter().zip(z_tile.iter()))
             .map(|(&u_i, (&naxis, &tilez))| tilez.min(naxis - u_i * tilez))
-            .collect::<Vec<_>>()
-            .into_boxed_slice()
+            .collect()
     }
 }
 
