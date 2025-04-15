@@ -16,12 +16,13 @@
 //! let hdu = hdu_list.next();
 //! if let Some(Ok(HDU::Primary(hdu))) = hdu {
 //!     let xtension = hdu.get_header().get_xtension();
-//!     let naxis1 = *xtension.get_naxisn(1).unwrap() as usize;
-//!     let naxis2 = *xtension.get_naxisn(2).unwrap() as usize;
+//!     let [naxis1, naxis2] = xtension.get_naxis() else {
+//!         panic!("Wrong number of axis in the header")
+//!     };
 //!
 //!     let image = hdu_list.get_data(&hdu);
 //!     if let Pixels::F32(it) = image.pixels() {
-//!         assert_eq!(it.count(), naxis1 * naxis2);
+//!         assert_eq!(it.count() as u64, naxis1 * naxis2);
 //!     } else {
 //!         panic!("expected data block containing f32");
 //!     }
@@ -95,9 +96,7 @@ mod tests {
 
         if let HDU::Primary(hdu) = hdu {
             let header = hdu.get_header();
-            assert_eq!(header.get_xtension().get_naxisn(1), Some(&64));
-            assert_eq!(header.get_xtension().get_naxisn(2), Some(&64));
-            assert_eq!(header.get_xtension().get_naxis(), 2);
+            assert_eq!(header.get_xtension().get_naxis(), &[64, 64]);
             assert_eq!(header.get_xtension().get_bitpix(), Bitpix::F32);
         }
 
@@ -333,7 +332,7 @@ mod tests {
         let mut hdu_list = Fits::from_reader(reader);
         while let Some(Ok(hdu)) = hdu_list.next() {
             if let HDU::XBinaryTable(hdu) = hdu {
-                let data: Vec<_> = hdu_list
+                let data_len = hdu_list
                     .get_data(&hdu)
                     .table_data()
                     .select_fields(&[
@@ -343,9 +342,9 @@ mod tests {
                         ColumnId::Name("phot_rp_mean_mag"),
                         ColumnId::Name("mag"),
                     ])
-                    .collect();
+                    .count();
 
-                assert_eq!(data.len(), 3 * 52);
+                assert_eq!(data_len, 3 * 52);
             }
         }
     }
@@ -360,8 +359,9 @@ mod tests {
             match hdu {
                 HDU::Primary(hdu) | HDU::XImage(hdu) => {
                     let xtension = hdu.get_header().get_xtension();
-                    let naxis1 = *xtension.get_naxisn(1).unwrap();
-                    let naxis2 = *xtension.get_naxisn(2).unwrap();
+                    let [naxis1, naxis2] = *xtension.get_naxis() else {
+                        panic!("Wrong number of axis in the header")
+                    };
 
                     let image = hdu_list.get_data(&hdu);
                     if let Pixels::F32(it) = image.pixels() {

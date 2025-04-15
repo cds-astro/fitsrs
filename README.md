@@ -89,10 +89,11 @@ while let Some(Ok(hdu)) = hdu_list.next() {
         HDU::XImage(hdu) => {
             let xtension = hdu.get_header().get_xtension();
 
-            let naxis1 = *xtension.get_naxisn(1).unwrap();
-            let naxis2 = *xtension.get_naxisn(2).unwrap();
+            let [naxis1, naxis2] = xtension.get_naxis() else {
+                    panic!("Expected two axis in the image");
+                };
 
-            let num_pixels = (naxis2 * naxis1) as usize;
+            let num_pixels = (naxis1 * naxis2) as usize;
 
             // Try to access the WCS for an HDU image
             if let Ok(wcs) = hdu.wcs() {
@@ -201,10 +202,11 @@ async fn parse_fits_async() {
             AsyncHDU::Image(hdu) => {
                 let xtension = hdu.get_header().get_xtension();
 
-                let naxis1 = *xtension.get_naxisn(1).unwrap() as usize;
-                let naxis2 = *xtension.get_naxisn(2).unwrap() as usize;
+                let [naxis1, naxis2] = xtension.get_naxis() else {
+                    panic!("Expected two axis in the image");
+                };
 
-                let num_pixels = naxis2 * naxis1;
+                let num_pixels = (naxis1 * naxis2) as usize;
 
                 match hdu_list.get_data(hdu) {
                     Stream::U8(st) => {

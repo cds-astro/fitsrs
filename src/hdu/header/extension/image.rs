@@ -14,22 +14,14 @@ use crate::hdu::header::Xtension;
 pub struct Image {
     // A number of bit that each pixel has
     bitpix: Bitpix,
-    // The number of axis
-    naxis: usize,
     // The size of each axis
-    naxisn: Vec<u64>,
+    naxisn: Box<[u64]>,
 }
 
 impl Image {
-    /// Get the number of axis given by the "NAXIS" card
-    pub fn get_naxis(&self) -> usize {
-        self.naxis
-    }
-
-    /// Get the size of an axis given by the "NAXISX" card
-    pub fn get_naxisn(&self, idx: usize) -> Option<&u64> {
-        // NAXIS indexes begins at 1 instead of 0
-        self.naxisn.get(idx - 1)
+    /// Get the sizes of axis given by the "NAXIS" cards
+    pub fn get_naxis(&self) -> &[u64] {
+        &self.naxisn
     }
 
     pub fn get_naxisn_all(&self) -> &[u64] {
@@ -71,12 +63,8 @@ impl Xtension for Image {
                     Err(Error::FailFindingKeyword(naxis))
                 }
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<_, _>>()?;
 
-        Ok(Image {
-            bitpix,
-            naxis: naxis as usize,
-            naxisn,
-        })
+        Ok(Image { bitpix, naxisn })
     }
 }
