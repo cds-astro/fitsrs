@@ -70,7 +70,7 @@ impl AsciiTable {
 
     #[inline]
     pub fn get_naxis2(&self) -> u64 {
-        self.naxis1
+        self.naxis2
     }
 
     #[inline]
