@@ -378,7 +378,7 @@ fn parse_empty_keyword_card(buf: &[u8; 80]) -> Card {
     if c.is_empty() {
         Card::Space
     } else {
-        Card::Comment(c.to_owned())
+        Card::Comment(c)
     }
 }
 
