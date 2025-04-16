@@ -30,7 +30,6 @@
 //! ```
 
 #![doc = include_str!("../README.md")]
-
 #![warn(trivial_casts, trivial_numeric_casts, clippy::uninlined_format_args)]
 
 extern crate async_trait;
