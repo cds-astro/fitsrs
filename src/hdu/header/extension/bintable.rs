@@ -72,6 +72,16 @@ pub struct BinTable {
     pub(crate) z_image: Option<TileCompressedImage>,
 }
 
+fn find_field_by_ttype(ttypes: &[Option<String>], ttype: &str) -> Option<usize> {
+    ttypes.iter().position(|tt| {
+        if let Some(tt) = tt {
+            tt == ttype
+        } else {
+            false
+        }
+    })
+}
+
 impl BinTable {
     pub fn get_num_rows(&self) -> usize {
         self.naxis2 as usize
@@ -79,13 +89,7 @@ impl BinTable {
 
     /// Returns the index of the field by name
     pub fn find_field_by_ttype(&self, ttype: &str) -> Option<usize> {
-        self.ttypes.iter().position(|tt| {
-            if let Some(tt) = tt {
-                tt == ttype
-            } else {
-                false
-            }
-        })
+        find_field_by_ttype(&self.ttypes, ttype)
     }
 }
 
@@ -491,20 +495,9 @@ impl Xtension for BinTable {
             })
             .unzip();
 
-        // Find for a DATA_COMPRESSED named field
-        let find_field_by_ttype = |ttype: &str| -> Option<usize> {
-            ttypes.iter().position(|tt| {
-                if let Some(tt) = tt {
-                    tt == ttype
-                } else {
-                    false
-                }
-            })
-        };
-
-        let data_compressed_idx = find_field_by_ttype("COMPRESSED_DATA")
+        let data_compressed_idx = find_field_by_ttype(&ttypes, "COMPRESSED_DATA")
             // Find for a GZIP_DATA_COMPRESSED named field
-            .or(find_field_by_ttype("GZIP_COMPRESSED_DATA"));
+            .or(find_field_by_ttype(&ttypes, "GZIP_COMPRESSED_DATA"));
 
         // Fill the headers with these specific tile compressed image keywords
         let z_image = if let (

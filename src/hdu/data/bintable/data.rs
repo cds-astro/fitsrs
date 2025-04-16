@@ -256,19 +256,10 @@ impl<R> TableData<R> {
                     ColumnId::Name(name) => {
                         // If the column is given by its name, then we must search
                         // in the ttypes keywords to get its correct index
-                        match self.ctx.ttypes.iter().position(|ttype| {
-                            if let Some(ttype) = ttype {
-                                ttype == name
-                            } else {
-                                false
-                            }
-                        }) {
-                            Some(idx) => Some(idx),
-                            None => {
-                                warn!("{name} field name has not been found. Its value is discarded");
-                                None
-                            }
-                        }
+                        self.ctx.find_field_by_ttype(name).or_else(|| {
+                            warn!("{name} field name has not been found. Its value is discarded");
+                            None
+                        })
                     }
                 }
             }
