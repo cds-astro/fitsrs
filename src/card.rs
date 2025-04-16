@@ -169,9 +169,7 @@ fn parse_extension(buf: &[u8; 80]) -> Result<Card, Error> {
         let x = XtensionType::try_from(value[1..end].trim_ascii())?;
         Ok(Card::Xtension { x, comment })
     } else {
-        let msg = format!(
-            "XTENSION value must be enclosed in single quotes, found: {value}"
-        );
+        let msg = format!("XTENSION value must be enclosed in single quotes, found: {value}");
         Err(Error::DynamicError(msg))
     }
 }
