@@ -44,8 +44,8 @@ impl Card {
             Card::Value {
                 value: Value::String { value: s, .. },
                 ..
-            } => s.ends_with('&'),
-            Card::Continuation {
+            }
+            | Card::Continuation {
                 string: Some(s), ..
             } => s.ends_with('&'),
             _ => false,
@@ -303,11 +303,7 @@ pub fn split_value_and_comment(buf: &[u8]) -> Result<(String, Option<String>), E
                 // slash
                 match (tic, toc) {
                     (true, false) => value.push('/'), // slash inside string, add it
-                    (true, true) => {
-                        slash = i;
-                        break;
-                    } // found a slash outside of the string, we're done here
-                    (false, false) => {
+                    (true, true) | (false, false) => {
                         slash = i;
                         break;
                     } // found a slash outside of the string, we're done here
@@ -441,10 +437,10 @@ pub enum Value {
 impl Value {
     pub fn unit(&self) -> Option<&str> {
         match self {
-            Value::Integer { comment, .. } => parse_unit(comment),
-            Value::Float { comment, .. } => parse_unit(comment),
-            Value::String { comment, .. } => parse_unit(comment),
-            Value::Logical { comment, .. } => parse_unit(comment),
+            Value::Integer { comment, .. }
+            | Value::Float { comment, .. }
+            | Value::String { comment, .. }
+            | Value::Logical { comment, .. } => parse_unit(comment),
             _ => None,
         }
     }

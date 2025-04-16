@@ -287,7 +287,6 @@ where
             self.tile.n_pixels = num_pixels;
             self.tile.remaining_pixels = num_pixels;
             self.tile.quantiz = match (&self.z_quantiz, self.z_dither_0) {
-                (Some(ZQuantiz::NoDither), _) => Quantiz::NoDither,
                 (Some(ZQuantiz::SubtractiveDither1), Some(zdither0)) => {
                     let i0 = (row_idx - 1 + (zdither0 as usize)) % 10000;
                     let i1 = (RAND_VALUES[i0] * 500.0).floor() as usize;
