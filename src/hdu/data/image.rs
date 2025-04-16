@@ -87,12 +87,12 @@ where
     /// You might need to convert the data from big to little endian at some point
     pub fn raw_bytes(&self) -> &[u8] {
         let inner = match &self.pixels {
-            Pixels::U8(It { reader, .. }) => reader.get_ref(),
-            Pixels::I16(It { reader, .. }) => reader.get_ref(),
-            Pixels::I32(It { reader, .. }) => reader.get_ref(),
-            Pixels::I64(It { reader, .. }) => reader.get_ref(),
-            Pixels::F32(It { reader, .. }) => reader.get_ref(),
-            Pixels::F64(It { reader, .. }) => reader.get_ref(),
+            Pixels::U8(It { reader, .. })
+            | Pixels::I16(It { reader, .. })
+            | Pixels::I32(It { reader, .. })
+            | Pixels::I64(It { reader, .. })
+            | Pixels::F32(It { reader, .. })
+            | Pixels::F64(It { reader, .. }) => reader.get_ref(),
         };
         let raw_bytes = inner.as_ref();
 
