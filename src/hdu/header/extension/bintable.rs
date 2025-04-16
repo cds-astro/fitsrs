@@ -387,7 +387,7 @@ impl Xtension for BinTable {
                 // discard the tform if it was not found and raise a warning
                 let tform_kw = format!("TFORM{idx_field}");
                 let tform = if let Some(Value::String{value, ..}) = values.get(&tform_kw) {
-                    Some(value.to_owned())
+                    Some(value)
                 } else {
                     warn!("{tform_kw} has not been found. It will be discarded");
                     None
