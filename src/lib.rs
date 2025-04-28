@@ -104,17 +104,17 @@ mod tests {
         assert!(hdu_list.next().is_none());
     }
 
-    #[test_case("samples/fits.gsfc.nasa.gov/Astro_UIT.fits", 2, 0, 0)]
-    #[test_case("samples/fits.gsfc.nasa.gov/EUVE.fits", 6, 0, 4)]
-    #[test_case("samples/fits.gsfc.nasa.gov/HST_FGS.fits", 2, 1, 0)]
-    #[test_case("samples/fits.gsfc.nasa.gov/IUE_LWP.fits", 2, 0, 1)]
-    #[test_case("samples/misc/ngc5457K.fits", 2, 0, 0)]
-    #[test_case("samples/fits.gsfc.nasa.gov/HST_FOC.fits", 2, 1, 0)]
-    #[test_case("samples/fits.gsfc.nasa.gov/HST_FOS.fits", 2, 1, 0)]
-    #[test_case("samples/fits.gsfc.nasa.gov/HST_HRS.fits", 2, 1, 0)]
-    #[test_case("samples/fits.gsfc.nasa.gov/HST_NICMOS.fits", 7, 0, 0)]
-    #[test_case("samples/fits.gsfc.nasa.gov/HST_WFPC_II.fits", 2, 1, 0)]
-    #[test_case("samples/fits.gsfc.nasa.gov/HST_WFPC_II_bis.fits", 2, 0, 0)]
+    #[test_case("samples/fits.gsfc.nasa.gov/Astro_UIT.fits",1,0,0)]
+    #[test_case("samples/fits.gsfc.nasa.gov/EUVE.fits",5,0,4)]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_FGS.fits",1,1,0)]
+    #[test_case("samples/fits.gsfc.nasa.gov/IUE_LWP.fits",1,0,1)]
+    #[test_case("samples/misc/ngc5457K.fits",1,0,0)]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_FOC.fits",1,1,0)]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_FOS.fits",1,1,0)]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_HRS.fits",1,1,0)]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_NICMOS.fits",6,0,0)]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_WFPC_II.fits",1,1,0)]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_WFPC_II_bis.fits",1,0,0)]
     fn test_fits_count_hdu(
         filename: &str,
         num_image_ext: usize,
@@ -123,7 +123,7 @@ mod tests {
     ) {
         let mut hdu_list = FITSFile::open(filename).unwrap();
 
-        let mut n_image_ext = 1; // because the primary hdu is an image
+        let mut n_image_ext = 0; // the primary HDU is counted below
         let mut n_bintable_ext = 0;
         let mut n_asciitable_ext = 0;
 
