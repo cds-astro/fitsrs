@@ -104,46 +104,55 @@ mod tests {
         assert!(hdu_list.next().is_none());
     }
 
-    #[test_case("samples/fits.gsfc.nasa.gov/Astro_UIT.fits",1,0,0)]
-    #[test_case("samples/fits.gsfc.nasa.gov/EUVE.fits",5,0,4)]
-    #[test_case("samples/fits.gsfc.nasa.gov/HST_FGS.fits",1,1,0)]
-    #[test_case("samples/fits.gsfc.nasa.gov/IUE_LWP.fits",1,0,1)]
-    #[test_case("samples/misc/ngc5457K.fits",1,0,0)]
-    #[test_case("samples/fits.gsfc.nasa.gov/HST_FOC.fits",1,1,0)]
-    #[test_case("samples/fits.gsfc.nasa.gov/HST_FOS.fits",1,1,0)]
-    #[test_case("samples/fits.gsfc.nasa.gov/HST_HRS.fits",1,1,0)]
-    #[test_case("samples/fits.gsfc.nasa.gov/HST_NICMOS.fits",6,0,0)]
-    #[test_case("samples/fits.gsfc.nasa.gov/HST_WFPC_II.fits",1,1,0)]
-    #[test_case("samples/fits.gsfc.nasa.gov/HST_WFPC_II_bis.fits",1,0,0)]
+    #[test_case("samples/fits.gsfc.nasa.gov/Astro_UIT.fits",1,0,0,&[11520],&[524288])]
+    #[test_case("samples/fits.gsfc.nasa.gov/EUVE.fits",5,0,4,&[5760, 14400, 550080, 1788480, 3026880, 4262400, 4271040, 4279680, 4288320],&[0, 524288, 1228800, 1228800, 1228800, 48, 40, 40, 40])]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_FGS.fits",1,1,0,&[20160, 2537280],&[2511264, 693])]
+    #[test_case("samples/fits.gsfc.nasa.gov/IUE_LWP.fits",1,0,1,&[28800, 34560],&[0, 11535])]
+    #[test_case("samples/misc/ngc5457K.fits",1,0,0,&[14400],&[65116872])]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_FOC.fits",1,1,0,&[11520, 4216320],&[4194304, 312])]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_FOS.fits",1,1,0,&[14400, 40320],&[16512, 672])]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_HRS.fits",1,1,0,&[20160, 66240],&[32000, 1648])]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_NICMOS.fits",6,0,0,&[20160, 31680, 322560, 613440, 763200, 912960],&[0, 284040, 284040, 142020, 142020, 284040])]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_WFPC_II.fits",1,1,0,&[23040, 694080],&[640000, 3184])]
+    #[test_case("samples/fits.gsfc.nasa.gov/HST_WFPC_II_bis.fits",1,0,0,&[23040],&[40000])]
     fn test_fits_count_hdu(
         filename: &str,
         num_image_ext: usize,
         num_asciitable_ext: usize,
         num_bintable_ext: usize,
+        byte_offsets: &[usize],
+        byte_lengths: &[u64],
     ) {
         let mut hdu_list = FITSFile::open(filename).unwrap();
 
         let mut n_image_ext = 0; // the primary HDU is counted below
         let mut n_bintable_ext = 0;
         let mut n_asciitable_ext = 0;
+        let mut seen_byte_offsets = vec![];
+        let mut seen_byte_lengths = vec![];
 
         while let Some(Ok(hdu)) = hdu_list.next() {
             match &hdu {
-                HDU::Primary(_) | HDU::XImage(_) => {
+                HDU::Primary(h) | HDU::XImage(h) => {
                     n_image_ext += 1;
+                    seen_byte_lengths.push(h.get_header().get_xtension().get_num_bytes_data_block());
                 }
-                HDU::XBinaryTable(_) => {
+                HDU::XBinaryTable(h) => {
                     n_bintable_ext += 1;
-                }
-                HDU::XASCIITable(_) => {
+                    seen_byte_lengths.push(h.get_header().get_xtension().get_num_bytes_data_block());}
+                HDU::XASCIITable(h) => {
                     n_asciitable_ext += 1;
+                    seen_byte_lengths.push(h.get_header().get_xtension().get_num_bytes_data_block());
                 }
             }
+            seen_byte_offsets.push(hdu_list.get_position_data_unit());
         }
 
         assert_eq!(n_image_ext, num_image_ext);
         assert_eq!(n_bintable_ext, num_bintable_ext);
         assert_eq!(n_asciitable_ext, num_asciitable_ext);
+        assert_eq!(seen_byte_offsets, byte_offsets);
+        assert_eq!(seen_byte_lengths, byte_lengths);
     }
 
     #[test]
