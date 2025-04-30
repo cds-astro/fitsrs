@@ -30,7 +30,12 @@
 //! ```
 
 #![doc = include_str!("../README.md")]
-#![warn(trivial_casts, trivial_numeric_casts, clippy::uninlined_format_args, clippy::match_same_arms)]
+#![warn(
+    trivial_casts,
+    trivial_numeric_casts,
+    clippy::uninlined_format_args,
+    clippy::match_same_arms
+)]
 
 extern crate async_trait;
 //extern crate byteorder;
