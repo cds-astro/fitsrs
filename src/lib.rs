@@ -120,7 +120,7 @@ mod tests {
         num_image_ext: usize,
         num_asciitable_ext: usize,
         num_bintable_ext: usize,
-        byte_offsets: &[usize],
+        byte_offsets: &[u64],
         byte_lengths: &[u64],
     ) {
         let mut hdu_list = FITSFile::open(filename).unwrap();
@@ -133,19 +133,18 @@ mod tests {
 
         while let Some(Ok(hdu)) = hdu_list.next() {
             match &hdu {
-                HDU::Primary(h) | HDU::XImage(h) => {
+                HDU::Primary(_) | HDU::XImage(_) => {
                     n_image_ext += 1;
-                    seen_byte_lengths.push(h.get_header().get_xtension().get_num_bytes_data_block());
                 }
-                HDU::XBinaryTable(h) => {
+                HDU::XBinaryTable(_) => {
                     n_bintable_ext += 1;
-                    seen_byte_lengths.push(h.get_header().get_xtension().get_num_bytes_data_block());}
-                HDU::XASCIITable(h) => {
-                    n_asciitable_ext += 1;
-                    seen_byte_lengths.push(h.get_header().get_xtension().get_num_bytes_data_block());
                 }
-            }
-            seen_byte_offsets.push(hdu_list.get_position_data_unit());
+                HDU::XASCIITable(_) => {
+                    n_asciitable_ext += 1;
+                }
+            };
+            seen_byte_lengths.push(hdu.get_data_unit_byte_size());
+            seen_byte_offsets.push(hdu.get_data_unit_byte_offset())
         }
 
         assert_eq!(n_image_ext, num_image_ext);
