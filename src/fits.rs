@@ -159,28 +159,10 @@ where
 
             match n {
                 Some(Ok(hdu)) => {
-                    self.num_bytes_in_cur_du = match &hdu {
-                        hdu::HDU::XImage(h) | hdu::HDU::Primary(h) => {
-                            let xtension = h.get_header().get_xtension();
-                            xtension.get_num_bytes_data_block() as usize
-                        }
-                        hdu::HDU::XASCIITable(h) => {
-                            let xtension = h.get_header().get_xtension();
-                            xtension.get_num_bytes_data_block() as usize
-                        }
-                        hdu::HDU::XBinaryTable(h) => {
-                            let xtension = h.get_header().get_xtension();
-                            xtension.get_num_bytes_data_block() as usize
-                        }
-                    };
+                    self.num_bytes_in_cur_du = hdu.get_data_unit_byte_size() as usize;
+                    self.pos_start_cur_du = hdu.get_data_unit_byte_offset() as usize;
 
-                    match self.reader.stream_position() {
-                        Err(e) => Some(Err(e.into())),
-                        Ok(pos) => {
-                            self.pos_start_cur_du = pos as usize;
-                            Some(Ok(hdu))
-                        }
-                    }
+                    Some(Ok(hdu))
                 }
                 Some(Err(e)) => {
                     // an error has been found we return it and ends the iterator for future next calls
@@ -202,6 +184,7 @@ where
 {
     /// The header part that stores all the cards
     header: Header<X>,
+    data_unit_byte_offset: u64,
 }
 
 impl<X> HDU<X>
@@ -214,7 +197,7 @@ where
         cards: Vec<Card>,
     ) -> Result<Self, Error>
     where
-        R: FitsRead<'a, X> + 'a,
+        R: FitsRead<'a, X> + Seek + 'a,
     {
         /* 1. Parse the header first */
         let header = Header::parse(cards)?;
@@ -234,12 +217,23 @@ where
             *num_bytes_read += num_off_bytes;
         }
 
+        let data_unit_byte_offset = reader.stream_position()?;
+
         // Data block
 
-        Ok(Self { header })
+        Ok(Self { header, data_unit_byte_offset })
     }
 
     pub fn get_header(&self) -> &Header<X> {
         &self.header
+    }
+
+    pub fn get_data_unit_byte_offset(&self) -> u64 {
+        self.data_unit_byte_offset
+    }
+
+    pub fn get_data_unit_byte_size(&self) -> u64 {
+        let xtension = self.get_header().get_xtension();
+        xtension.get_num_bytes_data_block()
     }
 }

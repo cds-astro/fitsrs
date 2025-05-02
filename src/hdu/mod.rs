@@ -4,6 +4,7 @@ pub mod data;
 pub mod primary;
 
 use std::convert::TryFrom;
+use std::io::Seek;
 
 use futures::AsyncRead;
 
@@ -115,7 +116,7 @@ impl HDU {
         num_bytes_read: &mut usize,
     ) -> Result<Self, Error>
     where
-        R: FitsRead<'a, Image> + FitsRead<'a, BinTable> + FitsRead<'a, AsciiTable> + 'a,
+        R: FitsRead<'a, Image> + FitsRead<'a, BinTable> + FitsRead<'a, AsciiTable> + Seek + 'a,
     {
         let cards = consume_cards(reader, num_bytes_read)?;
         // Check only the the first card. Even if not FITS valid we could accept
@@ -153,7 +154,7 @@ impl HDU {
 
     pub(crate) fn new_primary<'a, R>(reader: &mut R) -> Result<Self, Error>
     where
-        R: FitsRead<'a, Image> + 'a,
+        R: FitsRead<'a, Image> + Seek + 'a,
     {
         let mut num_bytes_read = 0;
 
@@ -181,6 +182,21 @@ impl HDU {
         } else {
             // TODO log the card to stderr
             Err(Error::StaticError("not a FITSv4 file"))
+        }
+    }
+
+    pub fn get_data_unit_byte_offset(&self) -> u64 {
+        match self {
+            HDU::Primary(hdu) | HDU::XImage(hdu) => hdu.get_data_unit_byte_offset(),
+            HDU::XBinaryTable(hdu) => hdu.get_data_unit_byte_offset(),
+            HDU::XASCIITable(hdu) => hdu.get_data_unit_byte_offset(),
+        }
+    }
+    pub fn get_data_unit_byte_size(&self) -> u64 {
+        match self {
+            HDU::Primary(hdu) | HDU::XImage(hdu) => hdu.get_data_unit_byte_size(),
+            HDU::XBinaryTable(hdu) => hdu.get_data_unit_byte_size(),
+            HDU::XASCIITable(hdu) => hdu.get_data_unit_byte_size(),
         }
     }
 }
