@@ -252,7 +252,7 @@ impl FromStr for TFormAsciiTable {
             'D' => {
                 let (w, d) = parse_split()?;
 
-                TFormAsciiTable::EFloatingPointExp { w, d }
+                TFormAsciiTable::DFloatingPointExp { w, d }
             }
             _ => return Err(TFormAsciiTableParseError::StringFormat),
         })
