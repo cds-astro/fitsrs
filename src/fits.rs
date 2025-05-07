@@ -219,9 +219,10 @@ where
 
         let data_unit_byte_offset = reader.stream_position()?;
 
-        // Data block
-
-        Ok(Self { header, data_unit_byte_offset })
+        Ok(Self {
+            header,
+            data_unit_byte_offset,
+        })
     }
 
     pub fn get_header(&self) -> &Header<X> {
