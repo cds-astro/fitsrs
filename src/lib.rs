@@ -59,6 +59,7 @@ pub use hdu::data::bintable::{BinaryTableData, DataValue, TableData, TableRowDat
 pub use hdu::data::image::{ImageData, Pixels};
 pub use hdu::data::iter::It;
 pub use hdu::{AsyncHDU, HDU};
+pub use wcs::{ImgXY, LonLat, WCSParams, WCS};
 
 #[cfg(test)]
 mod tests {

@@ -4,14 +4,14 @@ use crate::hdu::header::extension::image::Image;
 use crate::hdu::header::Header;
 use std::convert::TryFrom;
 use std::str::FromStr;
-use wcs::WCSParams;
 
 pub type ImgXY = wcs::ImgXY;
 pub type LonLat = wcs::LonLat;
 
 use crate::fits::HDU;
 use std::convert::TryInto;
-use wcs::WCS;
+pub use wcs::{WCSParams, WCS};
+
 impl HDU<Image> {
     /// Try to look for a WCS in the image header and return a [WCS](https://crates.io/crates/wcs) object
     pub fn wcs(&self) -> Result<WCS, Error> {
