@@ -49,7 +49,7 @@ pub mod file;
 pub mod fits;
 pub mod wcs;
 
-mod gz;
+pub mod gz;
 pub mod hdu;
 
 pub use async_fits::AsyncFits;

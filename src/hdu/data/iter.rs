@@ -57,12 +57,34 @@ pub struct It<R, T> {
     _t: std::marker::PhantomData<T>,
 }
 
-impl<R> It<R, u8>
+use std::io::Cursor;
+impl<R, T> It<Cursor<R>, T>
 where
     R: AsRef<[u8]>,
 {
     pub fn bytes(&self) -> &[u8] {
-        self.reader.as_ref()
+        let inner = self.reader.get_ref();
+        inner.as_ref()
+    }
+}
+
+impl<R, T> It<&'_ Cursor<R>, T>
+where
+    R: AsRef<[u8]>,
+{
+    pub fn bytes(&self) -> &[u8] {
+        let inner = self.reader.get_ref();
+        inner.as_ref()
+    }
+}
+
+impl<R, T> It<&'_ mut Cursor<R>, T>
+where
+    R: AsRef<[u8]>,
+{
+    pub fn bytes(&self) -> &[u8] {
+        let inner = self.reader.get_ref();
+        inner.as_ref()
     }
 }
 
