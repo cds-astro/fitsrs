@@ -166,6 +166,7 @@ while let Some(Ok(hdu)) = hdu_list.next() {
                 .get_num_bytes_data_block();
 
             let data = hdu_list.get_data(&hdu)
+                .bytes()
                 .collect::<Vec<_>>();
 
             assert_eq!(num_bytes as usize, data.len());

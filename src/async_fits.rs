@@ -131,7 +131,7 @@ where
             let hdu = if !self.start {
                 // We must consume the bytes until the next header is found
                 // if eof then the iterator finishes
-                let mut consume_tokens_until_next_hdu = self.consume_until_next_hdu();
+                let consume_tokens_until_next_hdu = self.consume_until_next_hdu();
                 let eof = match std::pin::pin!(consume_tokens_until_next_hdu).poll(cx) {
                     Poll::Pending => return Poll::Pending,
                     // The future finished returning the eof information
@@ -143,7 +143,7 @@ where
                         if !eof {
                             // parse the extension HDU
                             let r = &mut self.reader;
-                            let mut parse_x_hdu = hdu::AsyncHDU::new_xtension(r);
+                            let parse_x_hdu = hdu::AsyncHDU::new_xtension(r);
                             match std::pin::pin!(parse_x_hdu).poll(cx) {
                                 Poll::Pending => return Poll::Pending,
                                 // the future finished, returning the parsed hdu or the error while parsing it
@@ -157,7 +157,7 @@ where
                 }
             } else {
                 // parse the primary HDU
-                let mut parse_first_hdu = hdu::AsyncHDU::new_primary(&mut self.reader);
+                let parse_first_hdu = hdu::AsyncHDU::new_primary(&mut self.reader);
                 match std::pin::pin!(parse_first_hdu).poll(cx) {
                     Poll::Pending => return Poll::Pending,
                     // the future finished, returning the parsed hdu or the error while parsing it
