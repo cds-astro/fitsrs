@@ -85,7 +85,7 @@ mod tests {
 
     #[test]
     fn test_fits_image_mandatory_kw() {
-        let f = File::open("samples/hipsgen/Npix208.fits").unwrap();
+        let f = BufReader::new(File::open("samples/hipsgen/Npix208.fits").unwrap());
         let bytes: Result<Vec<_>, _> = f.bytes().collect();
         let buf = bytes.unwrap();
 
@@ -157,7 +157,7 @@ mod tests {
 
     #[test]
     fn test_fits_image_f32() {
-        let f = File::open("samples/hipsgen/Npix208.fits").unwrap();
+        let f = BufReader::new(File::open("samples/hipsgen/Npix208.fits").unwrap());
         let bytes: Result<Vec<_>, _> = f.bytes().collect();
         let buf = bytes.unwrap();
 
@@ -460,7 +460,7 @@ mod tests {
                     let num_bytes = hdu.get_header().get_xtension().get_num_bytes_data_block();
                     let bytes = hdu_list.get_data(&hdu);
 
-                    assert_eq!(num_bytes as usize, bytes.collect::<Vec<_>>().len());
+                    assert_eq!(num_bytes as usize, bytes.bytes().collect::<Vec<_>>().len());
                 }
             }
         }
@@ -524,7 +524,7 @@ mod tests {
                     let num_bytes = hdu.get_header().get_xtension().get_num_bytes_data_block();
 
                     let it_bytes = hdu_list.get_data(&hdu);
-                    let data = it_bytes.collect::<Vec<_>>();
+                    let data = it_bytes.bytes().collect::<Vec<_>>();
                     assert_eq!(num_bytes as usize, data.len());
                 }
                 _ => (),
@@ -687,7 +687,7 @@ mod tests {
                 HDU::XASCIITable(hdu) => {
                     let num_bytes = hdu.get_header().get_xtension().get_num_bytes_data_block();
 
-                    let data = hdu_list.get_data(&hdu).collect::<Vec<_>>();
+                    let data = hdu_list.get_data(&hdu).bytes().collect::<Vec<_>>();
 
                     assert_eq!(num_bytes as usize, data.len());
                 }

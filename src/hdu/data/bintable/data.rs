@@ -10,8 +10,8 @@ use crate::hdu::header::extension::bintable::{BinTable, TFormType};
 use crate::hdu::FitsRead;
 use byteorder::BigEndian;
 use log::warn;
-use std::io::Read;
-use std::io::{Bytes, SeekFrom};
+use std::io::SeekFrom;
+use std::io::{BufReader, Read};
 
 impl<'a, R> FitsRead<'a, BinTable> for R
 where
@@ -173,9 +173,9 @@ where
     R: Read,
 {
     /// Gives an iterator over the bytes of the main data table
-    pub fn bytes(self) -> Bytes<Take<R>> {
+    pub fn bytes(self) -> BufReader<Take<R>> {
         let only_main_data_table = self.reader.take(self.main_data_table_byte_size as u64);
-        only_main_data_table.bytes()
+        BufReader::new(only_main_data_table)
     }
 }
 

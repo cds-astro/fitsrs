@@ -1,6 +1,6 @@
 [package]
 name = "fitsrs"
-version = "0.3.3"
+version = "0.3.4"
 authors = ["Matthieu Baumann <matthieu.baumann@astro.unistra.fr>"]
 edition = "2018"
 description = "Implementation of the FITS image parser"
