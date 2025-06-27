@@ -79,14 +79,14 @@ where
 }
 
 use std::io::Cursor;
-impl<R> ImageData<&mut Cursor<R>>
+impl<'a, R> ImageData<&'a mut Cursor<R>>
 where
-    R: AsRef<[u8]>,
+    R: AsRef<[u8]> + 'a,
 {
     /// For in memory buffers, access the raw bytes of the image.
     /// You might need to convert the data from big to little endian at some point
-    pub fn raw_bytes(&self) -> &[u8] {
-        let inner = match &self.pixels {
+    pub fn raw_bytes(self) -> &'a [u8] {
+        let inner = match self.pixels {
             Pixels::U8(It { reader, .. })
             | Pixels::I16(It { reader, .. })
             | Pixels::I32(It { reader, .. })
