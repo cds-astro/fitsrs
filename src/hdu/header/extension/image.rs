@@ -32,6 +32,10 @@ impl Image {
         self.naxisn.get(idx - 1)
     }
 
+    pub fn get_naxisn_all(&self, ) -> &[u64] {
+        self.naxisn.as_slice()
+    }
+
     /// Get the bitpix value given by the "BITPIX" card
     pub fn get_bitpix(&self) -> Bitpix {
         self.bitpix

@@ -99,6 +99,14 @@ impl AsciiTable {
     pub fn get_gcount(&self) -> u64 {
         self.gcount
     }
+
+    pub fn get_num_cols(&self) -> usize {
+        self.get_tfields()
+    }
+
+    pub fn get_num_rows(&self) -> usize {
+        self.get_naxis2() as usize
+    }
 }
 
 #[async_trait(?Send)]
