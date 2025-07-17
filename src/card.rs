@@ -39,11 +39,16 @@ pub enum Card {
 
 impl Card {
     /// Returns `true` if and only if the the card is either a [value](Card::Value) card with a
-    /// [string](Value::String) value or a [continuation](Card::Continuation) where the string value
-    /// ends with an ampersand, i.e. the `&` character.
+    /// [string](Value::String) value or a [hierarch](Card::Hierarch) card with a string](Value::String),
+    /// or a [continuation](Card::Continuation) where the string value ends with an ampersand,
+    /// i.e. the `&` character.
     pub fn continued(&self) -> bool {
         match self {
             Card::Value {
+                value: Value::String { value: s, .. },
+                ..
+            }
+            | Card::Hierarch {
                 value: Value::String { value: s, .. },
                 ..
             }
