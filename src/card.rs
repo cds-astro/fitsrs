@@ -83,11 +83,10 @@ impl Card {
         } = r
         {
             match self {
-                Self::Value { value, .. }
-                | Self::Hierarch { value, ..} => {
+                Self::Value { value, .. } | Self::Hierarch { value, .. } => {
                     value.append(cont_value, cont_comment);
                 }
-                _ => panic!("card must be a value or a hierarch")
+                _ => panic!("card must be a value or a hierarch"),
             }
         } else {
             panic!("only continuation variants can be appended")
@@ -186,13 +185,18 @@ fn parse_extension(buf: &[u8; 80]) -> Result<Card, Error> {
 
 fn parse_hierarch(buf: &[u8; 80]) -> Result<Card, Error> {
     // Starts at 10 to remove the leading `HIERARCH  `
-    if let Some(mut index_eq) = &buf[9..].iter().position(|&b| b == b'='){
+    if let Some(mut index_eq) = &buf[9..].iter().position(|&b| b == b'=') {
         index_eq += 9;
         if let Some(kw) = &buf[9..index_eq]
-          .split(|b| b.is_ascii_whitespace())
-          .filter(|s| !s.is_empty())
-          .map(String::from_utf8_lossy)
-          .reduce(|mut acc, e| { acc += "."; acc += e; acc }) {
+            .split(|b| b.is_ascii_whitespace())
+            .filter(|s| !s.is_empty())
+            .map(String::from_utf8_lossy)
+            .reduce(|mut acc, e| {
+                acc += ".";
+                acc += e;
+                acc
+            })
+        {
             Ok(Card::Hierarch {
                 name: kw.to_string(),
                 value: parse_value(&buf[index_eq + 1..])?,
@@ -924,16 +928,17 @@ mod tests {
 
     #[test]
     fn hierarch_keyword_record() {
-        let r = b"HIERARCH ESO TEL FOCU SCALE = 1.489 / (deg/m) Focus length = 5.36\"/mm           ";
+        let r =
+            b"HIERARCH ESO TEL FOCU SCALE = 1.489 / (deg/m) Focus length = 5.36\"/mm           ";
         let kw = Card::try_from(r).unwrap();
 
         if let Card::Hierarch {
             name,
             value:
-            Value::Float {
-                value,
-                comment: Some(comment),
-            },
+                Value::Float {
+                    value,
+                    comment: Some(comment),
+                },
         } = kw
         {
             assert_eq!(name, "ESO.TEL.FOCU.SCALE");
