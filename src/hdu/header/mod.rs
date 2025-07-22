@@ -241,18 +241,8 @@ fn process_cards(cards: &[Card]) -> Result<HashMap<String, Value>, Error> {
 
     for (i, card) in cards.iter().enumerate() {
         match card {
-            Card::Value { name, value } => {
-                if kw.is_some() {
-                    // FITS document 4.2.1.2: value ends with a '&' but is not immediately followed
-                    // by a CONTINUE record. We thus consider it as part of the previous valued string.
-                    kw = None;
-                }
-                values.insert(name.to_owned(), value.to_owned());
-                if value.continued() {
-                    kw = Some(name.to_owned());
-                }
-            }
-            Card::Hierarch { name, value } => {
+            Card::Value { name, value }
+            | Card::Hierarch { name, value } => {
                 if kw.is_some() {
                     // FITS document 4.2.1.2: value ends with a '&' but is not immediately followed
                     // by a CONTINUE record. We thus consider it as part of the previous valued string.

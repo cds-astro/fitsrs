@@ -83,10 +83,8 @@ impl Card {
         } = r
         {
             match self {
-                Self::Value { value, .. } => {
-                    value.append(cont_value, cont_comment);
-                }
-                Self::Hierarch { value, ..} => {
+                Self::Value { value, .. }
+                | Self::Hierarch { value, ..} => {
                     value.append(cont_value, cont_comment);
                 }
                 _ => panic!("card must be a value or a hierarch")
