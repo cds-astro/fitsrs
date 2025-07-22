@@ -201,12 +201,10 @@ where
     /// # Params
     /// * `value` - The value of a card
     pub fn get_keyword(&self, val: &Value) -> Option<&str> {
-        self.cards().find_map(|card| {
-            match card {
-                Card::Value { name, value } if value == val => Some(name.as_str()),
-                Card::Hierarch { name, value } if value == val => Some(name.as_str()),
-                _ => None
-            }
+        self.cards().find_map(|card| match card {
+            Card::Value { name, value } if value == val => Some(name.as_str()),
+            Card::Hierarch { name, value } if value == val => Some(name.as_str()),
+            _ => None,
         })
     }
 
@@ -241,8 +239,7 @@ fn process_cards(cards: &[Card]) -> Result<HashMap<String, Value>, Error> {
 
     for (i, card) in cards.iter().enumerate() {
         match card {
-            Card::Value { name, value }
-            | Card::Hierarch { name, value } => {
+            Card::Value { name, value } | Card::Hierarch { name, value } => {
                 if kw.is_some() {
                     // FITS document 4.2.1.2: value ends with a '&' but is not immediately followed
                     // by a CONTINUE record. We thus consider it as part of the previous valued string.

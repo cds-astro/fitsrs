@@ -1,6 +1,4 @@
-use std::{
-    error::Error,
-};
+use std::error::Error;
 
 use clap::Parser;
 
@@ -19,12 +17,16 @@ enum Args {
     /// Read and print the structure of a FITS file
     #[clap(name = "struct")]
     Struct(Struct),
+    /// Read and print the headers of all the HDU in a FITS file
+    #[clap(name = "head")]
+    Head(Head),
 }
 
 impl Args {
     fn exec(self) -> Result<(), Box<dyn Error>> {
         match self {
             Self::Struct(args) => args.exec(),
+            Self::Head(args) => args.exec(),
         }
     }
 }
