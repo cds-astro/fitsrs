@@ -8,7 +8,7 @@ use crate::hdu::header::Xtension;
 
 use std::fmt::Debug;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Fits<R> {
     start: bool,
     // Store the number of bytes that remains to read so that the current HDU data finishes
@@ -29,21 +29,6 @@ where
 {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.reader.read(buf)
-    }
-}
-
-impl<R> Clone for Fits<R>
-where
-    R: Clone,
-{
-    fn clone(&self) -> Self {
-        Self {
-            reader: self.reader.clone(),
-            error_parsing_encountered: self.error_parsing_encountered,
-            num_bytes_in_cur_du: self.num_bytes_in_cur_du,
-            pos_start_cur_du: self.pos_start_cur_du,
-            start: self.start,
-        }
     }
 }
 
