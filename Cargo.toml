@@ -29,13 +29,13 @@ log = "0.4"
 log = { workspace = true }
 byteorder = "1.4.2"
 serde = { version = "1.0.152", features = ["derive"] }
-serde_json = "1.0.138"
 futures = "0.3.31"
 async-trait = "0.1.66"
 quick-error = "2.0.1"
 flate2 = "1.0.35"
 wcs = "0.4.1"
 indexmap = { version = "2.9.0", features = ["serde"] }
+serde_repr = "0.1.20"
 
 [dev-dependencies]
 test-case = "3.0.0"

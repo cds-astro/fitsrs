@@ -10,9 +10,6 @@ quick_error! {
             from()
             display("{message}")
         }
-        BitpixBadValue {
-            display("Bitpix value found is not valid. Standard values are: -64, -32, 8, 16, 32 and 64.")
-        }
         /// Fits file is not a multiple of 80 bytes long
         FailReadingNextBytes {
             display("A 80 bytes card could not be read. A fits file must have a multiple of 80 characters.")
@@ -23,12 +20,6 @@ quick_error! {
         WCS {
             from(wcs::error::Error)
             display("WCS parsing")
-        }
-        ValueBadParsing {
-            display("A value could not be parsed correctly")
-        }
-        FailTypeCardParsing(card: String, t: String) {
-            display("{card} card is not of type {t}")
         }
         NotSupportedXtensionType(extension: String) {
             display("{extension} extension is not supported. Only BINTABLE, TABLE and IMAGE are.")
@@ -44,5 +35,11 @@ quick_error! {
             // to only store its error kind which is sufficiant for our use
             from(err: std::io::Error) -> (err.kind())
         }
+    }
+}
+
+impl serde::de::Error for Error {
+    fn custom<T: std::fmt::Display>(msg: T) -> Self {
+        Error::DynamicError(msg.to_string())
     }
 }

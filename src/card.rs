@@ -6,7 +6,8 @@ pub type Keyword = [u8; 8];
 /// Holds 80 bytes of ASCII characters, i.e. one line in a FITS compliant file.
 pub type CardBuf = [u8; 80];
 
-use serde::Serialize;
+use serde::de::IntoDeserializer;
+use serde::{forward_to_deserialize_any, Deserializer, Serialize};
 
 /// Enum representing the variants of a single 80 character line in the header.
 #[derive(PartialEq, Debug, Serialize, Clone)]
@@ -417,33 +418,6 @@ fn parse_empty_keyword_card(buf: &[u8; 80]) -> Card {
     }
 }
 
-pub trait CardValue {
-    fn parse(value: &Value) -> Result<Self, Error>
-    where
-        Self: Sized;
-}
-
-impl CardValue for f64 {
-    fn parse(value: &Value) -> Result<Self, Error> {
-        Value::check_for_float(value)
-    }
-}
-impl CardValue for i64 {
-    fn parse(value: &Value) -> Result<Self, Error> {
-        Value::check_for_integer(value)
-    }
-}
-impl CardValue for String {
-    fn parse(value: &Value) -> Result<Self, Error> {
-        Value::check_for_string(value).map(|s| s.to_owned())
-    }
-}
-impl CardValue for bool {
-    fn parse(value: &Value) -> Result<Self, Error> {
-        Value::check_for_boolean(value)
-    }
-}
-
 /// Enum structure corresponding to all the possible types of cards in a header.
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub enum Value {
@@ -493,6 +467,49 @@ impl Value {
     }
 }
 
+impl<'de> Deserializer<'de> for &'de Value {
+    type Error = Error;
+
+    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: serde::de::Visitor<'de>,
+    {
+        match self {
+            Value::Integer { value, comment: _ } => visitor.visit_i64(*value),
+            Value::Float { value, comment: _ } => visitor.visit_f64(*value),
+            Value::Logical { value, comment: _ } => visitor.visit_bool(*value),
+            Value::String { value, comment: _ } => visitor.visit_borrowed_str(value),
+            Value::Undefined => visitor.visit_unit(),
+            Value::Invalid(s) => visitor.visit_borrowed_str(s),
+        }
+    }
+
+    fn deserialize_option<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: serde::de::Visitor<'de>,
+    {
+        if self == &Value::Undefined {
+            visitor.visit_none()
+        } else {
+            visitor.visit_some(self)
+        }
+    }
+
+    forward_to_deserialize_any! {
+        bool i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 char str string bytes byte_buf unit
+        seq tuple tuple_struct map struct enum identifier ignored_any
+        newtype_struct unit_struct
+    }
+}
+
+impl<'de> IntoDeserializer<'de, Error> for &'de Value {
+    type Deserializer = Self;
+
+    fn into_deserializer(self) -> Self::Deserializer {
+        self
+    }
+}
+
 /// Return the unit enclosed in brackets of the a comment, returns None
 /// if there is no comment or no unit in brackets.
 ///
@@ -514,31 +531,6 @@ fn parse_unit(comment: &Option<String>) -> Option<&str> {
 }
 
 impl Value {
-    pub fn check_for_integer(&self) -> Result<i64, Error> {
-        match self {
-            Value::Integer { value: num, .. } => Ok(*num),
-            _ => Err(Error::ValueBadParsing),
-        }
-    }
-    pub fn check_for_boolean(&self) -> Result<bool, Error> {
-        match self {
-            Value::Logical { value: logical, .. } => Ok(*logical),
-            _ => Err(Error::ValueBadParsing),
-        }
-    }
-    pub fn check_for_string(&self) -> Result<&str, Error> {
-        match self {
-            Value::String { value: s, .. } => Ok(s),
-            _ => Err(Error::ValueBadParsing),
-        }
-    }
-    pub fn check_for_float(&self) -> Result<f64, Error> {
-        match self {
-            Value::Float { value: f, .. } => Ok(*f),
-            _ => Err(Error::ValueBadParsing),
-        }
-    }
-
     pub fn append(&mut self, v: &Option<String>, c: &Option<String>) -> &mut Self {
         if let Value::String { value, comment } = self {
             append_string(value, v);
