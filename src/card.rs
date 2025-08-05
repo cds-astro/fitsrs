@@ -176,7 +176,7 @@ fn parse_extension(buf: &[u8; 80]) -> Result<Card, Error> {
     let (value, comment) = split_value_and_comment(&buf[10..])?;
     if value.starts_with("'") && value.ends_with("'") {
         let end = value.len() - 1;
-        let x = XtensionType::try_from(value[1..end].trim_ascii())?;
+        let x = value[1..end].trim_ascii().parse()?;
         Ok(Card::Xtension { x, comment })
     } else {
         let msg = format!("XTENSION value must be enclosed in single quotes, found: {value}");
