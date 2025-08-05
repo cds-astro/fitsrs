@@ -167,8 +167,7 @@ mod tests {
         assert!(matches!(hdu, HDU::Primary(_)));
         if let HDU::Primary(hdu) = hdu {
             let header = hdu.get_header();
-            let num_pixels = header.get_xtension().get_naxisn(1).unwrap()
-                * header.get_xtension().get_naxisn(2).unwrap();
+            let num_pixels = header.get_xtension().get_num_pixels();
             let image = hdu_list.get_data(&hdu);
             match image.pixels() {
                 Pixels::F32(it) => {
@@ -194,8 +193,7 @@ mod tests {
         assert!(matches!(hdu, HDU::Primary(_)));
         if let HDU::Primary(hdu) = hdu {
             let header = hdu.get_header();
-            let num_pixels = header.get_xtension().get_naxisn(1).unwrap()
-                * header.get_xtension().get_naxisn(2).unwrap();
+            let num_pixels = header.get_xtension().get_num_pixels();
             let image = hdu_list.get_data(&hdu);
             match image.pixels() {
                 Pixels::I16(data) => {
@@ -259,11 +257,7 @@ mod tests {
         let mut hdu_list = Fits::from_reader(reader);
 
         while let Some(Ok(HDU::XImage(hdu))) = hdu_list.next() {
-            let xtension = hdu.get_header().get_xtension();
-            let naxis1 = *xtension.get_naxisn(1).unwrap();
-            let naxis2 = *xtension.get_naxisn(2).unwrap();
-
-            let num_pixels = (naxis1 * naxis2) as usize;
+            let num_pixels = hdu.get_header().get_xtension().get_num_pixels();
 
             // Try to access the WCS on a specific HDU image
             if let Ok(wcs) = hdu.wcs() {
@@ -274,7 +268,7 @@ mod tests {
 
             let image = hdu_list.get_data(&hdu);
             assert_eq!(
-                num_pixels,
+                num_pixels as usize,
                 match image.pixels() {
                     Pixels::I16(it) => it.count(),
                     Pixels::U8(it) => it.count(),
@@ -299,13 +293,11 @@ mod tests {
         let mut hdu_list = Fits::from_reader(reader);
 
         if let Some(Ok(HDU::Primary(hdu))) = hdu_list.next() {
-            let xtension = hdu.get_header().get_xtension();
-            let naxis1 = *xtension.get_naxisn(1).unwrap();
-            let naxis2 = *xtension.get_naxisn(2).unwrap();
+            let num_pixels = hdu.get_header().get_xtension().get_num_pixels();
             let image = hdu_list.get_data(&hdu);
             match image.pixels() {
                 Pixels::F32(data) => {
-                    assert_eq!(data.count(), (naxis1 * naxis2) as usize);
+                    assert_eq!(data.count(), num_pixels as usize);
                 }
                 _ => unreachable!(),
             }
@@ -403,27 +395,20 @@ mod tests {
         while let Some(Ok(hdu)) = hdu_list.next() {
             match hdu {
                 HDU::XImage(hdu) | HDU::Primary(hdu) => {
-                    let xtension = hdu.get_header().get_xtension();
+                    let num_pixels = hdu.get_header().get_xtension().get_num_pixels();
 
-                    let naxis1 = xtension.get_naxisn(1);
-                    let naxis2 = xtension.get_naxisn(2);
-
-                    if let (Some(naxis1), Some(naxis2)) = (naxis1, naxis2) {
-                        let num_pixels = (naxis2 * naxis1) as usize;
-
-                        let image = hdu_list.get_data(&hdu);
-                        assert_eq!(
-                            num_pixels,
-                            match image.pixels() {
-                                Pixels::U8(it) => it.count(),
-                                Pixels::I16(it) => it.count(),
-                                Pixels::I32(it) => it.count(),
-                                Pixels::I64(it) => it.count(),
-                                Pixels::F32(it) => it.count(),
-                                Pixels::F64(it) => it.count(),
-                            }
-                        );
-                    };
+                    let image = hdu_list.get_data(&hdu);
+                    assert_eq!(
+                        num_pixels as usize,
+                        match image.pixels() {
+                            Pixels::U8(it) => it.count(),
+                            Pixels::I16(it) => it.count(),
+                            Pixels::I32(it) => it.count(),
+                            Pixels::I64(it) => it.count(),
+                            Pixels::F32(it) => it.count(),
+                            Pixels::F64(it) => it.count(),
+                        }
+                    );
                 }
                 HDU::XBinaryTable(hdu) => {
                     let _num_bytes = hdu.get_header().get_xtension().get_num_bytes_data_block();
@@ -455,12 +440,7 @@ mod tests {
         while let Some(Ok(hdu)) = hdu_list.next() {
             match hdu {
                 HDU::XImage(hdu) => {
-                    let xtension = hdu.get_header().get_xtension();
-
-                    let naxis1 = *xtension.get_naxisn(1).unwrap();
-                    let naxis2 = *xtension.get_naxisn(2).unwrap();
-
-                    let num_pixels = naxis2 * naxis1;
+                    let num_pixels = hdu.get_header().get_xtension().get_num_pixels();
 
                     let image = hdu_list.get_data(&hdu);
                     assert_eq!(
@@ -535,24 +515,19 @@ mod tests {
         while let Some(Ok(hdu)) = hdu_list.next().await {
             match hdu {
                 AsyncHDU::XImage(hdu) | AsyncHDU::Primary(hdu) => {
-                    let xtension = hdu.get_header().get_xtension();
-                    let naxis1 = xtension.get_naxisn(1);
-                    let naxis2 = xtension.get_naxisn(2);
-                    if let (Some(naxis1), Some(naxis2)) = (naxis1, naxis2) {
-                        let num_pixels = (*naxis2 * *naxis1) as usize;
+                    let num_pixels = hdu.get_header().get_xtension().get_num_pixels();
 
-                        assert_eq!(
-                            num_pixels,
-                            match hdu_list.get_data(&hdu) {
-                                DataStream::U8(st) => st.count().await,
-                                DataStream::I16(st) => st.count().await,
-                                DataStream::I32(st) => st.count().await,
-                                DataStream::I64(st) => st.count().await,
-                                DataStream::F32(st) => st.count().await,
-                                DataStream::F64(st) => st.count().await,
-                            }
-                        );
-                    }
+                    assert_eq!(
+                        num_pixels as usize,
+                        match hdu_list.get_data(&hdu) {
+                            DataStream::U8(st) => st.count().await,
+                            DataStream::I16(st) => st.count().await,
+                            DataStream::I32(st) => st.count().await,
+                            DataStream::I64(st) => st.count().await,
+                            DataStream::F32(st) => st.count().await,
+                            DataStream::F64(st) => st.count().await,
+                        }
+                    );
                 }
                 AsyncHDU::XBinaryTable(hdu) => {
                     let num_bytes = hdu.get_header().get_xtension().get_num_bytes_data_block();
@@ -583,16 +558,11 @@ mod tests {
                 // skip the primary HDU
                 HDU::Primary(_) => (),
                 HDU::XImage(hdu) => {
-                    let xtension = hdu.get_header().get_xtension();
-
-                    let naxis1 = *xtension.get_naxisn(1).unwrap();
-                    let naxis2 = *xtension.get_naxisn(2).unwrap();
-
-                    let num_pixels = (naxis2 * naxis1) as usize;
+                    let num_pixels = hdu.get_header().get_xtension().get_num_pixels();
 
                     let data = hdu_list.get_data(&hdu);
                     assert_eq!(
-                        num_pixels,
+                        num_pixels as usize,
                         match data.pixels() {
                             Pixels::U8(it) => it.count(),
                             Pixels::I16(it) => it.count(),

@@ -40,19 +40,20 @@ impl Image {
     pub fn get_bitpix(&self) -> Bitpix {
         self.bitpix
     }
+
+    /// Get total number of pixels in the image
+    pub fn get_num_pixels(&self) -> u64 {
+        if self.naxisn.is_empty() {
+            return 0;
+        }
+        self.naxisn.iter().product()
+    }
 }
 
 #[async_trait(?Send)]
 impl Xtension for Image {
     fn get_num_bytes_data_block(&self) -> u64 {
-        let num_pixels = if self.naxisn.is_empty() {
-            0
-        } else {
-            self.naxisn.iter().product()
-        };
-
-        let num_bits = ((self.bitpix as i32).unsigned_abs() as u64) * num_pixels;
-        num_bits >> 3
+        self.bitpix.byte_size() as u64 * self.get_num_pixels()
     }
 
     fn parse(values: &HashMap<String, Value>) -> Result<Self, Error> {
