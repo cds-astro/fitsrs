@@ -288,7 +288,7 @@ impl Xtension for BinTable {
             let mut z_tilen = Vec::with_capacity(z_naxis);
 
             for i in 1..=z_naxis {
-                let naxisn = if let Ok(value) = values.get_parsed::<i64>(&format!("ZNAXIS{i}")) {
+                let naxisn = if let Ok(value) = values.check_for_naxisi(i) {
                     value
                 } else {
                     warn!("ZNAXISN is mandatory. Tile compressed image discarded");
