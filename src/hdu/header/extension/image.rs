@@ -2,8 +2,6 @@ use async_trait::async_trait;
 use serde::Serialize;
 
 use crate::error::Error;
-use crate::hdu::header::check_for_bitpix;
-use crate::hdu::header::check_for_naxis;
 use crate::hdu::header::Bitpix;
 
 use crate::hdu::header::ValueMap;
@@ -45,9 +43,9 @@ impl Xtension for Image {
 
     fn parse(values: &ValueMap) -> Result<Self, Error> {
         // BITPIX
-        let bitpix = check_for_bitpix(values)?;
+        let bitpix = values.check_for_bitpix()?;
         // NAXIS
-        let naxis = check_for_naxis(values)?;
+        let naxis = values.check_for_naxis()?;
         // The size of each NAXIS
         let naxisn = (1..=naxis)
             .map(|naxis_i| values.get_parsed(&format!("NAXIS{naxis_i}")))

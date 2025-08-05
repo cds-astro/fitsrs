@@ -1,12 +1,6 @@
 use std::fmt::Debug;
 
 use crate::error::Error;
-use crate::hdu::header::check_for_bitpix;
-use crate::hdu::header::check_for_gcount;
-use crate::hdu::header::check_for_naxis;
-use crate::hdu::header::check_for_naxisi;
-use crate::hdu::header::check_for_pcount;
-use crate::hdu::header::check_for_tfields;
 use crate::hdu::header::Bitpix;
 use crate::hdu::Value;
 use async_trait::async_trait;
@@ -190,7 +184,7 @@ impl Xtension for BinTable {
 
     fn parse(values: &ValueMap) -> Result<Self, Error> {
         // BITPIX
-        let bitpix = check_for_bitpix(values)?;
+        let bitpix = values.check_for_bitpix()?;
         if bitpix != Bitpix::U8 {
             return Err(Error::StaticError(
                 "Binary Table HDU must have a BITPIX = 8",
@@ -198,27 +192,27 @@ impl Xtension for BinTable {
         }
 
         // NAXIS
-        let naxis = check_for_naxis(values)?;
+        let naxis = values.check_for_naxis()?;
         if naxis != 2 {
             return Err(Error::StaticError("Binary Table HDU must have NAXIS = 2"));
         }
 
         // NAXIS1
-        let naxis1 = check_for_naxisi(values, 1)?;
+        let naxis1 = values.check_for_naxisi(1)?;
         // NAXIS2
-        let naxis2 = check_for_naxisi(values, 2)?;
+        let naxis2 = values.check_for_naxisi(2)?;
 
         // PCOUNT
-        let pcount = check_for_pcount(values)?;
+        let pcount = values.check_for_pcount()?;
 
         // GCOUNT
-        let gcount = check_for_gcount(values)?;
+        let gcount = values.check_for_gcount()?;
         if gcount != 1 {
             return Err(Error::StaticError("Ascii Table HDU must have GCOUNT = 1"));
         }
 
         // FIELDS
-        let tfields = check_for_tfields(values)?;
+        let tfields = values.check_for_tfields()?;
 
         // Tile compressed image parameters
         let z_cmp_type = if let Some(Value::String {
