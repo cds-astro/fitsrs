@@ -5,12 +5,6 @@ use serde::Serialize;
 
 use crate::error::Error;
 
-use crate::hdu::header::check_for_bitpix;
-use crate::hdu::header::check_for_gcount;
-use crate::hdu::header::check_for_naxis;
-use crate::hdu::header::check_for_naxisi;
-use crate::hdu::header::check_for_pcount;
-use crate::hdu::header::check_for_tfields;
 use crate::hdu::header::Bitpix;
 
 use crate::hdu::header::ValueMap;
@@ -106,35 +100,35 @@ impl Xtension for AsciiTable {
 
     fn parse(values: &ValueMap) -> Result<Self, Error> {
         // BITPIX
-        let bitpix = check_for_bitpix(values)?;
+        let bitpix = values.check_for_bitpix()?;
         if bitpix != Bitpix::U8 {
             return Err(Error::StaticError("Ascii Table HDU must have a BITPIX = 8"));
         }
 
         // NAXIS
-        let naxis = check_for_naxis(values)?;
+        let naxis = values.check_for_naxis()?;
         if naxis != 2 {
             return Err(Error::StaticError("Ascii Table HDU must have NAXIS = 2"));
         }
 
         // NAXIS1
-        let naxis1 = check_for_naxisi(values, 1)?;
-        let naxis2 = check_for_naxisi(values, 2)?;
+        let naxis1 = values.check_for_naxisi(1)?;
+        let naxis2 = values.check_for_naxisi(2)?;
 
         // PCOUNT
-        let pcount = check_for_pcount(values)?;
+        let pcount = values.check_for_pcount()?;
         if pcount != 0 {
             return Err(Error::StaticError("Ascii Table HDU must have PCOUNT = 0"));
         }
 
         // GCOUNT
-        let gcount = check_for_gcount(values)?;
+        let gcount = values.check_for_gcount()?;
         if gcount != 1 {
             return Err(Error::StaticError("Ascii Table HDU must have GCOUNT = 1"));
         }
 
         // FIELDS
-        let tfields = check_for_tfields(values)?;
+        let tfields = values.check_for_tfields()?;
 
         // TFORMS
         let mut tbcols = Vec::with_capacity(tfields);

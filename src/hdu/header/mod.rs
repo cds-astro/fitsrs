@@ -62,31 +62,6 @@ pub fn check_card_keyword(card: &[u8; 80], keyword: &[u8; 8]) -> Result<card::Va
     }
 }
 
-/* Mandatory keywords parsing */
-fn check_for_bitpix(values: &ValueMap) -> Result<Bitpix, Error> {
-    values.get_parsed("BITPIX")
-}
-
-fn check_for_naxis(values: &ValueMap) -> Result<u64, Error> {
-    values.get_parsed("NAXIS")
-}
-
-fn check_for_naxisi(values: &ValueMap, i: usize) -> Result<u64, Error> {
-    values.get_parsed(&format!("NAXIS{i}"))
-}
-
-fn check_for_gcount(values: &ValueMap) -> Result<u64, Error> {
-    values.get_parsed("GCOUNT")
-}
-
-fn check_for_pcount(values: &ValueMap) -> Result<u64, Error> {
-    values.get_parsed("PCOUNT")
-}
-
-fn check_for_tfields(values: &ValueMap) -> Result<usize, Error> {
-    values.get_parsed("TFIELDS")
-}
-
 #[derive(Debug, PartialEq, Serialize_repr, Deserialize_repr, Clone, Copy)]
 #[repr(i8)]
 pub enum Bitpix {
@@ -154,6 +129,32 @@ impl ValueMap {
     /// in the FITS header.
     pub fn keywords(&self) -> Keys<String, Value> {
         self.values.keys()
+    }
+
+    /* Mandatory keywords parsing */
+
+    fn check_for_bitpix(&self) -> Result<Bitpix, Error> {
+        self.get_parsed("BITPIX")
+    }
+
+    fn check_for_naxis(&self) -> Result<u64, Error> {
+        self.get_parsed("NAXIS")
+    }
+
+    fn check_for_naxisi(&self, i: usize) -> Result<u64, Error> {
+        self.get_parsed(&format!("NAXIS{i}"))
+    }
+
+    fn check_for_gcount(&self) -> Result<u64, Error> {
+        self.get_parsed("GCOUNT")
+    }
+
+    fn check_for_pcount(&self) -> Result<u64, Error> {
+        self.get_parsed("PCOUNT")
+    }
+
+    fn check_for_tfields(&self) -> Result<usize, Error> {
+        self.get_parsed("TFIELDS")
     }
 }
 
