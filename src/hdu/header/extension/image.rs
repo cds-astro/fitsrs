@@ -50,11 +50,7 @@ impl Xtension for Image {
         let naxis = check_for_naxis(values)?;
         // The size of each NAXIS
         let naxisn = (1..=naxis)
-            .map(|naxis_i| {
-                values
-                    .get_parsed(&format!("NAXIS{naxis_i}"))
-                    .map(|value: i64| value as _)
-            })
+            .map(|naxis_i| values.get_parsed(&format!("NAXIS{naxis_i}")))
             .collect::<Result<_, _>>()?;
 
         Ok(Image { bitpix, naxisn })

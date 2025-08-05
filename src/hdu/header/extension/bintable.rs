@@ -16,6 +16,7 @@ use super::Xtension;
 
 use crate::hdu::header::ValueMap;
 use log::warn;
+use serde::Deserialize;
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct BinTable {
@@ -140,10 +141,13 @@ pub(crate) struct TileCompressedImage {
     pub(crate) data_compressed_idx: usize,
 }
 
-#[derive(Debug, PartialEq, Serialize, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub(crate) enum ZQuantiz {
+    #[serde(rename = "NO_DITHER")]
     NoDither,
+    #[serde(rename = "SUBTRACTIVE_DITHER_1")]
     SubtractiveDither1,
+    #[serde(rename = "SUBTRACTIVE_DITHER_2")]
     SubtractiveDither2,
 }
 
@@ -234,11 +238,7 @@ impl Xtension for BinTable {
                                 if value == "BLOCKSIZE" && zname.starts_with("ZNAME") {
                                     let zval = zname.replace("NAME", "VAL");
 
-                                    if let Ok(value) = values.get_parsed::<i64>(&zval) {
-                                        Some(value as u8)
-                                    } else {
-                                        None
-                                    }
+                                    values.get_parsed(&zval).ok()
                                 } else {
                                     None
                                 }
@@ -265,22 +265,14 @@ impl Xtension for BinTable {
             None
         };
 
-        let z_bitpix = match values.try_get_parsed::<Bitpix>("ZBITPIX") {
-            Ok(Some(z_bitpix)) => Some(z_bitpix),
-            Ok(None) => None,
-            Err(err) => {
-                warn!("ZBITPIX is not valid. The tile compressed image column will be discarded if any: {}", err);
-                None
-            }
-        };
+        let z_bitpix = values.get_parsed("ZBITPIX").unwrap_or_else(|err| {
+            warn!("ZBITPIX is not valid. The tile compressed image column will be discarded if any: {}", err);
+            None
+        });
 
         // ZNAXIS (required keyword) The value field of this keyword shall contain an integer that gives
         // the value of the NAXIS keyword in the uncompressed FITS image.
-        let z_naxis = if let Ok(value) = values.get_parsed::<i64>("ZNAXIS") {
-            Some(value as usize)
-        } else {
-            None
-        };
+        let z_naxis = values.get_parsed("ZNAXIS").ok();
 
         // ZNAXISn (required keywords) The value field of these keywords shall contain a positive integer
         // that gives the value of the NAXISn keywords in the uncompressed FITS image.
@@ -341,22 +333,10 @@ impl Xtension for BinTable {
         // ZQUANTIZ (optional keyword) This keyword records the name of the algorithm that was
         // used to quantize floating-point image pixels into integer values which are then passed to
         // the compression algorithm, as discussed further in section 4 of this document.
-        let z_quantiz = if let Some(Value::String {
-            value: z_quantiz, ..
-        }) = values.get("ZQUANTIZ")
-        {
-            match z_quantiz.trim_ascii_end() {
-                "NO_DITHER" => Some(ZQuantiz::NoDither),
-                "SUBTRACTIVE_DITHER_1" => Some(ZQuantiz::SubtractiveDither1),
-                "SUBTRACTIVE_DITHER_2" => Some(ZQuantiz::SubtractiveDither2),
-                _ => {
-                    warn!("ZQUANTIZ value not recognized");
-                    None
-                }
-            }
-        } else {
+        let z_quantiz = values.get_parsed("ZQUANTIZ").unwrap_or_else(|err| {
+            warn!("ZQUANTIZ value not recognized: {}", err);
             None
-        };
+        });
 
         // ZDITHER0 (optional keyword) The value field of this keyword shall contain an integer that
         // gives the seed value for the random dithering pattern that was used when quantizing the
@@ -525,8 +505,8 @@ impl Xtension for BinTable {
         };
 
         // update the value of theap if found
-        let theap = if let Ok(value) = values.get_parsed::<i64>("THEAP") {
-            value as usize
+        let theap = if let Ok(value) = values.get_parsed::<usize>("THEAP") {
+            value
         } else {
             (naxis1 as usize) * (naxis2 as usize)
         };

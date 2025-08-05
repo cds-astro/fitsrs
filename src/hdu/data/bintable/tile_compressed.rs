@@ -200,14 +200,15 @@ impl<R> TileCompressedData<R> {
             // If no ZBLANK colum has been found then check the header keywords (ZBLANK for float, BLANK for integer)
             .map_or_else(
                 || {
-                    if (*z_bitpix as i32) < 0 {
-                        header.get_parsed("ZBLANK")
-                    } else {
-                        header.get_parsed("BLANK").map(|value: i64| value as f64)
-                    }
-                    // TODO: we should probably propagate errors from here if ZBLANK/BLANK exist but are of a wrong type.
-                    .ok()
-                    .map(ZBLANK::Value)
+                    header
+                        .get_parsed(if (*z_bitpix as i32) < 0 {
+                            "ZBLANK"
+                        } else {
+                            "BLANK"
+                        })
+                        // TODO: we should probably propagate errors from here if ZBLANK/BLANK exist but are of a wrong type.
+                        .ok()
+                        .map(ZBLANK::Value)
                 },
                 |field_idx| Some(ZBLANK::ColumnIdx(field_idx)),
             );
@@ -601,16 +602,8 @@ mod tests {
 
         while let Some(Ok(hdu)) = hdu_list.next() {
             if let HDU::XBinaryTable(hdu) = hdu {
-                let width = hdu
-                    .get_header()
-                    .get_parsed::<i64>("ZNAXIS1")
-                    .unwrap()
-                    .unwrap() as u32;
-                let height = hdu
-                    .get_header()
-                    .get_parsed::<i64>("ZNAXIS2")
-                    .unwrap()
-                    .unwrap() as u32;
+                let width = hdu.get_header().get_parsed::<u32>("ZNAXIS1").unwrap();
+                let height = hdu.get_header().get_parsed::<u32>("ZNAXIS2").unwrap();
                 let pixels = hdu_list
                     .get_data(&hdu)
                     .map(|value| match value {
@@ -645,26 +638,10 @@ mod tests {
 
         while let Some(Ok(hdu)) = hdu_list.next() {
             if let HDU::XBinaryTable(hdu) = hdu {
-                let width = hdu
-                    .get_header()
-                    .get_parsed::<i64>("ZNAXIS1")
-                    .unwrap()
-                    .unwrap() as u32;
-                let height = hdu
-                    .get_header()
-                    .get_parsed::<i64>("ZNAXIS2")
-                    .unwrap()
-                    .unwrap() as u32;
-                let bscale = hdu
-                    .get_header()
-                    .get_parsed::<f64>("BSCALE")
-                    .unwrap()
-                    .unwrap() as f32;
-                let bzero = hdu
-                    .get_header()
-                    .get_parsed::<f64>("BZERO")
-                    .unwrap()
-                    .unwrap() as f32;
+                let width = hdu.get_header().get_parsed::<u32>("ZNAXIS1").unwrap();
+                let height = hdu.get_header().get_parsed::<u32>("ZNAXIS2").unwrap();
+                let bscale = hdu.get_header().get_parsed::<f32>("BSCALE").unwrap();
+                let bzero = hdu.get_header().get_parsed::<f32>("BZERO").unwrap();
 
                 let pixels = hdu_list
                     .get_data(&hdu)
@@ -701,16 +678,8 @@ mod tests {
 
         while let Some(Ok(hdu)) = hdu_list.next() {
             if let HDU::XBinaryTable(hdu) = hdu {
-                let width = hdu
-                    .get_header()
-                    .get_parsed::<i64>("ZNAXIS1")
-                    .unwrap()
-                    .unwrap() as u32;
-                let height = hdu
-                    .get_header()
-                    .get_parsed::<i64>("ZNAXIS2")
-                    .unwrap()
-                    .unwrap() as u32;
+                let width = hdu.get_header().get_parsed::<u32>("ZNAXIS1").unwrap();
+                let height = hdu.get_header().get_parsed::<u32>("ZNAXIS2").unwrap();
 
                 let mut buf = vec![0_u8; (width as usize) * (height as usize)];
 

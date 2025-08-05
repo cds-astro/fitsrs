@@ -5,7 +5,8 @@
 use futures::{AsyncRead, AsyncReadExt};
 use indexmap::map::{IndexMap, Keys};
 use log::warn;
-use serde::Serialize;
+use serde::de::{value::MapDeserializer, IntoDeserializer};
+use serde::{Deserialize, Serialize};
 
 pub mod extension;
 
@@ -19,6 +20,7 @@ use crate::{
     card::{self, *},
     error::Error,
 };
+use serde_repr::{Deserialize_repr, Serialize_repr};
 
 pub fn consume_next_card<R: Read>(
     reader: &mut R,
@@ -66,27 +68,27 @@ fn check_for_bitpix(values: &ValueMap) -> Result<Bitpix, Error> {
 }
 
 fn check_for_naxis(values: &ValueMap) -> Result<u64, Error> {
-    values.get_parsed("NAXIS").map(|value: i64| value as _)
+    values.get_parsed("NAXIS")
 }
 
 fn check_for_naxisi(values: &ValueMap, i: usize) -> Result<u64, Error> {
-    let naxisi = format!("NAXIS{i}");
-    values.get_parsed(&naxisi).map(|value: i64| value as _)
+    values.get_parsed(&format!("NAXIS{i}"))
 }
 
 fn check_for_gcount(values: &ValueMap) -> Result<u64, Error> {
-    values.get_parsed("GCOUNT").map(|value: i64| value as _)
+    values.get_parsed("GCOUNT")
 }
 
 fn check_for_pcount(values: &ValueMap) -> Result<u64, Error> {
-    values.get_parsed("PCOUNT").map(|value: i64| value as _)
+    values.get_parsed("PCOUNT")
 }
 
 fn check_for_tfields(values: &ValueMap) -> Result<usize, Error> {
-    values.get_parsed("TFIELDS").map(|value: i64| value as _)
+    values.get_parsed("TFIELDS")
 }
 
-#[derive(Debug, PartialEq, Serialize, Clone, Copy)]
+#[derive(Debug, PartialEq, Serialize_repr, Deserialize_repr, Clone, Copy)]
+#[repr(i8)]
 pub enum Bitpix {
     U8 = 8,
     I16 = 16,
@@ -94,20 +96,6 @@ pub enum Bitpix {
     I64 = 64,
     F32 = -32,
     F64 = -64,
-}
-
-impl CardValue for Bitpix {
-    fn parse(value: &Value) -> Result<Self, Error> {
-        Ok(match i64::parse(value)? {
-            8 => Bitpix::U8,
-            16 => Bitpix::I16,
-            32 => Bitpix::I32,
-            64 => Bitpix::I64,
-            -32 => Bitpix::F32,
-            -64 => Bitpix::F64,
-            _ => return Err(Error::BitpixBadValue),
-        })
-    }
 }
 
 impl Bitpix {
@@ -130,44 +118,25 @@ impl ValueMap {
     }
 
     /// Get the value a specific card and try to parse the value. Returns an
-    /// error if the asking type does not match the true inner type of the value.
-    ///
-    /// # Params
-    /// * `key` - The key of a card
-    pub fn try_get_parsed<T>(&self, key: &str) -> Result<Option<T>, Error>
-    where
-        T: CardValue,
-    {
-        self.get(key)
-            .map(|value| {
-                <T as CardValue>::parse(value).map_err(|_| {
-                    Error::FailTypeCardParsing(
-                        key.to_string(),
-                        std::any::type_name::<T>().to_string(),
-                    )
-                })
-            })
-            .transpose()
-    }
-
-    /// Get the value a specific card and try to parse the value. Returns an
     /// error if the value is not in the map or the asking type does not match
     /// the true inner type of the value.
     ///
     /// # Params
     /// * `key` - The key of a card
-    pub fn get_parsed<T>(&self, key: &str) -> Result<T, Error>
+    pub fn get_parsed<'de, T>(&'de self, key: &str) -> Result<T, Error>
     where
-        T: CardValue,
+        T: Deserialize<'de>,
     {
-        self.try_get_parsed(key)?
-            .ok_or_else(|| Error::FailFindingKeyword(key.to_string()))
+        // We use `Value::Undefined` fallback to handle `T` being an `Option<_>`.
+        T::deserialize(self.get(key).unwrap_or(&Value::Undefined))
     }
 
     /// Return an iterator over all key-[value](Card::Value) pairs in the FITS
     /// header.
-    pub fn iter(&self) -> impl Iterator<Item = (&str, &Value)> {
-        self.values.iter().map(|(k, v)| (k.as_str(), v))
+    pub fn iter(&self) -> ValueMapIter<'_> {
+        ValueMapIter {
+            inner: self.values.iter(),
+        }
     }
 
     /// Get the keyword corresponding to a specific value, returns `None` if
@@ -185,6 +154,30 @@ impl ValueMap {
     /// in the FITS header.
     pub fn keywords(&self) -> Keys<String, Value> {
         self.values.keys()
+    }
+}
+
+pub struct ValueMapIter<'map> {
+    inner: indexmap::map::Iter<'map, String, Value>,
+}
+
+impl<'map> Iterator for ValueMapIter<'map> {
+    type Item = (&'map str, &'map Value);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next().map(|(k, v)| (k.as_str(), v))
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
+    }
+}
+
+impl<'de> IntoDeserializer<'de, Error> for &'de ValueMap {
+    type Deserializer = MapDeserializer<'de, ValueMapIter<'de>, Error>;
+
+    fn into_deserializer(self) -> Self::Deserializer {
+        MapDeserializer::new(self.iter())
     }
 }
 
