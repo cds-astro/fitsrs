@@ -260,7 +260,7 @@ impl Xtension for BinTable {
         };
 
         let z_bitpix = values.get_parsed("ZBITPIX").unwrap_or_else(|err| {
-            warn!("ZBITPIX is not valid. The tile compressed image column will be discarded if any: {}", err);
+            warn!("ZBITPIX is not valid. The tile compressed image column will be discarded if any: {err}");
             None
         });
 
@@ -328,7 +328,7 @@ impl Xtension for BinTable {
         // used to quantize floating-point image pixels into integer values which are then passed to
         // the compression algorithm, as discussed further in section 4 of this document.
         let z_quantiz = values.get_parsed("ZQUANTIZ").unwrap_or_else(|err| {
-            warn!("ZQUANTIZ value not recognized: {}", err);
+            warn!("ZQUANTIZ value not recognized: {err}");
             None
         });
 
