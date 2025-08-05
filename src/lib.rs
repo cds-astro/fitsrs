@@ -21,8 +21,7 @@
 //!
 //!     let image = hdu_list.get_data(&hdu);
 //!     if let Pixels::F32(it) = image.pixels() {
-//!         let data = it.collect::<Vec<_>>();
-//!         assert_eq!(data.len(), naxis1 * naxis2);
+//!         assert_eq!(it.count(), naxis1 * naxis2);
 //!     } else {
 //!         panic!("expected data block containing f32");
 //!     }
@@ -173,7 +172,7 @@ mod tests {
             let image = hdu_list.get_data(&hdu);
             match image.pixels() {
                 Pixels::F32(it) => {
-                    assert!(it.collect::<Vec<_>>().len() as u64 == num_pixels);
+                    assert!(it.count() as u64 == num_pixels);
                 }
                 _ => unreachable!(),
             }
@@ -200,7 +199,7 @@ mod tests {
             let image = hdu_list.get_data(&hdu);
             match image.pixels() {
                 Pixels::I16(data) => {
-                    assert!(data.collect::<Vec<_>>().len() as u64 == num_pixels)
+                    assert!(data.count() as u64 == num_pixels)
                 }
                 _ => unreachable!(),
             }
@@ -274,32 +273,17 @@ mod tests {
             }
 
             let image = hdu_list.get_data(&hdu);
-            match image.pixels() {
-                Pixels::I16(it) => {
-                    let data = it.collect::<Vec<_>>();
-                    assert_eq!(data.len(), num_pixels);
+            assert_eq!(
+                num_pixels,
+                match image.pixels() {
+                    Pixels::I16(it) => it.count(),
+                    Pixels::U8(it) => it.count(),
+                    Pixels::I32(it) => it.count(),
+                    Pixels::I64(it) => it.count(),
+                    Pixels::F32(it) => it.count(),
+                    Pixels::F64(it) => it.count(),
                 }
-                Pixels::U8(it) => {
-                    let data = it.collect::<Vec<_>>();
-                    assert_eq!(data.len(), num_pixels);
-                }
-                Pixels::I32(it) => {
-                    let data = it.collect::<Vec<_>>();
-                    assert_eq!(data.len(), num_pixels);
-                }
-                Pixels::I64(it) => {
-                    let data = it.collect::<Vec<_>>();
-                    assert_eq!(data.len(), num_pixels);
-                }
-                Pixels::F32(it) => {
-                    let data = it.collect::<Vec<_>>();
-                    assert_eq!(data.len(), num_pixels);
-                }
-                Pixels::F64(it) => {
-                    let data = it.collect::<Vec<_>>();
-                    assert_eq!(data.len(), num_pixels);
-                }
-            }
+            );
         }
     }
 
@@ -321,7 +305,7 @@ mod tests {
             let image = hdu_list.get_data(&hdu);
             match image.pixels() {
                 Pixels::F32(data) => {
-                    assert_eq!(data.collect::<Vec<_>>().len(), (naxis1 * naxis2) as usize);
+                    assert_eq!(data.count(), (naxis1 * naxis2) as usize);
                 }
                 _ => unreachable!(),
             }
@@ -336,15 +320,15 @@ mod tests {
 
         let reader = BufReader::new(f);
         let mut hdu_list = Fits::from_reader(reader);
-        let mut data = vec![];
+        let mut data_len = 0;
         while let Some(Ok(hdu)) = hdu_list.next() {
             if let HDU::XBinaryTable(hdu) = hdu {
                 let _ = hdu.get_header().get_xtension();
-                data = hdu_list.get_data(&hdu).collect::<Vec<_>>();
+                data_len = hdu_list.get_data(&hdu).count();
             }
         }
 
-        assert_eq!(177 * 23, data.len());
+        assert_eq!(177 * 23, data_len);
     }
 
     #[test]
@@ -426,26 +410,17 @@ mod tests {
                         let num_pixels = (naxis2 * naxis1) as usize;
 
                         let image = hdu_list.get_data(&hdu);
-                        match image.pixels() {
-                            Pixels::U8(it) => {
-                                assert_eq!(num_pixels, it.collect::<Vec<_>>().len())
+                        assert_eq!(
+                            num_pixels,
+                            match image.pixels() {
+                                Pixels::U8(it) => it.count(),
+                                Pixels::I16(it) => it.count(),
+                                Pixels::I32(it) => it.count(),
+                                Pixels::I64(it) => it.count(),
+                                Pixels::F32(it) => it.count(),
+                                Pixels::F64(it) => it.count(),
                             }
-                            Pixels::I16(it) => {
-                                assert_eq!(num_pixels, it.collect::<Vec<_>>().len())
-                            }
-                            Pixels::I32(it) => {
-                                assert_eq!(num_pixels, it.collect::<Vec<_>>().len())
-                            }
-                            Pixels::I64(it) => {
-                                assert_eq!(num_pixels, it.collect::<Vec<_>>().len())
-                            }
-                            Pixels::F32(it) => {
-                                assert_eq!(num_pixels, it.collect::<Vec<_>>().len())
-                            }
-                            Pixels::F64(it) => {
-                                assert_eq!(num_pixels, it.collect::<Vec<_>>().len())
-                            }
-                        }
+                        );
                     };
                 }
                 HDU::XBinaryTable(hdu) => {
@@ -460,7 +435,7 @@ mod tests {
                     let num_bytes = hdu.get_header().get_xtension().get_num_bytes_data_block();
                     let bytes = hdu_list.get_data(&hdu);
 
-                    assert_eq!(num_bytes as usize, bytes.bytes().collect::<Vec<_>>().len());
+                    assert_eq!(num_bytes as usize, bytes.bytes().count());
                 }
             }
         }
@@ -486,32 +461,17 @@ mod tests {
                     let num_pixels = naxis2 * naxis1;
 
                     let image = hdu_list.get_data(&hdu);
-                    match image.pixels() {
-                        Pixels::U8(it) => {
-                            let data = it.collect::<Vec<_>>();
-                            assert_eq!(num_pixels as usize, data.len())
+                    assert_eq!(
+                        num_pixels as usize,
+                        match image.pixels() {
+                            Pixels::U8(it) => it.count(),
+                            Pixels::I16(it) => it.count(),
+                            Pixels::I32(it) => it.count(),
+                            Pixels::I64(it) => it.count(),
+                            Pixels::F32(it) => it.count(),
+                            Pixels::F64(it) => it.count(),
                         }
-                        Pixels::I16(it) => {
-                            let data = it.collect::<Vec<_>>();
-                            assert_eq!(num_pixels as usize, data.len())
-                        }
-                        Pixels::I32(it) => {
-                            let data = it.collect::<Vec<_>>();
-                            assert_eq!(num_pixels as usize, data.len())
-                        }
-                        Pixels::I64(it) => {
-                            let data = it.collect::<Vec<_>>();
-                            assert_eq!(num_pixels as usize, data.len())
-                        }
-                        Pixels::F32(it) => {
-                            let data = it.collect::<Vec<_>>();
-                            assert_eq!(num_pixels as usize, data.len())
-                        }
-                        Pixels::F64(it) => {
-                            let data = it.collect::<Vec<_>>();
-                            assert_eq!(num_pixels as usize, data.len())
-                        }
-                    }
+                    );
                 }
                 HDU::XBinaryTable(_) => {
                     /*let num_bytes = hdu.get_header().get_xtension().get_num_bytes_data_block();
@@ -523,9 +483,7 @@ mod tests {
                 HDU::XASCIITable(hdu) => {
                     let num_bytes = hdu.get_header().get_xtension().get_num_bytes_data_block();
 
-                    let it_bytes = hdu_list.get_data(&hdu);
-                    let data = it_bytes.bytes().collect::<Vec<_>>();
-                    assert_eq!(num_bytes as usize, data.len());
+                    assert_eq!(num_bytes as usize, hdu_list.get_data(&hdu).bytes().count());
                 }
                 _ => (),
             }
@@ -581,47 +539,28 @@ mod tests {
                     if let (Some(naxis1), Some(naxis2)) = (naxis1, naxis2) {
                         let num_pixels = (*naxis2 * *naxis1) as usize;
 
-                        match hdu_list.get_data(&hdu) {
-                            DataStream::U8(st) => {
-                                let data = st.collect::<Vec<_>>().await;
-                                assert_eq!(num_pixels, data.len())
+                        assert_eq!(
+                            num_pixels,
+                            match hdu_list.get_data(&hdu) {
+                                DataStream::U8(st) => st.count().await,
+                                DataStream::I16(st) => st.count().await,
+                                DataStream::I32(st) => st.count().await,
+                                DataStream::I64(st) => st.count().await,
+                                DataStream::F32(st) => st.count().await,
+                                DataStream::F64(st) => st.count().await,
                             }
-                            DataStream::I16(stream) => {
-                                let data = stream.collect::<Vec<_>>().await;
-                                assert_eq!(num_pixels, data.len())
-                            }
-                            DataStream::I32(stream) => {
-                                let data = stream.collect::<Vec<_>>().await;
-                                assert_eq!(num_pixels, data.len());
-                            }
-                            DataStream::I64(stream) => {
-                                let data = stream.collect::<Vec<_>>().await;
-                                assert_eq!(num_pixels, data.len())
-                            }
-                            DataStream::F32(stream) => {
-                                let data = stream.collect::<Vec<_>>().await;
-                                assert_eq!(num_pixels, data.len())
-                            }
-                            DataStream::F64(stream) => {
-                                let data = stream.collect::<Vec<_>>().await;
-                                assert_eq!(num_pixels, data.len())
-                            }
-                        }
+                        );
                     }
                 }
                 AsyncHDU::XBinaryTable(hdu) => {
                     let num_bytes = hdu.get_header().get_xtension().get_num_bytes_data_block();
 
-                    let it_bytes = hdu_list.get_data(&hdu);
-                    let data = it_bytes.collect::<Vec<_>>().await;
-                    assert_eq!(num_bytes as usize, data.len());
+                    assert_eq!(num_bytes as usize, hdu_list.get_data(&hdu).count().await);
                 }
                 AsyncHDU::XASCIITable(hdu) => {
                     let num_bytes = hdu.get_header().get_xtension().get_num_bytes_data_block();
 
-                    let it_bytes = hdu_list.get_data(&hdu);
-                    let data = it_bytes.collect::<Vec<_>>().await;
-                    assert_eq!(num_bytes as usize, data.len());
+                    assert_eq!(num_bytes as usize, hdu_list.get_data(&hdu).count().await);
                 }
             }
         }
@@ -650,46 +589,27 @@ mod tests {
                     let num_pixels = (naxis2 * naxis1) as usize;
 
                     let data = hdu_list.get_data(&hdu);
-                    match data.pixels() {
-                        Pixels::U8(it) => {
-                            let data = it.collect::<Vec<_>>();
-                            assert_eq!(num_pixels, data.len())
+                    assert_eq!(
+                        num_pixels,
+                        match data.pixels() {
+                            Pixels::U8(it) => it.count(),
+                            Pixels::I16(it) => it.count(),
+                            Pixels::I32(it) => it.count(),
+                            Pixels::I64(it) => it.count(),
+                            Pixels::F32(it) => it.count(),
+                            Pixels::F64(it) => it.count(),
                         }
-                        Pixels::I16(it) => {
-                            let data = it.collect::<Vec<_>>();
-                            assert_eq!(num_pixels, data.len())
-                        }
-                        Pixels::I32(it) => {
-                            let data = it.collect::<Vec<_>>();
-                            assert_eq!(num_pixels, data.len())
-                        }
-                        Pixels::I64(it) => {
-                            let data = it.collect::<Vec<_>>();
-                            assert_eq!(num_pixels, data.len())
-                        }
-                        Pixels::F32(it) => {
-                            let data = it.collect::<Vec<_>>();
-                            assert_eq!(num_pixels, data.len())
-                        }
-                        Pixels::F64(it) => {
-                            let data = it.collect::<Vec<_>>();
-                            assert_eq!(num_pixels, data.len())
-                        }
-                    }
+                    );
                 }
                 HDU::XBinaryTable(hdu) => {
                     let num_rows = hdu.get_header().get_xtension().get_num_rows();
 
-                    let rows = hdu_list.get_data(&hdu).row_iter().collect::<Vec<_>>();
-
-                    assert_eq!(num_rows, rows.len());
+                    assert_eq!(num_rows, hdu_list.get_data(&hdu).row_iter().count());
                 }
                 HDU::XASCIITable(hdu) => {
                     let num_bytes = hdu.get_header().get_xtension().get_num_bytes_data_block();
 
-                    let data = hdu_list.get_data(&hdu).bytes().collect::<Vec<_>>();
-
-                    assert_eq!(num_bytes as usize, data.len());
+                    assert_eq!(num_bytes as usize, hdu_list.get_data(&hdu).bytes().count());
                 }
             }
         }
