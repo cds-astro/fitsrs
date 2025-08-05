@@ -66,18 +66,18 @@ fn read_image() {
                     .get_header()
                     .get_parsed::<i64>("NAXIS1")
                     .unwrap()
-                    .unwrap() as u32;
+                    .unwrap() as usize;
                 let height = hdu
                     .get_header()
                     .get_parsed::<i64>("NAXIS2")
                     .unwrap()
-                    .unwrap() as u32;
+                    .unwrap() as usize;
                 let pixels = match hdu_list.get_data(&hdu).pixels() {
-                    Pixels::I16(it) => it.collect::<Vec<_>>(),
+                    Pixels::I16(it) => it.count(),
                     _ => unreachable!(),
                 };
 
-                assert!(width * height == pixels.len() as u32);
+                assert!(width * height == pixels);
             }
             _ => (),
         }
