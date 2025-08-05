@@ -36,7 +36,7 @@ fn decompress(filename: &str) {
             let height = hdu.get_header().get_parsed::<usize>("ZNAXIS2").unwrap();
             let pixels = hdu_list.get_data(&hdu).collect::<Vec<_>>();
 
-            assert!(width * height == pixels);
+            assert!(width * height == pixels.len());
         }
     }
 }
@@ -61,7 +61,7 @@ fn read_image() {
                     _ => unreachable!(),
                 };
 
-                assert!(width * height == pixels);
+                assert!(width * height == pixels.len());
             }
             _ => (),
         }
