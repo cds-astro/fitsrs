@@ -296,7 +296,7 @@ fn process_cards(cards: &[Card]) -> Result<ValueMap, Error> {
                 values.insert(
                     "XTENSION".to_owned(),
                     Value::String {
-                        value: (*x).into(),
+                        value: x.to_string(),
                         comment: None,
                     },
                 );
