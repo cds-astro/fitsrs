@@ -265,6 +265,8 @@ impl<R> TableData<R> {
             }
         ).collect();
 
+        self.cols_idx.sort_unstable();
+
         // We must go to the first column at this point
         self.seek_to_first_col = true;
 
