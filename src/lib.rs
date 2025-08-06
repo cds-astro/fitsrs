@@ -361,9 +361,11 @@ mod tests {
                     .get_data(&hdu)
                     .table_data()
                     .select_fields(&[
-                        ColumnId::Name("mag"),
+                        // Note: fields are intentionally selected out of order
+                        // to test that we don't rely on the order of fields.
                         ColumnId::Name("phot_bp_mean_mag"),
                         ColumnId::Name("phot_rp_mean_mag"),
+                        ColumnId::Name("mag"),
                     ])
                     .collect();
 
