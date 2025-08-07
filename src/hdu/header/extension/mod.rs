@@ -2,15 +2,13 @@ pub mod asciitable;
 pub mod bintable;
 pub mod image;
 
-use std::convert::TryFrom;
+use std::str::FromStr;
 
 use async_trait::async_trait;
 use serde::Serialize;
 
-use crate::card::Value;
+use super::ValueMap;
 use crate::error::Error;
-
-use std::collections::HashMap;
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Serialize)]
 pub enum XtensionType {
@@ -19,20 +17,26 @@ pub enum XtensionType {
     AsciiTable,
 }
 
-impl From<XtensionType> for String {
-    fn from(val: XtensionType) -> Self {
-        match val {
-            XtensionType::Image => "IMAGE".to_owned(),
-            XtensionType::BinTable => "BINTABLE".to_owned(),
-            XtensionType::AsciiTable => "TABLE".to_owned(),
+impl XtensionType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            XtensionType::Image => "IMAGE",
+            XtensionType::BinTable => "BINTABLE",
+            XtensionType::AsciiTable => "TABLE",
         }
     }
 }
 
-impl TryFrom<&str> for XtensionType {
-    type Error = Error;
+impl std::fmt::Display for XtensionType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+impl FromStr for XtensionType {
+    type Err = Error;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "IMAGE" | "IUEIMAGE" => Ok(XtensionType::Image),
             "TABLE" => Ok(XtensionType::AsciiTable),
@@ -49,7 +53,7 @@ pub trait Xtension {
 
     // Parse the Xtension keywords
     // During the parsing, some checks will be made
-    fn parse(values: &HashMap<String, Value>) -> Result<Self, Error>
+    fn parse(values: &ValueMap) -> Result<Self, Error>
     where
         Self: Sized;
 }

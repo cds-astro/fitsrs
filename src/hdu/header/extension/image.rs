@@ -1,13 +1,10 @@
 use async_trait::async_trait;
 use serde::Serialize;
-use std::collections::HashMap;
 
-use crate::card::Value;
 use crate::error::Error;
-use crate::hdu::header::check_for_bitpix;
-use crate::hdu::header::check_for_naxis;
 use crate::hdu::header::Bitpix;
 
+use crate::hdu::header::ValueMap;
 use crate::hdu::header::Xtension;
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
@@ -51,26 +48,19 @@ impl Xtension for Image {
         num_bits >> 3
     }
 
-    fn parse(values: &HashMap<String, Value>) -> Result<Self, Error> {
+    fn parse(values: &ValueMap) -> Result<Self, Error> {
         // BITPIX
-        let bitpix = check_for_bitpix(values)?;
+        let bitpix = values.check_for_bitpix()?;
         // NAXIS
-        let naxis = check_for_naxis(values)?;
+        let naxis = values.check_for_naxis()? as usize;
         // The size of each NAXIS
         let naxisn = (1..=naxis)
-            .map(|naxis_i| {
-                let naxis = format!("NAXIS{naxis_i}");
-                if let Some(Value::Integer { value, .. }) = values.get(&naxis) {
-                    Ok(*value as u64)
-                } else {
-                    Err(Error::FailFindingKeyword(naxis))
-                }
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+            .map(|naxis_i| values.check_for_naxisi(naxis_i))
+            .collect::<Result<_, _>>()?;
 
         Ok(Image {
             bitpix,
-            naxis: naxis as usize,
+            naxis,
             naxisn,
         })
     }

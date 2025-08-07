@@ -1,13 +1,6 @@
-use std::collections::HashMap;
 use std::fmt::Debug;
 
 use crate::error::Error;
-use crate::hdu::header::check_for_bitpix;
-use crate::hdu::header::check_for_gcount;
-use crate::hdu::header::check_for_naxis;
-use crate::hdu::header::check_for_naxisi;
-use crate::hdu::header::check_for_pcount;
-use crate::hdu::header::check_for_tfields;
 use crate::hdu::header::Bitpix;
 use crate::hdu::Value;
 use async_trait::async_trait;
@@ -15,7 +8,9 @@ use serde::Serialize;
 
 use super::Xtension;
 
+use crate::hdu::header::ValueMap;
 use log::warn;
+use serde::Deserialize;
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct BinTable {
@@ -142,10 +137,13 @@ pub(crate) struct TileCompressedImage {
     pub(crate) data_compressed_idx: usize,
 }
 
-#[derive(Debug, PartialEq, Serialize, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub(crate) enum ZQuantiz {
+    #[serde(rename = "NO_DITHER")]
     NoDither,
+    #[serde(rename = "SUBTRACTIVE_DITHER_1")]
     SubtractiveDither1,
+    #[serde(rename = "SUBTRACTIVE_DITHER_2")]
     SubtractiveDither2,
 }
 
@@ -186,9 +184,9 @@ impl Xtension for BinTable {
         self.naxis1 * self.naxis2 + self.pcount
     }
 
-    fn parse(values: &HashMap<String, Value>) -> Result<Self, Error> {
+    fn parse(values: &ValueMap) -> Result<Self, Error> {
         // BITPIX
-        let bitpix = check_for_bitpix(values)?;
+        let bitpix = values.check_for_bitpix()?;
         if bitpix != Bitpix::U8 {
             return Err(Error::StaticError(
                 "Binary Table HDU must have a BITPIX = 8",
@@ -196,27 +194,27 @@ impl Xtension for BinTable {
         }
 
         // NAXIS
-        let naxis = check_for_naxis(values)?;
+        let naxis = values.check_for_naxis()?;
         if naxis != 2 {
             return Err(Error::StaticError("Binary Table HDU must have NAXIS = 2"));
         }
 
         // NAXIS1
-        let naxis1 = check_for_naxisi(values, 1)?;
+        let naxis1 = values.check_for_naxisi(1)?;
         // NAXIS2
-        let naxis2 = check_for_naxisi(values, 2)?;
+        let naxis2 = values.check_for_naxisi(2)?;
 
         // PCOUNT
-        let pcount = check_for_pcount(values)?;
+        let pcount = values.check_for_pcount()?;
 
         // GCOUNT
-        let gcount = check_for_gcount(values)?;
+        let gcount = values.check_for_gcount()?;
         if gcount != 1 {
             return Err(Error::StaticError("Ascii Table HDU must have GCOUNT = 1"));
         }
 
         // FIELDS
-        let tfields = check_for_tfields(values)?;
+        let tfields = values.check_for_tfields()?;
 
         // Tile compressed image parameters
         let z_cmp_type = if let Some(Value::String {
@@ -236,11 +234,7 @@ impl Xtension for BinTable {
                                 if value == "BLOCKSIZE" && zname.starts_with("ZNAME") {
                                     let zval = zname.replace("NAME", "VAL");
 
-                                    if let Some(Value::Integer { value, .. }) = values.get(&zval) {
-                                        Some(*value as u8)
-                                    } else {
-                                        None
-                                    }
+                                    values.get_parsed(&zval).ok()
                                 } else {
                                     None
                                 }
@@ -267,33 +261,14 @@ impl Xtension for BinTable {
             None
         };
 
-        let z_bitpix = if let Some(Value::Integer {
-            value: z_bitpix, ..
-        }) = values.get("ZBITPIX")
-        {
-            match z_bitpix {
-                8 => Some(Bitpix::U8),
-                16 => Some(Bitpix::I16),
-                32 => Some(Bitpix::I32),
-                64 => Some(Bitpix::I64),
-                -32 => Some(Bitpix::F32),
-                -64 => Some(Bitpix::F64),
-                _ => {
-                    warn!("ZBITPIX is not valid. The tile compressed image column will be discarded if any");
-                    None
-                }
-            }
-        } else {
+        let z_bitpix = values.get_parsed("ZBITPIX").unwrap_or_else(|err| {
+            warn!("ZBITPIX is not valid. The tile compressed image column will be discarded if any: {err}");
             None
-        };
+        });
 
         // ZNAXIS (required keyword) The value field of this keyword shall contain an integer that gives
         // the value of the NAXIS keyword in the uncompressed FITS image.
-        let z_naxis = if let Some(Value::Integer { value, .. }) = values.get("ZNAXIS") {
-            Some(*value as usize)
-        } else {
-            None
-        };
+        let z_naxis = values.get_parsed("ZNAXIS").ok();
 
         // ZNAXISn (required keywords) The value field of these keywords shall contain a positive integer
         // that gives the value of the NAXISn keywords in the uncompressed FITS image.
@@ -315,23 +290,24 @@ impl Xtension for BinTable {
             let mut z_tilen = Vec::with_capacity(z_naxis);
 
             for i in 1..=z_naxis {
-                let naxisn =
-                    if let Some(Value::Integer { value, .. }) = values.get(&format!("ZNAXIS{i}")) {
-                        *value
-                    } else {
-                        warn!("ZNAXISN is mandatory. Tile compressed image discarded");
-                        break;
-                    };
+                let naxisn = if let Ok(value) = values.check_for_naxisi(i) {
+                    value
+                } else {
+                    warn!("ZNAXISN is mandatory. Tile compressed image discarded");
+                    break;
+                };
 
                 // If not found, z_tilen equals z_naxisn
-                let tilen = match (values.get(&format!("ZTILE{i}")), i) {
+                let tilen = if let Ok(value) = values.get_parsed(&format!("ZTILE{i}")) {
                     // ZTILEi has been found
-                    (Some(&Value::Integer { value, .. }), _) => value,
+                    value
+                } else if i == 1 {
                     // ZTILEi has not been found or is not set to an integer => default behavior
                     // * i == 1, ZTILE1 = NAXIS1
+                    naxisn
+                } else {
                     // * i > 1, ZTILEi = 1
-                    (_, 1) => naxisn,
-                    _ => 1,
+                    1
                 };
 
                 z_naxisn.push(naxisn as usize);
@@ -353,40 +329,23 @@ impl Xtension for BinTable {
         // ZQUANTIZ (optional keyword) This keyword records the name of the algorithm that was
         // used to quantize floating-point image pixels into integer values which are then passed to
         // the compression algorithm, as discussed further in section 4 of this document.
-        let z_quantiz = if let Some(Value::String {
-            value: z_quantiz, ..
-        }) = values.get("ZQUANTIZ")
-        {
-            match z_quantiz.trim_ascii_end() {
-                "NO_DITHER" => Some(ZQuantiz::NoDither),
-                "SUBTRACTIVE_DITHER_1" => Some(ZQuantiz::SubtractiveDither1),
-                "SUBTRACTIVE_DITHER_2" => Some(ZQuantiz::SubtractiveDither2),
-                _ => {
-                    warn!("ZQUANTIZ value not recognized");
-                    None
-                }
-            }
-        } else {
+        let z_quantiz = values.get_parsed("ZQUANTIZ").unwrap_or_else(|err| {
+            warn!("ZQUANTIZ value not recognized: {err}");
             None
-        };
+        });
 
         // ZDITHER0 (optional keyword) The value field of this keyword shall contain an integer that
         // gives the seed value for the random dithering pattern that was used when quantizing the
         // floating-point pixel values. The value may range from 1 to 10000, inclusive. See section 4 for
         // further discussion of this keyword.
-        let z_dither_0 =
-            if let Some(Value::Integer { value, .. }) = values.get(&"ZDITHER0".to_string()) {
-                Some(*value)
-            } else {
-                None
-            };
+        let z_dither_0 = values.get_parsed("ZDITHER0").ok();
 
         // TFORMS & TTYPES
         let (tforms, ttypes): (Vec<_>, Vec<_>) = (1..=tfields)
             .filter_map(|idx_field| {
                 // discard the tform if it was not found and raise a warning
                 let tform_kw = format!("TFORM{idx_field}");
-                let tform = if let Some(Value::String{value, ..}) = values.get(&tform_kw) {
+                let tform = if let Ok(value) = values.get_parsed::<String>(&tform_kw) {
                     Some(value)
                 } else {
                     warn!("{tform_kw} has not been found. It will be discarded");
@@ -394,8 +353,8 @@ impl Xtension for BinTable {
                 }?;
 
                 // try to find a ttype (optional keyword)
-                let ttype = if let Some(Value::String{value, ..}) = values.get(&format!("TTYPE{idx_field}")) {
-                    Some(value.to_owned())
+                let ttype = if let Ok(value) = values.get_parsed(&format!("TTYPE{idx_field}")) {
+                    Some(value)
                 } else {
                     warn!("Field {tform_kw:?} does not have a TTYPE name.");
                     None
@@ -550,8 +509,8 @@ impl Xtension for BinTable {
         };
 
         // update the value of theap if found
-        let theap = if let Some(Value::Integer { value, .. }) = values.get("THEAP") {
-            *value as usize
+        let theap = if let Ok(value) = values.get_parsed::<usize>("THEAP") {
+            value
         } else {
             (naxis1 as usize) * (naxis2 as usize)
         };

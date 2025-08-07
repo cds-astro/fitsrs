@@ -32,19 +32,11 @@ fn decompress(filename: &str) {
 
     while let Some(Ok(hdu)) = hdu_list.next() {
         if let HDU::XBinaryTable(hdu) = hdu {
-            let width = hdu
-                .get_header()
-                .get_parsed::<i64>("ZNAXIS1")
-                .unwrap()
-                .unwrap() as u32;
-            let height = hdu
-                .get_header()
-                .get_parsed::<i64>("ZNAXIS2")
-                .unwrap()
-                .unwrap() as u32;
+            let width = hdu.get_header().get_parsed::<usize>("ZNAXIS1").unwrap();
+            let height = hdu.get_header().get_parsed::<usize>("ZNAXIS2").unwrap();
             let pixels = hdu_list.get_data(&hdu).collect::<Vec<_>>();
 
-            assert!(width * height == pixels.len() as u32);
+            assert!(width * height == pixels.len());
         }
     }
 }
@@ -62,22 +54,14 @@ fn read_image() {
     while let Some(Ok(hdu)) = hdu_list.next() {
         match hdu {
             HDU::Primary(hdu) | HDU::XImage(hdu) => {
-                let width = hdu
-                    .get_header()
-                    .get_parsed::<i64>("NAXIS1")
-                    .unwrap()
-                    .unwrap() as u32;
-                let height = hdu
-                    .get_header()
-                    .get_parsed::<i64>("NAXIS2")
-                    .unwrap()
-                    .unwrap() as u32;
+                let width = hdu.get_header().get_parsed::<usize>("NAXIS1").unwrap();
+                let height = hdu.get_header().get_parsed::<usize>("NAXIS2").unwrap();
                 let pixels = match hdu_list.get_data(&hdu).pixels() {
                     Pixels::I16(it) => it.collect::<Vec<_>>(),
                     _ => unreachable!(),
                 };
 
-                assert!(width * height == pixels.len() as u32);
+                assert!(width * height == pixels.len());
             }
             _ => (),
         }

@@ -1,24 +1,15 @@
-use std::collections::HashMap;
-
 use async_trait::async_trait;
 
 use log::warn;
 use serde::Serialize;
 
-use crate::card::Value;
 use crate::error::Error;
 
-use crate::hdu::header::check_for_bitpix;
-use crate::hdu::header::check_for_gcount;
-use crate::hdu::header::check_for_naxis;
-use crate::hdu::header::check_for_naxisi;
-use crate::hdu::header::check_for_pcount;
-use crate::hdu::header::check_for_tfields;
 use crate::hdu::header::Bitpix;
 
+use crate::hdu::header::ValueMap;
 use crate::hdu::header::Xtension;
-use std::num::ParseIntError;
-use std::str::FromStr;
+use serde::Deserialize;
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct AsciiTable {
@@ -107,62 +98,61 @@ impl Xtension for AsciiTable {
         self.naxis1 * self.naxis2
     }
 
-    fn parse(values: &HashMap<String, Value>) -> Result<Self, Error> {
+    fn parse(values: &ValueMap) -> Result<Self, Error> {
         // BITPIX
-        let bitpix = check_for_bitpix(values)?;
+        let bitpix = values.check_for_bitpix()?;
         if bitpix != Bitpix::U8 {
             return Err(Error::StaticError("Ascii Table HDU must have a BITPIX = 8"));
         }
 
         // NAXIS
-        let naxis = check_for_naxis(values)?;
+        let naxis = values.check_for_naxis()?;
         if naxis != 2 {
             return Err(Error::StaticError("Ascii Table HDU must have NAXIS = 2"));
         }
 
         // NAXIS1
-        let naxis1 = check_for_naxisi(values, 1)?;
-        let naxis2 = check_for_naxisi(values, 2)?;
+        let naxis1 = values.check_for_naxisi(1)?;
+        let naxis2 = values.check_for_naxisi(2)?;
 
         // PCOUNT
-        let pcount = check_for_pcount(values)?;
+        let pcount = values.check_for_pcount()?;
         if pcount != 0 {
             return Err(Error::StaticError("Ascii Table HDU must have PCOUNT = 0"));
         }
 
         // GCOUNT
-        let gcount = check_for_gcount(values)?;
+        let gcount = values.check_for_gcount()?;
         if gcount != 1 {
             return Err(Error::StaticError("Ascii Table HDU must have GCOUNT = 1"));
         }
 
         // FIELDS
-        let tfields = check_for_tfields(values)?;
+        let tfields = values.check_for_tfields()?;
 
         // TFORMS
-        let (tbcols, tforms) = (1..=tfields)
-            .filter_map(|idx_field| {
-                let tbcol = if let Some(Value::Integer { value, .. }) =
-                    values.get(&format!("TBCOL{idx_field}"))
-                {
-                    *value as u64
-                } else {
-                    warn!("Discard field {idx_field}");
-                    return None;
-                };
+        let mut tbcols = Vec::with_capacity(tfields);
+        let mut tforms = Vec::with_capacity(tfields);
+        for idx_field in 1..=tfields {
+            let tbcol = match values.get_parsed(&format!("TBCOL{idx_field}")) {
+                Ok(tbcol) => tbcol,
+                Err(err) => {
+                    warn!("Discard field {idx_field}: {err}");
+                    continue;
+                }
+            };
 
-                let tform = if let Some(Value::String { value, .. }) =
-                    values.get(&format!("TFORM{idx_field}"))
-                {
-                    TFormAsciiTable::from_str(value).ok()?
-                } else {
-                    warn!("Discard field {idx_field}");
-                    return None;
-                };
+            let tform = match values.get_parsed(&format!("TFORM{idx_field}")) {
+                Ok(tform) => tform,
+                Err(err) => {
+                    warn!("Discard field {idx_field}: {err}");
+                    continue;
+                }
+            };
 
-                Some((tbcol, tform))
-            })
-            .unzip();
+            tbcols.push(tbcol);
+            tforms.push(tform);
+        }
 
         Ok(AsciiTable {
             bitpix,
@@ -195,67 +185,80 @@ pub enum TFormAsciiTable {
     DFloatingPointExp { w: usize, d: usize },
 }
 
-#[derive(Debug)]
-pub enum TFormAsciiTableParseError {
-    ParseInt(ParseIntError),
-    StringFormat,
-}
+impl<'de> Deserialize<'de> for TFormAsciiTable {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct Visitor;
 
-impl From<ParseIntError> for TFormAsciiTableParseError {
-    fn from(err: ParseIntError) -> Self {
-        TFormAsciiTableParseError::ParseInt(err)
-    }
-}
+        impl serde::de::Visitor<'_> for Visitor {
+            type Value = TFormAsciiTable;
 
-impl FromStr for TFormAsciiTable {
-    type Err = TFormAsciiTableParseError;
-
-    fn from_str(tform: &str) -> Result<Self, Self::Err> {
-        let mut chars = tform.trim_end().chars();
-        let first_char = chars
-            .next()
-            .ok_or(TFormAsciiTableParseError::StringFormat)?;
-        let rest = chars.as_str();
-
-        let parse_split = || {
-            let (w, d) = rest
-                .split_once('.')
-                .ok_or(TFormAsciiTableParseError::StringFormat)?;
-
-            let w = w.parse()?;
-            let d = d.parse()?;
-
-            Ok::<_, Self::Err>((w, d))
-        };
-
-        Ok(match first_char {
-            'A' => {
-                let w = rest.parse()?;
-
-                TFormAsciiTable::Character { w }
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a valid TFORM string")
             }
-            'I' => {
-                let w = rest.parse()?;
 
-                TFormAsciiTable::DecimalInteger { w }
-            }
-            'F' => {
-                let (w, d) = parse_split()?;
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                let mut chars = v.trim_end().chars();
+                let first_char = chars.next().ok_or(E::custom("TFORM string is empty"))?;
+                let rest = chars.as_str();
 
-                TFormAsciiTable::FloatingPointFixed { w, d }
-            }
-            'E' => {
-                let (w, d) = parse_split()?;
+                let parse = |s: &str| {
+                    s.parse().map_err(|err| {
+                        E::custom(format_args!(
+                            "Failed to parse an integer from the TFORM string: {err}"
+                        ))
+                    })
+                };
 
-                TFormAsciiTable::EFloatingPointExp { w, d }
-            }
-            'D' => {
-                let (w, d) = parse_split()?;
+                let parse_split = || {
+                    let (w, d) = rest
+                        .split_once('.')
+                        .ok_or(E::custom("Expected to find `.` in the TFORM string"))?;
 
-                TFormAsciiTable::DFloatingPointExp { w, d }
+                    Ok::<_, E>((parse(w)?, parse(d)?))
+                };
+
+                Ok(match first_char {
+                    'A' => {
+                        let w = parse(rest)?;
+
+                        TFormAsciiTable::Character { w }
+                    }
+                    'I' => {
+                        let w = parse(rest)?;
+
+                        TFormAsciiTable::DecimalInteger { w }
+                    }
+                    'F' => {
+                        let (w, d) = parse_split()?;
+
+                        TFormAsciiTable::FloatingPointFixed { w, d }
+                    }
+                    'E' => {
+                        let (w, d) = parse_split()?;
+
+                        TFormAsciiTable::EFloatingPointExp { w, d }
+                    }
+                    'D' => {
+                        let (w, d) = parse_split()?;
+
+                        TFormAsciiTable::DFloatingPointExp { w, d }
+                    }
+                    _ => {
+                        return Err(E::custom(format_args!(
+                            "Invalid TFORM prefix '{first_char}'"
+                        )))
+                    }
+                })
             }
-            _ => return Err(TFormAsciiTableParseError::StringFormat),
-        })
+        }
+
+        deserializer.deserialize_str(Visitor)
     }
 }
 
