@@ -1,0 +1,27 @@
+[package]
+name = "fits-cli"
+version = "0.1.0"
+edition = "2024"
+authors = ["F.-X. Pineau <francois-xavier.pineau@astro.unistra.fr>"]
+description = "Command-line tool for fitsrs"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+categories = ["command-line-utilities", "science", "data-structures"]
+keywords = ["fits"]
+
+
+[[bin]]
+path = "src/main.rs"
+name = "fits"
+bench = false
+test = false
+
+[dependencies]
+fitsrs = { package = "fitsrs", path = "../.." }
+log = { workspace = true }
+clap = { version = "4.5", features = ["derive"] }
+env_logger = "0.11"
+
+[target.'cfg(all(target_env = "musl", target_arch = "x86_64"))'.dependencies]
+mimalloc = "0.1.43"
+

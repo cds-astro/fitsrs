@@ -83,6 +83,10 @@ fn find_field_by_ttype(ttypes: &[Option<String>], ttype: &str) -> Option<usize> 
 }
 
 impl BinTable {
+    pub fn get_num_cols(&self) -> usize {
+        self.tfields
+    }
+
     pub fn get_num_rows(&self) -> usize {
         self.naxis2 as usize
     }

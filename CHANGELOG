@@ -1,5 +1,12 @@
 # CHANGELOG.md
 
+## 0.4.0-beta
+
+- Create a workspace to accept sub-crates
+- Add a CLI tool in the workspace
+- Add a few getters in header structs
+- Add HIERACH support
+
 ## 0.3.0
 
 Features:

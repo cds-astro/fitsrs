@@ -27,6 +27,8 @@ pub enum Card {
     Comment(String),
     /// A log line of the operations used for processing the file.
     History(String),
+    /// A keyword card, with a value and optional comment, using the HIERARCH convention.
+    Hierarch { name: String, value: Value },
     /// An empty line at the end of the header block providing header space for adding new cards or used for aesthetic purposes.
     Space,
     /// End marker.
@@ -37,11 +39,16 @@ pub enum Card {
 
 impl Card {
     /// Returns `true` if and only if the the card is either a [value](Card::Value) card with a
-    /// [string](Value::String) value or a [continuation](Card::Continuation) where the string value
-    /// ends with an ampersand, i.e. the `&` character.
+    /// [string](Value::String) value or a [hierarch](Card::Hierarch) card with a string](Value::String),
+    /// or a [continuation](Card::Continuation) where the string value ends with an ampersand,
+    /// i.e. the `&` character.
     pub fn continued(&self) -> bool {
         match self {
             Card::Value {
+                value: Value::String { value: s, .. },
+                ..
+            }
+            | Card::Hierarch {
                 value: Value::String { value: s, .. },
                 ..
             }
@@ -70,18 +77,19 @@ impl Card {
     pub fn append(&mut self, r: &Self) -> &mut Self {
         assert!(self.continued(), "card must hold a continued string value");
 
-        if let Self::Value { value, .. } = self {
-            if let Self::Continuation {
-                string: cont_value,
-                comment: cont_comment,
-            } = r
-            {
-                value.append(cont_value, cont_comment);
-            } else {
-                panic!("only continuation variants can be appended")
+        if let Self::Continuation {
+            string: cont_value,
+            comment: cont_comment,
+        } = r
+        {
+            match self {
+                Self::Value { value, .. } | Self::Hierarch { value, .. } => {
+                    value.append(cont_value, cont_comment);
+                }
+                _ => panic!("card must be a value or a hierarch"),
             }
         } else {
-            panic!("card must be a value");
+            panic!("only continuation variants can be appended")
         }
         self
     }
@@ -145,6 +153,7 @@ impl TryFrom<&CardBuf> for Card {
             "HISTORY" => Ok(Card::History(parse_comment_text(&buf[8..]))),
             "CONTINUE" => parse_continuation(buf),
             "XTENSION" => parse_extension(buf),
+            "HIERARCH" => parse_hierarch(buf),
             "END" => Ok(Card::End),
             _ => {
                 if b"= " == &buf[8..10] {
@@ -170,6 +179,36 @@ fn parse_extension(buf: &[u8; 80]) -> Result<Card, Error> {
         Ok(Card::Xtension { x, comment })
     } else {
         let msg = format!("XTENSION value must be enclosed in single quotes, found: {value}");
+        Err(Error::DynamicError(msg))
+    }
+}
+
+fn parse_hierarch(buf: &[u8; 80]) -> Result<Card, Error> {
+    // Starts at 10 to remove the leading `HIERARCH  `
+    if let Some(mut index_eq) = &buf[9..].iter().position(|&b| b == b'=') {
+        index_eq += 9;
+        if let Some(kw) = &buf[9..index_eq]
+            .split(|b| b.is_ascii_whitespace())
+            .filter(|s| !s.is_empty())
+            .map(String::from_utf8_lossy)
+            .reduce(|mut acc, e| {
+                acc += ".";
+                acc += e;
+                acc
+            })
+        {
+            Ok(Card::Hierarch {
+                name: kw.to_string(),
+                value: parse_value(&buf[index_eq + 1..])?,
+            })
+        } else {
+            let kwr = String::from_utf8_lossy(buf);
+            let msg = format!("Empty keyword in HIERARCH keyword record \"{kwr}\"");
+            Err(Error::DynamicError(msg))
+        }
+    } else {
+        let kwr = String::from_utf8_lossy(buf);
+        let msg = format!("Key/value separator '=' not found in HIERARCH keyword record \"{kwr}\"");
         Err(Error::DynamicError(msg))
     }
 }
@@ -884,6 +923,29 @@ mod tests {
             }
         } else {
             panic!("Card is not a Card::Value")
+        }
+    }
+
+    #[test]
+    fn hierarch_keyword_record() {
+        let r =
+            b"HIERARCH ESO TEL FOCU SCALE = 1.489 / (deg/m) Focus length = 5.36\"/mm           ";
+        let kw = Card::try_from(r).unwrap();
+
+        if let Card::Hierarch {
+            name,
+            value:
+                Value::Float {
+                    value,
+                    comment: Some(comment),
+                },
+        } = kw
+        {
+            assert_eq!(name, "ESO.TEL.FOCU.SCALE");
+            assert_eq!(value, 1.489_f64);
+            assert_eq!(comment, " (deg/m) Focus length = 5.36\"/mm");
+        } else {
+            panic!("card is not a string keyword or it is missing its comment")
         }
     }
 }
