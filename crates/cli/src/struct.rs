@@ -3,11 +3,12 @@ use std::{error::Error, fmt::Debug, fs::File, io::BufReader, path::PathBuf};
 use clap::Args;
 
 use fitsrs::{
-    Fits, HDU, fits,
+    fits,
     hdu::header::{
-        Xtension,
         extension::{asciitable::AsciiTable, bintable::BinTable, image::Image},
+        Xtension,
     },
+    Fits, HDU,
 };
 
 #[derive(Debug, Clone, Args)]
@@ -88,7 +89,7 @@ fn print_img_header(img: &Image) {
         " * HEAD naxis: {}; bitpix : {:?}; dimensions: {}.",
         img.get_naxis(),
         img.get_bitpix(),
-        img.get_naxisn_all()
+        img.get_naxis()
             .iter()
             .map(|d| d.to_string())
             .reduce(|mut s, d| {
