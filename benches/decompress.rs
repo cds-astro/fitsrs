@@ -61,7 +61,7 @@ fn read_image() {
                     _ => unreachable!(),
                 };
 
-                assert!(width * height == pixels.len());
+                assert!(width * height == pixels);
             }
             _ => (),
         }

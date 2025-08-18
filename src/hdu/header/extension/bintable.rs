@@ -288,7 +288,7 @@ impl Xtension for BinTable {
             let mut z_tilen = Vec::with_capacity(z_naxis);
 
             for i in 1..=z_naxis {
-                let naxisn = if let Ok(value) = values.check_for_naxisi(i) {
+                let znaxisn = if let Ok(value) = values.get_parsed(&format!("ZNAXIS{i}")) {
                     value
                 } else {
                     warn!("ZNAXISN is mandatory. Tile compressed image discarded");
@@ -302,13 +302,13 @@ impl Xtension for BinTable {
                 } else if i == 1 {
                     // ZTILEi has not been found or is not set to an integer => default behavior
                     // * i == 1, ZTILE1 = NAXIS1
-                    naxisn
+                    znaxisn
                 } else {
                     // * i > 1, ZTILEi = 1
                     1
                 };
 
-                z_naxisn.push(naxisn as usize);
+                z_naxisn.push(znaxisn as usize);
                 z_tilen.push(tilen as usize)
             }
 
