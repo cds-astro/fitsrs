@@ -3,12 +3,11 @@ use std::{error::Error, fmt::Debug, fs::File, io::BufReader, path::PathBuf};
 use clap::Args;
 
 use fitsrs::{
-    fits,
+    Fits, HDU, fits,
     hdu::header::{
-        extension::{asciitable::AsciiTable, bintable::BinTable, image::Image},
         Xtension,
+        extension::{asciitable::AsciiTable, bintable::BinTable, image::Image},
     },
-    Fits, HDU,
 };
 
 #[derive(Debug, Clone, Args)]
