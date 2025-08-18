@@ -127,7 +127,7 @@ impl ValueMap {
 
     /// Return an iterator over all keywords representing a FITS [Card::Value]
     /// in the FITS header.
-    pub fn keywords(&self) -> Keys<String, Value> {
+    pub fn keywords(&self) -> Keys<'_, String, Value> {
         self.values.keys()
     }
 
@@ -226,48 +226,6 @@ where
     /// Get the gcount value given by the `PCOUNT` card
     pub fn get_xtension(&self) -> &X {
         &self.xtension
-    }
-
-    /// Get the value of a card, returns `None` if the card is not
-    /// found or is not a value card.
-    pub fn get(&self, key: &str) -> Option<&Value> {
-        self.values.get(key)
-    }
-
-    /// Get the value a specific card and try to parse the value. Returns an
-    /// error if the asking type does not match the true inner type of the value.
-    ///
-    /// # Params
-    /// * `key` - The key of a card
-    pub fn get_parsed<T>(&self, key: &str) -> Option<Result<T, Error>>
-    where
-        T: CardValue,
-    {
-        self.get(key).map(|value| {
-            <T as CardValue>::parse(value.clone()).map_err(|_| {
-                Error::FailTypeCardParsing(key.to_string(), std::any::type_name::<T>().to_string())
-            })
-        })
-    }
-
-    /// Get the keyword corresponding to a specific value, returns `None` if
-    /// no card are found with that value. If multiple cards do have the same value
-    /// then the first found card's keyword will be returned.
-    ///
-    /// # Params
-    /// * `value` - The value of a card
-    pub fn get_keyword(&self, val: &Value) -> Option<&str> {
-        self.cards().find_map(|card| match card {
-            Card::Value { name, value } if value == val => Some(name.as_str()),
-            Card::Hierarch { name, value } if value == val => Some(name.as_str()),
-            _ => None,
-        })
-    }
-
-    /// Return an iterator over all keywords representing a FITS [Card::Value]
-    /// in the FITS header.
-    pub fn keywords(&self) -> Keys<'_, String, Value> {
-        self.values.keys()
     }
 
     /// Return an iterator over all [cards](Card) in the FITS header.
