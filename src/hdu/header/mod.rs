@@ -210,7 +210,7 @@ where
 
     /// Return an iterator over all keywords representing a FITS [Card::Value]
     /// in the FITS header.
-    pub fn keywords(&self) -> Keys<String, Value> {
+    pub fn keywords(&self) -> Keys<'_, String, Value> {
         self.values.keys()
     }
 
