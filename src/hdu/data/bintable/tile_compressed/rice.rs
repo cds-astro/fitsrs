@@ -93,50 +93,57 @@ impl<R, T> RICEDecoder<R, T> {
 }
 
 use std::io::Error;
-/// A trait to define constant for possible output types from a
-/// RICE decoder/encoder
-trait RICE: Sized + Into<i32> {
-    const FSBITS: i32;
-    const FSMAX: i32;
-    const BBITS: i32 = 1 << Self::FSBITS;
-
-    /// Just a wrapping around std::mem::size_of
-    fn size_of() -> usize {
-        std::mem::size_of::<Self>()
-    }
-
-    /// Utilitary method for reading the first T elem that is not encoded
-    fn from_be_bytes<R: Read>(reader: &mut R) -> Result<Self, Error>;
+use std::io::Read;
+trait FromBytes {
+    fn from_be_bytes<R: Read>(reader: &mut R) -> Result<Self, Error>
+    where
+        Self: Sized;
 }
 
-impl RICE for u8 {
-    const FSBITS: i32 = 3;
-    const FSMAX: i32 = 6;
-
+impl FromBytes for u8 {
     fn from_be_bytes<R: Read>(reader: &mut R) -> Result<Self, Error> {
         reader.read_u8()
     }
 }
 
-impl RICE for i16 {
-    const FSBITS: i32 = 4;
-    const FSMAX: i32 = 14;
-
+impl FromBytes for i16 {
     fn from_be_bytes<R: Read>(reader: &mut R) -> Result<Self, Error> {
         reader.read_i16::<BigEndian>()
     }
 }
 
-impl RICE for i32 {
-    const FSBITS: i32 = 5;
-    const FSMAX: i32 = 25;
-
+impl FromBytes for i32 {
     fn from_be_bytes<R: Read>(reader: &mut R) -> Result<Self, Error> {
         reader.read_i32::<BigEndian>()
     }
 }
 
-use std::io::Read;
+/// A trait to define constant for possible output types from a
+/// RICE decoder/encoder
+trait RICE: Sized + Into<i32> + FromBytes {
+    const FSBITS: i32;
+    const FSMAX: i32;
+    const BBITS: i32 = 1 << Self::FSBITS;
+
+    fn size_of() -> usize {
+        std::mem::size_of::<Self>()
+    }
+}
+
+impl RICE for u8 {
+    const FSBITS: i32 = 3;
+    const FSMAX: i32 = 6;
+}
+
+impl RICE for i16 {
+    const FSBITS: i32 = 4;
+    const FSMAX: i32 = 14;
+}
+
+impl RICE for i32 {
+    const FSBITS: i32 = 5;
+    const FSMAX: i32 = 25;
+}
 
 use byteorder::BigEndian;
 use byteorder::ReadBytesExt;

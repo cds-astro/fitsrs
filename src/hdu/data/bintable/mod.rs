@@ -1,12 +1,9 @@
 #![allow(clippy::upper_case_acronyms)]
 
 pub mod data;
-pub mod dithering;
-pub mod rice;
 pub mod row;
 pub mod tile_compressed;
 
-pub use data::BinaryTableData;
 pub use data::TableData;
 pub use row::TableRowData;
 

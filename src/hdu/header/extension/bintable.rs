@@ -91,7 +91,7 @@ impl BinTable {
 }
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
-pub(crate) struct TileCompressedImage {
+pub struct TileCompressedImage {
     /// ZCMPTYPE (required keyword) The value field of this keyword shall contain a character string
     /// giving the name of the algorithm that must be used to decompress the image. Currently, values of GZIP 1, GZIP 2, RICE 1, PLIO 1, and HCOMPRESS 1 are reserved, and the corresponding
     /// algorithms are described in a later section of this document. The value RICE ONE is also

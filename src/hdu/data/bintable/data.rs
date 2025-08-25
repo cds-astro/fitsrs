@@ -27,13 +27,13 @@ where
     }
 }
 
-use super::tile_compressed::TileCompressedData;
 #[derive(Debug)]
 pub enum BinaryTableData<R> {
     Table(TableData<R>),
-    TileCompressed(TileCompressedData<R>),
+    TileCompressed(Pixels<R>),
 }
 
+/*
 impl<R> Iterator for BinaryTableData<R>
 where
     R: Debug + Seek + Read,
@@ -47,18 +47,19 @@ where
         }
     }
 }
+*/
 
+use super::tile_compressed::pixels::Pixels;
 impl<R> BinaryTableData<R>
 where
     R: Debug + Read,
 {
     fn new(reader: R, header: &Header<BinTable>, start_pos: u64) -> Self {
         let ctx = header.get_xtension();
-
         let data = TableData::new(reader, header, start_pos);
 
         if let Some(tile_compressed) = &ctx.z_image {
-            BinaryTableData::TileCompressed(TileCompressedData::new(header, data, tile_compressed))
+            BinaryTableData::TileCompressed(Pixels::new(data, header, tile_compressed))
         } else {
             BinaryTableData::Table(data)
         }
@@ -66,7 +67,12 @@ where
 
     pub fn table_data(self) -> TableData<R> {
         match self {
-            BinaryTableData::TileCompressed(tile) => tile.table_data(),
+            BinaryTableData::TileCompressed(pixels) => match pixels {
+                Pixels::U8(pixels) => pixels.row_it.table_data(),
+                Pixels::I16(pixels) => pixels.row_it.table_data(),
+                Pixels::I32(pixels) => pixels.row_it.table_data(),
+                Pixels::F32(pixels) => pixels.row_it.table_data(),
+            },
             BinaryTableData::Table(table) => table,
         }
     }
@@ -75,8 +81,13 @@ where
 impl<R> BinaryTableData<R> {
     pub fn row_iter(self) -> TableRowData<R> {
         match self {
-            Self::Table(table) => TableRowData::new(table),
-            Self::TileCompressed(TileCompressedData { row_it, .. }) => row_it,
+            BinaryTableData::TileCompressed(pixels) => match pixels {
+                Pixels::U8(pixels) => pixels.row_it,
+                Pixels::I16(pixels) => pixels.row_it,
+                Pixels::I32(pixels) => pixels.row_it,
+                Pixels::F32(pixels) => pixels.row_it,
+            },
+            BinaryTableData::Table(table) => table.row_iter(),
         }
     }
 }

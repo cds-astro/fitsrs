@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use fitsrs::Pixels;
+use fitsrs::hdu::data::bintable::{self, data::BinaryTableData};
 
 fn criterion_benchmark_decompression(c: &mut Criterion) {
     let mut group = c.benchmark_group("decompression");
@@ -34,9 +34,22 @@ fn decompress(filename: &str) {
         if let HDU::XBinaryTable(hdu) = hdu {
             let width = hdu.get_header().get_parsed::<usize>("ZNAXIS1").unwrap();
             let height = hdu.get_header().get_parsed::<usize>("ZNAXIS2").unwrap();
-            let pixels = hdu_list.get_data(&hdu).collect::<Vec<_>>();
 
-            assert!(width * height == pixels.len());
+            match hdu_list.get_data(&hdu) {
+                BinaryTableData::TileCompressed(bintable::tile_compressed::pixels::Pixels::U8(
+                    pixels,
+                )) => assert!(width * height == pixels.count()),
+                BinaryTableData::TileCompressed(
+                    bintable::tile_compressed::pixels::Pixels::I16(pixels),
+                ) => assert!(width * height == pixels.count()),
+                BinaryTableData::TileCompressed(
+                    bintable::tile_compressed::pixels::Pixels::I32(pixels),
+                ) => assert!(width * height == pixels.count()),
+                BinaryTableData::TileCompressed(
+                    bintable::tile_compressed::pixels::Pixels::F32(pixels),
+                ) => assert!(width * height == pixels.count()),
+                _ => unreachable!(),
+            }
         }
     }
 }
@@ -57,7 +70,7 @@ fn read_image() {
                 let width = hdu.get_header().get_parsed::<usize>("NAXIS1").unwrap();
                 let height = hdu.get_header().get_parsed::<usize>("NAXIS2").unwrap();
                 let pixels = match hdu_list.get_data(&hdu).pixels() {
-                    Pixels::I16(it) => it.count(),
+                    fitsrs::hdu::data::image::Pixels::I16(it) => it.count(),
                     _ => unreachable!(),
                 };
 
