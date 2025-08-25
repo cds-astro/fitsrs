@@ -4,7 +4,6 @@ pub mod image;
 pub mod iter;
 pub mod stream;
 
-pub use bintable::BinaryTableData;
 pub use bintable::TableData;
 pub use image::{ImageData, Pixels};
 

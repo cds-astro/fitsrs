@@ -55,7 +55,7 @@ pub mod hdu;
 pub use async_fits::AsyncFits;
 pub use file::FITSFile;
 pub use fits::Fits;
-pub use hdu::data::bintable::{BinaryTableData, DataValue, TableData, TableRowData};
+pub use hdu::data::bintable::{DataValue, TableData, TableRowData};
 pub use hdu::data::image::{ImageData, Pixels};
 pub use hdu::data::iter::It;
 pub use hdu::{AsyncHDU, HDU};
@@ -315,7 +315,7 @@ mod tests {
         while let Some(Ok(hdu)) = hdu_list.next() {
             if let HDU::XBinaryTable(hdu) = hdu {
                 let _ = hdu.get_header().get_xtension();
-                data_len = hdu_list.get_data(&hdu).count();
+                data_len = hdu_list.get_data(&hdu).table_data().count();
             }
         }
 
