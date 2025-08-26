@@ -44,6 +44,9 @@ pub struct F32Keywords {
     z_scale_idx: usize,
     /// Idx column storing z_zero values for each tile
     z_zero_idx: usize,
+    /// Idx column storing z_blank values for each tile
+    z_blank_idx: Option<usize>,
+
     /// Dither
     z_dither_0: i64,
     /// quantiz option
@@ -53,8 +56,10 @@ pub struct F32Keywords {
     scale: f32,
     /// Current value of ZZERO field (floating point case)
     zero: f32,
+    /// Current value of ZBLANK (floating point case)
+    /// Stores the integer value that evaluates to a floating point NAN
+    z_blank: Option<i32>,
     /// Current value of ZBLANK field (float and integer case)
-    _blank: Option<ZBLANK>,
     /// Current quantiz state
     quantiz: Quantiz,
 }
@@ -62,6 +67,13 @@ pub struct F32Keywords {
 impl F32Keywords {
     /// Unquantize the integer decoded value to the real floating point value
     fn unquantize(&mut self, value: i32) -> f32 {
+        // map the NaN if value corresponds to BLANK
+        if let Some(z_blank) = self.z_blank {
+            if z_blank == value {
+                return f32::NAN;
+            }
+        }
+
         match &mut self.quantiz {
             Quantiz::NoDither => (value as f32) * self.scale + self.zero,
             Quantiz::SubtractiveDither1 { i1 } => {
@@ -103,27 +115,27 @@ impl Keywords for F32Keywords {
         let z_scale_idx = ctx.find_field_by_ttype("ZSCALE").unwrap();
         let z_zero_idx = ctx.find_field_by_ttype("ZZERO").unwrap();
 
-        let _blank = ctx
+        let mut z_blank = None;
+        let z_blank_idx = ctx
             // Check for a field named ZBLANK
             .find_field_by_ttype("ZBLANK")
-            // If no ZBLANK colum has been found then check the header keywords (ZBLANK for float, BLANK for integer)
-            .map_or_else(
-                || {
-                    header
-                        .get_parsed("ZBLANK")
-                        // TODO: we should probably propagate errors from here if ZBLANK/BLANK exist but are of a wrong type.
-                        .ok()
-                        .map(ZBLANK::Value)
-                },
-                |field_idx| Some(ZBLANK::ColumnIdx(field_idx)),
-            );
+            .or_else(|| {
+                z_blank = header
+                    .get_parsed("ZBLANK")
+                    // TODO: we should probably propagate errors from here if ZBLANK/BLANK exist but are of a wrong type.
+                    .ok();
+
+                None
+            });
+        // If no ZBLANK colum has been found then check the header keywords (ZBLANK for float, BLANK for integer)
 
         Self {
             scale: 1.0,
             zero: 0.0,
             z_scale_idx,
             z_zero_idx,
-            _blank,
+            z_blank_idx,
+            z_blank,
             quantiz: Quantiz::NoDither,
             z_quantiz: z_quantiz.clone().unwrap_or(ZQuantiz::NoDither),
             z_dither_0: z_dither_0.unwrap_or(0),
@@ -174,12 +186,6 @@ impl Keywords for I32Keywords {
 
         Self { _blank }
     }
-}
-
-#[derive(Debug)]
-enum ZBLANK {
-    ColumnIdx(usize),
-    Value(f64),
 }
 
 #[derive(Debug)]
@@ -264,6 +270,9 @@ mod tests {
                 let height = hdu.get_header().get_parsed::<u32>("ZNAXIS2").unwrap();
 
                 let img_bytes = match hdu_list.get_data(&hdu) {
+                    BinaryTableData::TileCompressed(Pixels::U8(pixels)) => {
+                        pixels.collect::<Vec<_>>()
+                    }
                     BinaryTableData::TileCompressed(Pixels::I16(pixels)) => pixels
                         .map(|v| (((v as f32) / vmax) * 255.0) as u8)
                         .collect::<Vec<_>>(),
@@ -321,8 +330,6 @@ mod tests {
     #[test_case("samples/fits.gsfc.nasa.gov/FITS RICE DITHER2 method.fz")]
     fn test_fits_f32_with_dithering(filename: &str) {
         use std::fs::File;
-
-        use crate::hdu::data::bintable::DataValue;
 
         let mut f = File::open(filename).unwrap();
         let mut buf = Vec::new();
