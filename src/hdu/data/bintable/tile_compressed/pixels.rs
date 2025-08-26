@@ -246,84 +246,12 @@ where
                 // read from BigEndian, i.e. the most significant byte is at first and the least one is at last position
                 self.buf[off + 3]
             }
-            // GZIP compression
-            // Unsigned byte
-            /*
-            // 16-bit integer
-            (ZCmpType::Gzip1, Bitpix::I16) => {
-                // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
-                // read from BigEndian, i.e. the most significant byte is at first and the least one is at last position
-                let off = 4 * idx;
-                let value = (self.buf[off + 3] as i16) | ((self.buf[off + 2] as i16) << 8);
-                DataValue::Short { value, column, idx }
-            }
-            // 32-bit integer
-            (ZCmpType::Gzip1, Bitpix::I32) => {
-                // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
-                let off = 4 * idx;
-                let value = i32::from_be_bytes([
-                    self.buf[off],
-                    self.buf[off + 1],
-                    self.buf[off + 2],
-                    self.buf[off + 3],
-                ]);
-                DataValue::Integer { value, column, idx }
-            }*/
-            // 32-bit floating point
-            /*// GZIP2 (when uncompressed, the bytes are all in most signicant byte order)
-            // FIXME: not tested
-            // 16-bit integer
-            (ZCmpType::Gzip2, Bitpix::I16) => {
-                // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
-                // read from BigEndian, i.e. the most significant byte is at first and the least one is at last position
-                let num_bytes = self.buf.len();
-                let step_msb = num_bytes / 4;
-                let value = (self.buf[3 * step_msb + idx] as i16)
-                    | ((self.buf[2 * step_msb + idx] as i16) << 8);
-                DataValue::Short { value, column, idx }
-            }
-            // 32-bit integer
-            // FIXME: not tested
-            (ZCmpType::Gzip2, Bitpix::I32) => {
-                // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
-                // read from BigEndian, i.e. the most significant byte is at first and the least one is at last position
-                let num_bytes = self.buf.len();
-                let step_msb = num_bytes / 4;
-                let value = ((self.buf[idx] as i32) << 24)
-                    | ((self.buf[idx + step_msb] as i32) << 16)
-                    | ((self.buf[idx + 2 * step_msb] as i32) << 8)
-                    | (self.buf[idx + 3 * step_msb] as i32);
-
-                DataValue::Integer { value, column, idx }
-            }*/
             ZCmpType::Rice { .. } => {
                 // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
                 let off = 4 * idx;
                 let value = self.buf[off];
                 value
             }
-            /*// RICE compression
-            // Unsigned byte
-
-            // 16-bit integer
-            (ZCmpType::Rice { .. }, Bitpix::I16) => {
-                // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
-                let off = 4 * idx;
-                let value = (self.buf[off] as i16) | ((self.buf[off + 1] as i16) << 8);
-                DataValue::Short { value, column, idx }
-            }
-            // 32-bit integer
-            (ZCmpType::Rice { .. }, Bitpix::I32) => {
-                // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
-                let off = 4 * idx;
-                let value = i32::from_ne_bytes([
-                    self.buf[off],
-                    self.buf[off + 1],
-                    self.buf[off + 2],
-                    self.buf[off + 3],
-                ]);
-                DataValue::Integer { value, column, idx }
-            }*/
             // Not supported compression/bitpix results in parsing the binary table as normal and thus this part is not reachable
             _ => unreachable!(),
         };
@@ -427,62 +355,11 @@ where
                 let step_msb = num_bytes / 4;
                 (self.buf[3 * step_msb + idx] as i16) | ((self.buf[2 * step_msb + idx] as i16) << 8)
             }
-            // GZIP compression
-            // Unsigned byte
-            /*
-            // 16-bit integer
-
-            // 32-bit integer
-            (ZCmpType::Gzip1, Bitpix::I32) => {
-                // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
-                let off = 4 * idx;
-                let value = i32::from_be_bytes([
-                    self.buf[off],
-                    self.buf[off + 1],
-                    self.buf[off + 2],
-                    self.buf[off + 3],
-                ]);
-                DataValue::Integer { value, column, idx }
-            }*/
-            // 32-bit floating point
-            /*// GZIP2 (when uncompressed, the bytes are all in most signicant byte order)
-            // FIXME: not tested
-            // 32-bit integer
-            // FIXME: not tested
-            (ZCmpType::Gzip2, Bitpix::I32) => {
-                // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
-                // read from BigEndian, i.e. the most significant byte is at first and the least one is at last position
-                let num_bytes = self.buf.len();
-                let step_msb = num_bytes / 4;
-                let value = ((self.buf[idx] as i32) << 24)
-                    | ((self.buf[idx + step_msb] as i32) << 16)
-                    | ((self.buf[idx + 2 * step_msb] as i32) << 8)
-                    | (self.buf[idx + 3 * step_msb] as i32);
-
-                DataValue::Integer { value, column, idx }
-            }*/
             ZCmpType::Rice { .. } => {
                 // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
                 let off = 4 * idx;
                 (self.buf[off] as i16) | ((self.buf[off + 1] as i16) << 8)
             }
-            /*// RICE compression
-            // Unsigned byte
-
-            // 16-bit integer
-
-            // 32-bit integer
-            (ZCmpType::Rice { .. }, Bitpix::I32) => {
-                // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
-                let off = 4 * idx;
-                let value = i32::from_ne_bytes([
-                    self.buf[off],
-                    self.buf[off + 1],
-                    self.buf[off + 2],
-                    self.buf[off + 3],
-                ]);
-                DataValue::Integer { value, column, idx }
-            }*/
             // Not supported compression/bitpix results in parsing the binary table as normal and thus this part is not reachable
             _ => unreachable!(),
         };
@@ -656,7 +533,8 @@ where
                         z_dither_0,
                         z_quantiz,
                         quantiz,
-                        ..
+                        z_blank_idx,
+                        z_blank,
                     },
                 ..
             } = &mut self.desc;
@@ -687,17 +565,16 @@ where
                 _ => unreachable!(),
             };
 
-            /*
-            *z_blank = match self.z_blank {
-                Some(ZBLANK::ColumnIdx(idx)) => match row_data[idx] {
-                    DataValue::Float { value, .. } => Some(value),
-                    DataValue::Double { value, .. } => Some(value as f32),
+            if let Some(idx) = z_blank_idx {
+                *z_blank = match row_data[*idx] {
+                    DataValue::UnsignedByte { value, .. } => Some(value as i32),
+                    DataValue::Short { value, .. } => Some(value as i32),
+                    DataValue::Integer { value, .. } => Some(value),
+                    DataValue::Long { value, .. } => Some(value as i32),
                     _ => unreachable!(),
-                },
-                Some(ZBLANK::Value(value)) => Some(value as f32),
-                _ => None,
-            };
-            */
+                }
+            }
+
             // We jump to the heap at the position of the tile
             // Then we decomp the tile and store it into out internal buf
             // Finally we go back to the main data table location before jumping to the heap
@@ -746,35 +623,6 @@ where
         let idx = (self.desc.n_pixels - self.desc.remaining_pixels) as usize;
 
         let value = match self.z_cmp_type {
-            // GZIP compression
-            // Unsigned byte
-            /*(ZCmpType::Gzip1, Bitpix::U8) | (ZCmpType::Gzip2, Bitpix::U8) => {
-                // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
-                let off = 4 * idx;
-                // read from BigEndian, i.e. the most significant byte is at first and the least one is at last position
-                let value = self.buf[off + 3];
-                DataValue::UnsignedByte { value, column, idx }
-            }
-            // 16-bit integer
-            (ZCmpType::Gzip1, Bitpix::I16) => {
-                // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
-                // read from BigEndian, i.e. the most significant byte is at first and the least one is at last position
-                let off = 4 * idx;
-                let value = (self.buf[off + 3] as i16) | ((self.buf[off + 2] as i16) << 8);
-                DataValue::Short { value, column, idx }
-            }
-            // 32-bit integer
-            (ZCmpType::Gzip1, Bitpix::I32) => {
-                // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
-                let off = 4 * idx;
-                let value = i32::from_be_bytes([
-                    self.buf[off],
-                    self.buf[off + 1],
-                    self.buf[off + 2],
-                    self.buf[off + 3],
-                ]);
-                DataValue::Integer { value, column, idx }
-            }*/
             // 32-bit floating point
             ZCmpType::Gzip1 => {
                 // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
@@ -787,33 +635,6 @@ where
                 ]);
                 self.desc.keywords.unquantize(value)
             }
-            /*// GZIP2 (when uncompressed, the bytes are all in most signicant byte order)
-            // FIXME: not tested
-            // 16-bit integer
-            (ZCmpType::Gzip2, Bitpix::I16) => {
-                // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
-                // read from BigEndian, i.e. the most significant byte is at first and the least one is at last position
-                let num_bytes = self.buf.len();
-                let step_msb = num_bytes / 4;
-                let value = (self.buf[3 * step_msb + idx] as i16)
-                    | ((self.buf[2 * step_msb + idx] as i16) << 8);
-                DataValue::Short { value, column, idx }
-            }
-            // 32-bit integer
-            // FIXME: not tested
-            (ZCmpType::Gzip2, Bitpix::I32) => {
-                // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
-                // read from BigEndian, i.e. the most significant byte is at first and the least one is at last position
-                let num_bytes = self.buf.len();
-                let step_msb = num_bytes / 4;
-                let value = ((self.buf[idx] as i32) << 24)
-                    | ((self.buf[idx + step_msb] as i32) << 16)
-                    | ((self.buf[idx + 2 * step_msb] as i32) << 8)
-                    | (self.buf[idx + 3 * step_msb] as i32);
-
-                DataValue::Integer { value, column, idx }
-            }*/
-            // 32-bit floating point
             ZCmpType::Gzip2 => {
                 // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
                 // read from BigEndian, i.e. the most significant byte is at first and the least one is at last position
@@ -826,33 +647,6 @@ where
 
                 self.desc.keywords.unquantize(value)
             }
-            /*// RICE compression
-            // Unsigned byte
-            (ZCmpType::Rice { .. }, Bitpix::U8) => {
-                // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
-                let off = 4 * idx;
-                let value = self.buf[off];
-                DataValue::UnsignedByte { value, column, idx }
-            }
-            // 16-bit integer
-            (ZCmpType::Rice { .. }, Bitpix::I16) => {
-                // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
-                let off = 4 * idx;
-                let value = (self.buf[off] as i16) | ((self.buf[off + 1] as i16) << 8);
-                DataValue::Short { value, column, idx }
-            }
-            // 32-bit integer
-            (ZCmpType::Rice { .. }, Bitpix::I32) => {
-                // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
-                let off = 4 * idx;
-                let value = i32::from_ne_bytes([
-                    self.buf[off],
-                    self.buf[off + 1],
-                    self.buf[off + 2],
-                    self.buf[off + 3],
-                ]);
-                DataValue::Integer { value, column, idx }
-            }*/
             // 32-bit floating point
             ZCmpType::Rice { .. } => {
                 // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
