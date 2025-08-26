@@ -249,8 +249,7 @@ where
             ZCmpType::Rice { .. } => {
                 // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
                 let off = 4 * idx;
-                let value = self.buf[off];
-                value
+                self.buf[off]
             }
             // Not supported compression/bitpix results in parsing the binary table as normal and thus this part is not reachable
             _ => unreachable!(),
