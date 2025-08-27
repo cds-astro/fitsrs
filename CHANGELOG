@@ -1,11 +1,13 @@
 # CHANGELOG.md
 
-## 0.4.0-beta
+## 0.4.0
 
 - Create a workspace to accept sub-crates
 - Add a CLI tool in the workspace
 - Add a few getters in header structs
-- Add HIERACH support
+- Add HIERARCH support
+- Enhance pixels retrieval API for binary table extensions
+- Several fixes on the parsing of binary table extensions
 
 ## 0.3.0
 
