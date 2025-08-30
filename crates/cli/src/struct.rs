@@ -85,7 +85,7 @@ where
 
 fn print_img_header(img: &Image) {
     println!(
-        " * HEAD naxis: {}; bitpix : {:?}; dimensions: {}.",
+        " * HEAD naxis: {:?}; bitpix : {:?}; dimensions: {}.",
         img.get_naxis(),
         img.get_bitpix(),
         img.get_naxis()
