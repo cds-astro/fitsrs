@@ -72,6 +72,7 @@ where
                 Pixels::I16(pixels) => pixels.row_it.table_data(),
                 Pixels::I32(pixels) => pixels.row_it.table_data(),
                 Pixels::F32(pixels) => pixels.row_it.table_data(),
+                Pixels::F64(pixels) => pixels.row_it.table_data(),
             },
             BinaryTableData::Table(table) => table,
         }
@@ -86,6 +87,7 @@ impl<R> BinaryTableData<R> {
                 Pixels::I16(pixels) => pixels.row_it,
                 Pixels::I32(pixels) => pixels.row_it,
                 Pixels::F32(pixels) => pixels.row_it,
+                Pixels::F64(pixels) => pixels.row_it,
             },
             BinaryTableData::Table(table) => table.row_iter(),
         }

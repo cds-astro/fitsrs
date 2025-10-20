@@ -88,6 +88,10 @@ impl BinTable {
     pub fn find_field_by_ttype(&self, ttype: &str) -> Option<usize> {
         find_field_by_ttype(&self.ttypes, ttype)
     }
+
+    pub fn get_z_image(&self) -> &Option<TileCompressedImage> {
+        &self.z_image
+    }
 }
 
 #[derive(Debug, PartialEq, Serialize, Clone)]
@@ -100,11 +104,11 @@ pub struct TileCompressedImage {
 
     /// ZBITPIX (required keyword) The value field of this keyword shall contain an integer that gives
     /// the value of the BITPIX keyword in the uncompressed FITS image.
-    pub(crate) z_bitpix: Bitpix,
+    pub z_bitpix: Bitpix,
 
     /// ZNAXISn (required keywords) The value field of these keywords shall contain a positive integer
     /// that gives the value of the NAXISn keywords in the uncompressed FITS image.
-    pub(crate) z_naxisn: Box<[usize]>,
+    pub z_naxisn: Box<[usize]>,
 
     /// ZTILEn (optional keywords) The value of these indexed keywords (where n ranges from 1 to
     /// ZNAXIS) shall contain a positive integer representing the number of pixels along axis n of
@@ -488,8 +492,8 @@ impl Xtension for BinTable {
                     warn!("PLI0_1 compression not supported");
                     None
                 }
-                (_, Bitpix::F64) | (_, Bitpix::I64) => {
-                    warn!("Only bitpix u8, i16, i32 and f32 are supported");
+                (_, Bitpix::I64) => {
+                    warn!("Only bitpix u8, i16, i32, f32, f64 are supported");
                     None
                 }
                 _ => Some(tile_compressed),

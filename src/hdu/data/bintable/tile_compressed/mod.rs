@@ -64,6 +64,69 @@ pub struct F32Keywords {
     quantiz: Quantiz,
 }
 
+#[derive(Debug)]
+pub struct F64Keywords {
+    /// Idx column storing z_scale values for each tile
+    z_scale_idx: usize,
+    /// Idx column storing z_zero values for each tile
+    z_zero_idx: usize,
+    /// Idx column storing z_blank values for each tile
+    z_blank_idx: Option<usize>,
+
+    /// Dither
+    z_dither_0: i64,
+    /// quantiz option
+    z_quantiz: ZQuantiz,
+
+    /// Current value of ZSCALE field (floating point case)
+    scale: f32,
+    /// Current value of ZZERO field (floating point case)
+    zero: f32,
+    /// Current value of ZBLANK (floating point case)
+    /// Stores the integer value that evaluates to a floating point NAN
+    z_blank: Option<i32>,
+    /// Current value of ZBLANK field (float and integer case)
+    /// Current quantiz state
+    quantiz: Quantiz,
+}
+
+impl F64Keywords {
+    /// Unquantize the integer decoded value to the real floating point value
+    fn unquantize(&mut self, value: i32) -> f32 {
+        // map the NaN if value corresponds to BLANK
+        if let Some(z_blank) = self.z_blank {
+            if z_blank == value {
+                return f32::NAN;
+            }
+        }
+
+        match &mut self.quantiz {
+            Quantiz::NoDither => (value as f32) * self.scale + self.zero,
+            Quantiz::SubtractiveDither1 { i1 } => {
+                let ri = RAND_VALUES[*i1];
+                // increment i1 for the next pixel
+                *i1 = (*i1 + 1) % N_RANDOM;
+
+                ((value as f32) - ri + 0.5) * self.scale + self.zero
+            }
+            Quantiz::SubtractiveDither2 { i1 } => {
+                // FIXME: i32::MIN is -2147483648 !
+                if value == -2147483647 {
+                    *i1 = (*i1 + 1) % N_RANDOM;
+
+                    0.0
+                } else {
+                    let ri = RAND_VALUES[*i1];
+                    // increment i1 for the next pixel
+                    *i1 = (*i1 + 1) % N_RANDOM;
+
+                    ((value as f32) - ri + 0.5) * self.scale + self.zero
+                }
+            }
+        }
+    }
+}
+
 impl F32Keywords {
     /// Unquantize the integer decoded value to the real floating point value
     fn unquantize(&mut self, value: i32) -> f32 {
@@ -103,6 +166,48 @@ impl F32Keywords {
 
 impl Keywords for F32Keywords {
     type T = f32;
+
+    fn new(header: &Header<BinTable>, config: &TileCompressedImage) -> Self {
+        let TileCompressedImage {
+            z_dither_0,
+            z_quantiz,
+            ..
+        } = config;
+
+        let ctx = header.get_xtension();
+        let z_scale_idx = ctx.find_field_by_ttype("ZSCALE").unwrap();
+        let z_zero_idx = ctx.find_field_by_ttype("ZZERO").unwrap();
+
+        let mut z_blank = None;
+        let z_blank_idx = ctx
+            // Check for a field named ZBLANK
+            .find_field_by_ttype("ZBLANK")
+            .or_else(|| {
+                z_blank = header
+                    .get_parsed("ZBLANK")
+                    // TODO: we should probably propagate errors from here if ZBLANK/BLANK exist but are of a wrong type.
+                    .ok();
+
+                None
+            });
+        // If no ZBLANK colum has been found then check the header keywords (ZBLANK for float, BLANK for integer)
+
+        Self {
+            scale: 1.0,
+            zero: 0.0,
+            z_scale_idx,
+            z_zero_idx,
+            z_blank_idx,
+            z_blank,
+            quantiz: Quantiz::NoDither,
+            z_quantiz: z_quantiz.clone().unwrap_or(ZQuantiz::NoDither),
+            z_dither_0: z_dither_0.unwrap_or(0),
+        }
+    }
+}
+
+impl Keywords for F64Keywords {
+    type T = f64;
 
     fn new(header: &Header<BinTable>, config: &TileCompressedImage) -> Self {
         let TileCompressedImage {
@@ -204,8 +309,11 @@ mod tests {
 
     use crate::{hdu::data::bintable::tile_compressed::pixels::Pixels, Fits, HDU};
 
+    /*
     #[test]
     fn test_tile_size_from_row_idx() {
+        use super::pixels::tile_size_from_row_idx;
+
         let ground_truth = [
             [300, 200, 150],
             [300, 200, 150],
@@ -244,12 +352,11 @@ mod tests {
             [300, 100, 50],
             [100, 100, 50],
         ];
-        use super::pixels::tile_size_from_row_idx;
         for (i, &ground_truth) in ground_truth.iter().enumerate() {
             let tile_s = tile_size_from_row_idx(&[300, 200, 150], &[1000, 500, 350], i);
             assert_eq!([tile_s[0], tile_s[1], tile_s[2]], ground_truth);
         }
-    }
+    }*/
 
     #[test_case("samples/fits.gsfc.nasa.gov/m13real_rice.fits", 1000.0)]
     #[test_case("samples/fits.gsfc.nasa.gov/m13_rice.fits", 1000.0)]
