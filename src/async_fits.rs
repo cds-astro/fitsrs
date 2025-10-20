@@ -67,7 +67,7 @@ where
         // 2. We are at the end of the real data. As FITS standard stores data in block of 2880 bytes
         // we must read until the next block of data to get the location of the next HDU
 
-        let is_remaining_bytes = (self.num_bytes_in_cur_hdu % 2880) > 0;
+        let is_remaining_bytes = !self.num_bytes_in_cur_hdu.is_multiple_of(2880);
         // Skip the remaining bytes to set the reader where a new HDU begins
         if is_remaining_bytes {
             let mut block_mem_buf: [u8; 2880] = [0; 2880];
@@ -226,7 +226,7 @@ where
         let header = Header::parse(cards)?;
         /* 2. Skip the next bytes to a new 2880 multiple of bytes
         This is where the data block should start */
-        let is_remaining_bytes = ((*num_bytes_read) % 2880) > 0;
+        let is_remaining_bytes = !(*num_bytes_read).is_multiple_of(2880);
 
         // Skip the remaining bytes to set the reader where a new HDU begins
         if is_remaining_bytes {

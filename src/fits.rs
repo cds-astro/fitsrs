@@ -188,7 +188,7 @@ where
         let header = Header::parse(cards)?;
         /* 2. Skip the next bytes to a new 2880 multiple of bytes
         This is where the data block should start */
-        let is_remaining_bytes = ((*num_bytes_read) % 2880) > 0;
+        let is_remaining_bytes = !(*num_bytes_read).is_multiple_of(2880);
 
         // Skip the remaining bytes to set the reader where a new HDU begins
         if is_remaining_bytes {
