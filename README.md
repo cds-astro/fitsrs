@@ -176,6 +176,46 @@ while let Some(Ok(hdu)) = hdu_list.next() {
 }
 ```
 
+Integration with `image`
+------------------------
+
+Enable the optional `image` feature and register the decoding hook to let the `image` crate read FITS files:
+
+```toml
+[dependencies]
+fitsrs = { version = "0.4.1", features = ["image"] }
+```
+
+```rust,no_run
+use fitsrs::image_integration::register_fits_decoding_hook;
+use image::ImageReader;
+
+fn main() -> image::ImageResult<()> {
+    register_fits_decoding_hook();
+
+    let img = ImageReader::open("samples/hipsgen/Npix8.fits")?
+        .decode()?;
+
+    println!("decoded FITS dimensions: {}x{}", img.width(), img.height());
+    Ok(())
+}
+```
+
+The decoder scans all HDUs and picks the first suitable 2D image (including the first plane of image cubes). `BZERO` and `BSCALE` header keywords are applied during decoding when present.
+
+FITS does not mandate a display range for floating-point or high-bit-depth integer data. The pixel type mapping is therefore:
+
+| BITPIX | `ColorType` | Notes |
+|--------|-------------|-------|
+| 8 | `L8` | exact |
+| 16 | `L16` | BZERO/BSCALE applied; common case BZERO=32768 recovers unsigned u16 |
+| −32 | `Rgb32F` | full precision; R=G=B (grayscale stored as colour) |
+| 32 | `Rgb32F` | cast to f32; may lose precision for large integers |
+| 64 | `Rgb32F` | cast to f32; lossy |
+| −64 | `Rgb32F` | cast to f32; lossy |
+
+For the float/integer depths the `Rgb32F` output preserves the original dynamic range; downstream consumers are responsible for tone-mapping or normalisation.
+
 For async input readers:
 
 ```rust

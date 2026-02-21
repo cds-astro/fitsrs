@@ -49,6 +49,9 @@ pub mod file;
 pub mod fits;
 pub mod wcs;
 
+#[cfg(any(test, feature = "image"))]
+pub mod image_integration;
+
 pub mod gz;
 pub mod hdu;
 
