@@ -159,11 +159,13 @@ impl<'a> ImageDecoder for FitsDecoder<'a> {
                 }
             }
             Pixels::I16(iter) => {
-                for (dst, mut src) in buf.as_chunks_mut::<2>().0.iter_mut().zip(iter) {
-                    if let Some(scale) = scale {
-                        src = scale(src as f64).round() as i16;
+                for (dst, src) in buf.as_chunks_mut::<2>().0.iter_mut().zip(iter) {
+                    *dst = if let Some(scale) = scale {
+                        scale(src as f64).round() as u16
+                    } else {
+                        src.max(0).cast_unsigned()
                     }
-                    *dst = src.max(0).to_le_bytes();
+                    .to_le_bytes();
                 }
             }
             // For larger depths there is no matching image-rs color type, so we convert to Rgb32F and write the same value to all 3 channels.
