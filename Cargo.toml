@@ -40,7 +40,6 @@ image = { version = "0.25.5", optional = true }
 
 [features]
 default = []
-image = ["dep:image"]
 
 [dev-dependencies]
 test-case = "3.0.0"
