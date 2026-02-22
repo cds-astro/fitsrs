@@ -1,6 +1,7 @@
 use std::convert::TryFrom;
 use std::fmt;
 use std::io::{Read, Seek, SeekFrom};
+use std::sync::Once;
 
 use image::error::{DecodingError, ImageFormatHint};
 use image::hooks::{register_decoding_hook, register_format_detection_hook, GenericReader};
@@ -35,8 +36,6 @@ impl Seek for FitsReader<'_> {
     }
 }
 
-const FITS_MAGIC: &[u8] = b"SIMPLE  =";
-
 fn to_image_error(err: impl Into<String>) -> ImageError {
     let msg = err.into();
     ImageError::Decoding(DecodingError::new(
@@ -52,20 +51,17 @@ fn map_fits_error(err: FitsError) -> ImageError {
 /// Registers the FITS decoder with the `image` crate so that calls such as
 /// `ImageReader::open("image.fits")?.decode()?` work with FITS files.
 ///
-/// Returns `true` on success, or `false` if the hook is already registered.
-pub fn register_fits_decoding_hook() -> bool {
-    let registered = register_decoding_hook(
-        "fits".into(),
-        Box::new(|r| Ok(Box::new(FitsDecoder::new(r)?))),
-    );
+/// Should be called once before the first use, subsequent.
+pub fn register_fits_decoding_hook() {
+    static REGISTER_FITS_HOOK: Once = Once::new();
 
-    if registered {
-        register_format_detection_hook("fits".into(), FITS_MAGIC, None);
-        register_format_detection_hook("fit".into(), FITS_MAGIC, None);
-        register_format_detection_hook("fts".into(), FITS_MAGIC, None);
-    }
+    REGISTER_FITS_HOOK.call_once(|| {
+        for ext in ["fits", "fit", "fts", "fz"] {
+            register_decoding_hook(ext.into(), Box::new(|r| Ok(Box::new(FitsDecoder::new(r)?))));
+        }
 
-    registered
+        register_format_detection_hook("fits".into(), b"SIMPLE  =", None);
+    });
 }
 
 pub struct FitsDecoder<'a> {
