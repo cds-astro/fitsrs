@@ -7,12 +7,14 @@ use image::error::{DecodingError, ImageFormatHint};
 use image::hooks::{register_decoding_hook, register_format_detection_hook, GenericReader};
 use image::{ColorType, ImageDecoder, ImageError, ImageResult};
 
-use crate::error::Error as FitsError;
 use crate::fits::HDU as FitsHDU;
 use crate::hdu::data::image::Pixels;
 use crate::hdu::header::extension::image::Image as FitsImage;
 use crate::hdu::header::Bitpix;
 use crate::{Fits, HDU};
+use serde::de::IntoDeserializer;
+use serde::Deserialize;
+use std::ops::DivAssign;
 
 /// Newtype around `GenericReader<'a>` that adds a trivial `Debug` impl,
 /// satisfying `Fits<R>`'s `R: Debug` bound.
@@ -36,16 +38,11 @@ impl Seek for FitsReader<'_> {
     }
 }
 
-fn to_image_error(err: impl Into<String>) -> ImageError {
-    let msg = err.into();
+fn to_image_error(err: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> ImageError {
     ImageError::Decoding(DecodingError::new(
         ImageFormatHint::Name("fits".into()),
-        std::io::Error::other(msg),
+        std::io::Error::other(err),
     ))
-}
-
-fn map_fits_error(err: FitsError) -> ImageError {
-    to_image_error(err.to_string())
 }
 
 /// Registers the FITS decoder with the `image` crate so that calls such as
@@ -78,7 +75,7 @@ impl<'a> FitsDecoder<'a> {
         // The primary HDU is always an image, but it may have no data,
         // in which case the actual image is in the first XImage extension.
         let hdu = loop {
-            match fits.next().transpose().map_err(map_fits_error)? {
+            match fits.next().transpose().map_err(to_image_error)? {
                 Some(HDU::Primary(hdu)) | Some(HDU::XImage(hdu))
                     if hdu.get_data_unit_byte_size() != 0 =>
                 {
@@ -120,6 +117,35 @@ impl<'a> FitsDecoder<'a> {
     }
 }
 
+#[derive(Deserialize, Clone, Copy, PartialEq)]
+#[serde(default, rename_all = "UPPERCASE")]
+struct Scale {
+    bzero: f64,
+    bscale: f64,
+}
+
+impl Default for Scale {
+    fn default() -> Self {
+        Self {
+            bzero: 0.0,
+            bscale: 1.0,
+        }
+    }
+}
+
+impl DivAssign<f64> for Scale {
+    fn div_assign(&mut self, rhs: f64) {
+        self.bzero /= rhs;
+        self.bscale /= rhs;
+    }
+}
+
+impl Scale {
+    fn apply(self, value: f64) -> f64 {
+        value.mul_add(self.bscale, self.bzero)
+    }
+}
+
 impl<'a> ImageDecoder for FitsDecoder<'a> {
     fn dimensions(&self) -> (u32, u32) {
         self.dimensions
@@ -130,66 +156,58 @@ impl<'a> ImageDecoder for FitsDecoder<'a> {
     }
 
     fn read_image(mut self, buf: &mut [u8]) -> ImageResult<()> {
-        // Read BZERO/BSCALE from the header at decode time; they default to 0 and 1
-        // per the FITS standard when absent. The most important case is BZERO=32768
-        // with BITPIX=16, which encodes unsigned u16 data as signed i16.
         let header = self.hdu.get_header();
-        // BZERO/BSCALE default to 0 and 1 per the FITS standard when absent.
-        // The FITS spec mandates these are always stored as real floating-point values.
-        // get_parsed::<Option<f64>> returns Ok(None) when absent, Ok(Some(v)) when
-        // present, and Err when present but not parseable as a float.
-        let bzero = header
-            .get_parsed::<Option<f64>>("BZERO")
-            .map_err(map_fits_error)?
-            .unwrap_or(0.0);
-        let bscale = header
-            .get_parsed::<Option<f64>>("BSCALE")
-            .map_err(map_fits_error)?
-            .unwrap_or(1.0);
-        let scale =
-            (bzero != 0.0 || bscale != 1.0).then_some(move |v: f64| v.mul_add(bscale, bzero));
+        let mut scale = Scale::deserialize(header.into_deserializer()).map_err(to_image_error)?;
         let image_data = self.fits.get_data(&self.hdu);
+        // The general idea of these conversions to an image suitable for viewing:
+        // - ignore negative values
+        // - assume images are already normalized to their pixel format max value
+        // - adapt to the least lossy image-rs color type for given pixel format
         match image_data.pixels() {
             Pixels::U8(iter) => {
+                let needs_scale = scale != Scale::default();
+
                 for (dst, mut src) in buf.iter_mut().zip(iter) {
-                    if let Some(scale) = scale {
-                        src = scale(src as f64).round() as u8;
+                    if needs_scale {
+                        src = scale.apply(f64::from(src)).round() as u8;
                     }
                     *dst = src;
                 }
             }
             Pixels::I16(iter) => {
+                let needs_scale = scale != Scale::default();
+
                 for (dst, src) in buf.as_chunks_mut::<2>().0.iter_mut().zip(iter) {
-                    *dst = if let Some(scale) = scale {
-                        scale(src as f64).round() as u16
+                    *dst = if needs_scale {
+                        scale.apply(f64::from(src)).round() as u16
                     } else {
-                        src.max(0).cast_unsigned()
+                        u16::try_from(src).unwrap_or(0)
                     }
                     .to_le_bytes();
                 }
             }
             // For larger depths there is no matching image-rs color type, so we convert to Rgb32F and write the same value to all 3 channels.
             Pixels::I32(iter) => {
-                for (chunk, src) in buf.as_chunks_mut::<12>().0.iter_mut().zip(iter) {
-                    let src = match scale {
-                        Some(scale) => scale(f64::from(src)) as f32,
-                        None => src as f32,
-                    }
-                    .to_le_bytes();
+                // this is ugly, but image-rs doesn't have 32-bit integer format, so instead we scale down to f32 0-1 range
+                scale /= f64::from(i32::MAX);
 
+                for (chunk, src) in buf.as_chunks_mut::<12>().0.iter_mut().zip(iter) {
+                    let src = (scale.apply(f64::from(src)) as f32).to_le_bytes();
+
+                    // splat the same value to RGB since there is no floating-point luma ColorType in image-rs
                     for dst in chunk.as_chunks_mut::<4>().0 {
                         *dst = src;
                     }
                 }
             }
             Pixels::I64(iter) => {
-                for (chunk, src) in buf.as_chunks_mut::<12>().0.iter_mut().zip(iter) {
-                    let src = match scale {
-                        Some(scale) => scale(src as f64) as f32,
-                        None => src as f32,
-                    }
-                    .to_le_bytes();
+                // same as above, but for 64-bit integers
+                scale /= i64::MAX as f64;
 
+                for (chunk, src) in buf.as_chunks_mut::<12>().0.iter_mut().zip(iter) {
+                    let src = (scale.apply(src as f64) as f32).to_le_bytes();
+
+                    // splat the same value to RGB since there is no floating-point luma ColorType in image-rs
                     for dst in chunk.as_chunks_mut::<4>().0 {
                         *dst = src;
                     }
@@ -198,6 +216,7 @@ impl<'a> ImageDecoder for FitsDecoder<'a> {
             // BZERO and BSCALE are not recommended for floating-point data in spec, so ignore it.
             Pixels::F32(iter) => {
                 for (chunk, src) in buf.as_chunks_mut::<12>().0.iter_mut().zip(iter) {
+                    // splat the same value to RGB since there is no floating-point luma ColorType in image-rs
                     for dst in chunk.as_chunks_mut::<4>().0 {
                         *dst = src.to_le_bytes();
                     }
@@ -205,6 +224,7 @@ impl<'a> ImageDecoder for FitsDecoder<'a> {
             }
             Pixels::F64(iter) => {
                 for (chunk, src) in buf.as_chunks_mut::<12>().0.iter_mut().zip(iter) {
+                    // splat the same value to RGB since there is no floating-point luma ColorType in image-rs
                     for dst in chunk.as_chunks_mut::<8>().0 {
                         *dst = src.to_le_bytes();
                     }
@@ -216,10 +236,6 @@ impl<'a> ImageDecoder for FitsDecoder<'a> {
 
     fn read_image_boxed(self: Box<Self>, buf: &mut [u8]) -> ImageResult<()> {
         (*self).read_image(buf)
-    }
-
-    fn icc_profile(&mut self) -> ImageResult<Option<Vec<u8>>> {
-        Ok(None)
     }
 }
 
