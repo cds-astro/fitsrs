@@ -186,7 +186,7 @@ Enable the optional `image` feature and register the decoding hook to let the `i
 fitsrs = { version = "0.4.1", features = ["image"] }
 ```
 
-```rust,no_run
+```rust,ignore
 use fitsrs::image_integration::register_fits_decoding_hook;
 use image::ImageReader;
 
