@@ -64,8 +64,7 @@ pub fn register_fits_decoding_hook() {
 pub struct FitsDecoder<'a> {
     width: u32,
     height: u32,
-    color_type: ColorType,
-    is_rgb: bool,
+        is_rgb: bool,
     fits: Fits<FitsReader<'a>>,
     hdu: FitsHDU<FitsImage>,
 }
@@ -109,24 +108,7 @@ impl<'a> FitsDecoder<'a> {
             height: u32::try_from(height)
                 .map_err(|_| to_image_error("image height exceeds u32::MAX"))?,
             is_rgb,
-            color_type: match xtension.get_bitpix() {
-                Bitpix::U8 => {
-                    if is_rgb {
-                        ColorType::Rgb8
-                    } else {
-                        ColorType::L8
-                    }
-                }
-                Bitpix::I16 => {
-                    if is_rgb {
-                        ColorType::Rgb16
-                    } else {
-                        ColorType::L16
-                    }
-                }
-                Bitpix::F32 | Bitpix::I32 | Bitpix::I64 | Bitpix::F64 => ColorType::Rgb32F,
-            },
-            fits,
+                        fits,
             hdu,
         })
     }
@@ -198,7 +180,23 @@ impl<'a> ImageDecoder for FitsDecoder<'a> {
     }
 
     fn color_type(&self) -> ColorType {
-        self.color_type
+        match self.hdu.get_header().get_xtension().get_bitpix() {
+            Bitpix::U8 => {
+                if self.is_rgb {
+                    ColorType::Rgb8
+                } else {
+                    ColorType::L8
+                }
+            }
+            Bitpix::I16 => {
+                if self.is_rgb {
+                    ColorType::Rgb16
+                } else {
+                    ColorType::L16
+                }
+            }
+            Bitpix::F32 | Bitpix::I32 | Bitpix::I64 | Bitpix::F64 => ColorType::Rgb32F,
+        }
     }
 
     fn read_image(mut self, buf: &mut [u8]) -> ImageResult<()> {
