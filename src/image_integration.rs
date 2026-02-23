@@ -1,20 +1,22 @@
 use std::convert::TryFrom;
 use std::fmt;
 use std::io::{Read, Seek, SeekFrom};
+use std::ops::DivAssign;
 use std::sync::Once;
 
 use image::error::{DecodingError, ImageFormatHint};
 use image::hooks::{register_decoding_hook, register_format_detection_hook, GenericReader};
+use image::metadata::Orientation;
 use image::{ColorType, ImageDecoder, ImageError, ImageResult};
+
+use serde::de::IntoDeserializer;
+use serde::Deserialize;
 
 use crate::fits::HDU as FitsHDU;
 use crate::hdu::data::image::Pixels;
 use crate::hdu::header::extension::image::Image as FitsImage;
 use crate::hdu::header::Bitpix;
 use crate::{Fits, HDU};
-use serde::de::IntoDeserializer;
-use serde::Deserialize;
-use std::ops::DivAssign;
 
 /// Newtype around `GenericReader<'a>` that adds a trivial `Debug` impl,
 /// satisfying `Fits<R>`'s `R: Debug` bound.
