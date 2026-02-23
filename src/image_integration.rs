@@ -66,7 +66,7 @@ pub fn register_fits_decoding_hook() {
 pub struct FitsDecoder<'a> {
     width: u32,
     height: u32,
-        is_rgb: bool,
+    is_rgb: bool,
     fits: Fits<FitsReader<'a>>,
     hdu: FitsHDU<FitsImage>,
 }
@@ -110,7 +110,7 @@ impl<'a> FitsDecoder<'a> {
             height: u32::try_from(height)
                 .map_err(|_| to_image_error("image height exceeds u32::MAX"))?,
             is_rgb,
-                        fits,
+            fits,
             hdu,
         })
     }
