@@ -181,6 +181,13 @@ impl<'a> ImageDecoder for FitsDecoder<'a> {
         (self.width, self.height)
     }
 
+    fn orientation(&mut self) -> ImageResult<Orientation> {
+        // FITS uses bottom-left coordinate system.
+        // image-rs, like most modern formats, expects top-left one.
+        // For correct display, provide a flip-vertical orientation hint.
+        Ok(Orientation::FlipVertical)
+    }
+
     fn color_type(&self) -> ColorType {
         match self.hdu.get_header().get_xtension().get_bitpix() {
             Bitpix::U8 => {
