@@ -13,7 +13,10 @@ use serde::de::IntoDeserializer;
 use serde::Deserialize;
 
 use crate::fits::HDU as FitsHDU;
+use crate::hdu::data::bintable::data::BinaryTableData;
+use crate::hdu::data::bintable::tile_compressed::pixels::Pixels as TcPixels;
 use crate::hdu::data::image::Pixels;
+use crate::hdu::header::extension::bintable::BinTable;
 use crate::hdu::header::extension::image::Image as FitsImage;
 use crate::hdu::header::Bitpix;
 use crate::{Fits, HDU};
@@ -63,12 +66,18 @@ pub fn register_fits_decoding_hook() {
     });
 }
 
+enum HduKind {
+    Image(FitsHDU<FitsImage>),
+    TileCompressed(FitsHDU<BinTable>),
+}
+
 pub struct FitsDecoder<'a> {
     width: u32,
     height: u32,
     is_rgb: bool,
+    bitpix: Bitpix,
     fits: Fits<FitsReader<'a>>,
-    hdu: FitsHDU<FitsImage>,
+    hdu: HduKind,
 }
 
 impl<'a> FitsDecoder<'a> {
@@ -77,30 +86,68 @@ impl<'a> FitsDecoder<'a> {
 
         // The primary HDU is always an image, but it may have no data,
         // in which case the actual image is in the first XImage extension.
-        let hdu = loop {
+        // Tile-compressed images are stored as XBinaryTable with a z_image header.
+        enum Found {
+            Image(FitsHDU<FitsImage>),
+            TileCompressed(FitsHDU<BinTable>),
+        }
+        let found = loop {
             match fits.next().transpose().map_err(to_image_error)? {
                 Some(HDU::Primary(hdu)) | Some(HDU::XImage(hdu))
                     if hdu.get_data_unit_byte_size() != 0 =>
                 {
-                    break hdu
+                    break Found::Image(hdu);
+                }
+                Some(HDU::XBinaryTable(hdu))
+                    if hdu.get_header().get_xtension().get_z_image().is_some() =>
+                {
+                    break Found::TileCompressed(hdu);
                 }
                 Some(_) => {}
                 None => return Err(to_image_error("no 2D image HDU found in FITS file")),
             }
         };
 
-        let xtension: &FitsImage = hdu.get_header().get_xtension();
-        let &[width, height, ref extra_axes @ ..] = xtension.get_naxis() else {
-            return Err(to_image_error("primary HDU has fewer than 2 axes"));
-        };
-
-        let is_rgb = match extra_axes {
-            [] | [1] => false,
-            [3] => true,
-            _ => {
-                return Err(to_image_error(
-                    "incompatible image axes (expected 2 or 3 with NAXIS3=3 for RGB)",
-                ))
+        let (width, height, is_rgb, bitpix, hdu) = match found {
+            Found::Image(hdu) => {
+                let xtension: &FitsImage = hdu.get_header().get_xtension();
+                let &[width, height, ref extra_axes @ ..] = xtension.get_naxis() else {
+                    return Err(to_image_error("primary HDU has fewer than 2 axes"));
+                };
+                let is_rgb = match extra_axes {
+                    [] | [1] => Ok(false),
+                    [3] => Ok(true),
+                    _ => Err(to_image_error(
+                        "incompatible image axes (expected 2 or 3 with NAXIS3=3 for RGB)",
+                    )),
+                }?;
+                let bitpix = xtension.get_bitpix();
+                (width, height, is_rgb, bitpix, HduKind::Image(hdu))
+            }
+            Found::TileCompressed(hdu) => {
+                let Some(z_image) = hdu.get_header().get_xtension().get_z_image() else {
+                    // this should never happen we check for the presence of z_image in the found loop
+                    return Err(to_image_error("tile-compressed HDU has no z_image"));
+                };
+                let &[width, height, ref extra_axes @ ..] = z_image.z_naxisn.as_ref() else {
+                    return Err(to_image_error("tile-compressed HDU has fewer than 2 axes"));
+                };
+                // if z_naxisn was a u64 to match Image, this could be extracted
+                let is_rgb = match extra_axes {
+                    [] | [1] => Ok(false),
+                    [3] => Ok(true),
+                    _ => Err(to_image_error(
+                        "incompatible image axes (expected 2 or 3 with NAXIS3=3 for RGB)",
+                    )),
+                }?;
+                let bitpix = z_image.z_bitpix;
+                (
+                    width as u64,
+                    height as u64,
+                    is_rgb,
+                    bitpix,
+                    HduKind::TileCompressed(hdu),
+                )
             }
         };
 
@@ -110,6 +157,7 @@ impl<'a> FitsDecoder<'a> {
             height: u32::try_from(height)
                 .map_err(|_| to_image_error("image height exceeds u32::MAX"))?,
             is_rgb,
+            bitpix,
             fits,
             hdu,
         })
@@ -176,6 +224,80 @@ fn write_splat<const P: usize>(buf: &mut [u8], iter: impl Iterator<Item = [u8; P
     }
 }
 
+// The general idea of these conversions to an image suitable for viewing:
+// - ignore negative values
+// - assume images are already normalized to their pixel format max value
+// - adapt to the least lossy image-rs color type for given pixel format
+fn write_u8(buf: &mut [u8], iter: impl Iterator<Item = u8>, scale: Scale, is_rgb: bool) {
+    let needs_scale = scale != Scale::default();
+    let mapped = iter.map(|src| {
+        [if needs_scale {
+            scale.apply(f64::from(src)).round() as u8
+        } else {
+            src
+        }]
+    });
+    if is_rgb {
+        write_rgb(buf, mapped);
+    } else {
+        write_luma(buf, mapped);
+    }
+}
+
+fn write_i16(buf: &mut [u8], iter: impl Iterator<Item = i16>, scale: Scale, is_rgb: bool) {
+    let needs_scale = scale != Scale::default();
+    let mapped = iter.map(|src| {
+        if needs_scale {
+            scale.apply(f64::from(src)).round() as u16
+        } else {
+            u16::try_from(src).unwrap_or(0)
+        }
+        .to_le_bytes()
+    });
+    if is_rgb {
+        write_rgb(buf, mapped);
+    } else {
+        write_luma(buf, mapped);
+    }
+}
+
+// For larger depths there is no matching image-rs color type, so we convert to Rgb32F and write the same value to all 3 channels.
+fn write_i32(buf: &mut [u8], iter: impl Iterator<Item = i32>, mut scale: Scale, is_rgb: bool) {
+    // this is ugly, but image-rs doesn't have 32-bit integer format, so instead we scale down to f32 0-1 range
+    scale /= f64::from(i32::MAX);
+    let mapped = iter.map(|src| (scale.apply(f64::from(src)) as f32).to_le_bytes());
+    if is_rgb {
+        write_rgb(buf, mapped);
+    } else {
+        write_splat(buf, mapped);
+    }
+}
+
+fn write_i64(buf: &mut [u8], iter: impl Iterator<Item = i64>, mut scale: Scale, is_rgb: bool) {
+    // same as above, but for 64-bit integers
+    scale /= i64::MAX as f64;
+    let mapped = iter.map(|src| (scale.apply(src as f64) as f32).to_le_bytes());
+    if is_rgb {
+        write_rgb(buf, mapped);
+    } else {
+        write_splat(buf, mapped);
+    }
+}
+
+// BZERO and BSCALE are not recommended for floating-point data in spec, so ignore it.
+fn write_f64(buf: &mut [u8], iter: impl Iterator<Item = f64>, is_rgb: bool) {
+    write_f32(buf, iter.map(|src| src as f32), is_rgb)
+}
+
+fn write_f32(buf: &mut [u8], iter: impl Iterator<Item = f32>, is_rgb: bool) {
+    let mapped = iter.map(|src| src.to_le_bytes());
+    if is_rgb {
+        write_rgb(buf, mapped);
+    } else {
+        write_splat(buf, mapped);
+    }
+}
+
 impl<'a> ImageDecoder for FitsDecoder<'a> {
     fn dimensions(&self) -> (u32, u32) {
         (self.width, self.height)
@@ -189,7 +311,7 @@ impl<'a> ImageDecoder for FitsDecoder<'a> {
     }
 
     fn color_type(&self) -> ColorType {
-        match self.hdu.get_header().get_xtension().get_bitpix() {
+        match self.bitpix {
             Bitpix::U8 => {
                 if self.is_rgb {
                     ColorType::Rgb8
@@ -209,85 +331,40 @@ impl<'a> ImageDecoder for FitsDecoder<'a> {
     }
 
     fn read_image(mut self, buf: &mut [u8]) -> ImageResult<()> {
-        let header = self.hdu.get_header();
-        let mut scale = Scale::deserialize(header.into_deserializer()).map_err(to_image_error)?;
         let is_rgb = self.is_rgb;
-        let image_data = self.fits.get_data(&self.hdu);
-        // The general idea of these conversions to an image suitable for viewing:
-        // - ignore negative values
-        // - assume images are already normalized to their pixel format max value
-        // - adapt to the least lossy image-rs color type for given pixel format
-        match image_data.pixels() {
-            Pixels::U8(iter) => {
-                let needs_scale = scale != Scale::default();
-                let mapped = iter.map(|src| {
-                    [if needs_scale {
-                        scale.apply(f64::from(src)).round() as u8
-                    } else {
-                        src
-                    }]
-                });
-                if is_rgb {
-                    write_rgb(buf, mapped);
-                } else {
-                    write_luma(buf, mapped);
+        match self.hdu {
+            HduKind::Image(hdu) => {
+                let scale = Scale::deserialize(hdu.get_header().into_deserializer())
+                    .map_err(to_image_error)?;
+                match self.fits.get_data(&hdu).pixels() {
+                    Pixels::U8(it) => write_u8(buf, it, scale, is_rgb),
+                    Pixels::I16(it) => write_i16(buf, it, scale, is_rgb),
+                    Pixels::I32(it) => write_i32(buf, it, scale, is_rgb),
+                    Pixels::I64(it) => write_i64(buf, it, scale, is_rgb),
+                    Pixels::F32(it) => write_f32(buf, it, is_rgb),
+                    Pixels::F64(it) => write_f64(buf, it, is_rgb),
                 }
             }
-            Pixels::I16(iter) => {
-                let needs_scale = scale != Scale::default();
-                let mapped = iter.map(|src| {
-                    if needs_scale {
-                        scale.apply(f64::from(src)).round() as u16
-                    } else {
-                        u16::try_from(src).unwrap_or(0)
+            HduKind::TileCompressed(hdu) => {
+                let scale = Scale::deserialize(hdu.get_header().into_deserializer())
+                    .map_err(to_image_error)?;
+                match self.fits.get_data(&hdu) {
+                    BinaryTableData::TileCompressed(tc) => match tc {
+                        TcPixels::U8(it) => write_u8(buf, it, scale, is_rgb),
+                        TcPixels::I16(it) => write_i16(buf, it, scale, is_rgb),
+                        TcPixels::I32(it) => write_i32(buf, it, scale, is_rgb),
+                        // Tile-compressed F32 and F64 iterators both yield f32
+                        TcPixels::F32(it) => write_f32(buf, it, is_rgb),
+                        TcPixels::F64(it) => write_f32(buf, it, is_rgb),
+                    },
+                    BinaryTableData::Table(_) => {
+                        return Err(to_image_error(
+                            "expected tile-compressed data but found plain binary table",
+                        ));
                     }
-                    .to_le_bytes()
-                });
-                if is_rgb {
-                    write_rgb(buf, mapped);
-                } else {
-                    write_luma(buf, mapped);
                 }
             }
-            // For larger depths there is no matching image-rs color type, so we convert to Rgb32F and write the same value to all 3 channels.
-            Pixels::I32(iter) => {
-                // this is ugly, but image-rs doesn't have 32-bit integer format, so instead we scale down to f32 0-1 range
-                scale /= f64::from(i32::MAX);
-                let mapped = iter.map(|src| (scale.apply(f64::from(src)) as f32).to_le_bytes());
-                if is_rgb {
-                    write_rgb(buf, mapped);
-                } else {
-                    write_splat(buf, mapped);
-                }
-            }
-            Pixels::I64(iter) => {
-                // same as above, but for 64-bit integers
-                scale /= i64::MAX as f64;
-                let mapped = iter.map(|src| (scale.apply(src as f64) as f32).to_le_bytes());
-                if is_rgb {
-                    write_rgb(buf, mapped);
-                } else {
-                    write_splat(buf, mapped);
-                }
-            }
-            // BZERO and BSCALE are not recommended for floating-point data in spec, so ignore it.
-            Pixels::F32(iter) => {
-                let mapped = iter.map(|src| src.to_le_bytes());
-                if is_rgb {
-                    write_rgb(buf, mapped);
-                } else {
-                    write_splat(buf, mapped);
-                }
-            }
-            Pixels::F64(iter) => {
-                let mapped = iter.map(|src| (src as f32).to_le_bytes());
-                if is_rgb {
-                    write_rgb(buf, mapped);
-                } else {
-                    write_splat(buf, mapped);
-                }
-            }
-        };
+        }
         Ok(())
     }
 
@@ -312,6 +389,9 @@ mod tests {
     #[test_case("fits.gsfc.nasa.gov/HST_HRS", 2000, 4, Rgb32F)]
     #[test_case("fits.gsfc.nasa.gov/HST_NICMOS", 270, 263, Rgb32F)]
     #[test_case("fits.gsfc.nasa.gov/HST_WFPC_II_bis", 100, 100, Rgb32F)]
+    #[test_case("fits.gsfc.nasa.gov/FITS RICE_ONE", 3600, 3600, Rgb32F)]
+    #[test_case("fits.gsfc.nasa.gov/m13_rice", 300, 300, L16)]
+    #[test_case("fits.gsfc.nasa.gov/m13real_rice", 300, 300, Rgb32F)]
     #[test_case("hipsgen/Npix8", 512, 512, L16)]
     #[test_case("hipsgen/Npix9", 512, 512, L16)]
     #[test_case("hipsgen/Npix132", 512, 512, L16)]
