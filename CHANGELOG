@@ -1,5 +1,9 @@
 # CHANGELOG.md
 
+## Dev
+
+- Impl serde deserialization binary table row into custom Deserialize struct.
+
 ## 0.4.0
 
 - Create a workspace to accept sub-crates

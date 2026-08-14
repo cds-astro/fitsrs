@@ -1,9 +1,13 @@
 use crate::hdu::header::extension::bintable::BinTable;
+use serde::de::DeserializeOwned;
+
 use std::fmt::Debug;
 use std::io::{Read, Seek};
 
 use super::data::TableData;
+use super::deser::RowDeserializeIter;
 use super::DataValue;
+use std::cell::OnceCell;
 
 #[derive(Debug)]
 pub struct TableRowData<R> {
@@ -55,5 +59,24 @@ where
         self.idx_row += 1;
 
         Some(row_data.into_boxed_slice())
+    }
+}
+
+impl<R> TableRowData<R>
+where
+    R: Read + Seek + Debug,
+{
+    pub fn deserialize<T: DeserializeOwned>(self) -> RowDeserializeIter<R, T> {
+        let ttypes = self.get_ctx().ttypes.clone();
+        let num_rows = self.get_ctx().naxis2 as usize;
+
+        RowDeserializeIter {
+            data: self.data, // or self.table_data() if that's the accessor for the inner TableData<R>
+            ttypes,
+            row_idx: 0,
+            num_rows,
+            sorted_fields: OnceCell::new(),
+            _marker: std::marker::PhantomData,
+        }
     }
 }

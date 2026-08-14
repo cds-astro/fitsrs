@@ -352,6 +352,115 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_fits_deser_bintable() {
+        use serde::Deserialize;
+
+        #[derive(Deserialize, Debug, PartialEq)]
+        struct Mag {
+            phot_bp_mean_mag: f32,
+            phot_rp_mean_mag: f32,
+            mag: f32,
+            flux: f32,
+        }
+
+        #[allow(dead_code)]
+        #[derive(Deserialize)]
+        struct MagWithBadTypedField {
+            phot_bp_mean_mag: f32,
+            phot_rp_mean_mag: f32,
+            mag: String, // wrong type: column is numeric
+            flux: f32,
+        }
+
+        #[allow(dead_code)]
+        #[derive(Deserialize)]
+        struct MagWithUnknownField {
+            phot_bp_mean_mag: f32,
+            phot_rp_mean_mag: f32,
+            mag3: f32, // no such TTYPE
+            flux: f32,
+        }
+
+        #[allow(dead_code)]
+        #[derive(Deserialize)]
+        struct Empty {}
+
+        use std::fs::File;
+
+        let f = File::open("samples/astrometry.net/corr.fits").unwrap();
+        let reader = BufReader::new(f);
+        let mut hdu_list = Fits::from_reader(reader);
+
+        while let Some(Ok(hdu)) = hdu_list.next() {
+            if let HDU::XBinaryTable(hdu) = hdu {
+                let num_rows = hdu.get_header().get_xtension().get_num_rows();
+
+                // --- 1. Good struct: full collection succeeds ---
+                let rows: Vec<Mag> = hdu_list
+                    .get_data(&hdu)
+                    .row_iter()
+                    .deserialize::<Mag>()
+                    .collect::<Result<Vec<_>, _>>()
+                    .expect("deserialization with a valid, fully-matching struct should succeed");
+
+                assert_eq!(
+                    rows.len(),
+                    num_rows,
+                    "should decode exactly one row per NAXIS2"
+                );
+
+                let last_typed = rows.last().expect("table should be non-empty");
+
+                assert_eq!(
+                    last_typed,
+                    &Mag {
+                        phot_bp_mean_mag: 12.726986,
+                        phot_rp_mean_mag: 11.683337,
+                        mag: 12.290148,
+                        flux: 33.244617,
+                    }
+                );
+
+                // --- 2. Bad-typed field: mag column isn't a String, must fail ---
+                let bad_typed: Result<Vec<MagWithBadTypedField>, _> = hdu_list
+                    .get_data(&hdu)
+                    .row_iter()
+                    .deserialize::<MagWithBadTypedField>()
+                    .collect();
+                assert!(
+                    bad_typed.is_err(),
+                    "deserializing a numeric column into String should error"
+                );
+
+                // --- 3. Unknown field name: no matching TTYPE, must fail at resolution time ---
+                let unknown_field: Result<Vec<MagWithUnknownField>, _> = hdu_list
+                    .get_data(&hdu)
+                    .row_iter()
+                    .deserialize::<MagWithUnknownField>()
+                    .collect();
+                assert!(
+                    unknown_field.is_err(),
+                    "deserializing into a struct with an unmatched field name should error"
+                );
+
+                // --- 4. Empty struct: see note below ---
+                let empty: Vec<Empty> = hdu_list
+                    .get_data(&hdu)
+                    .row_iter()
+                    .deserialize::<Empty>()
+                    .collect::<Result<Vec<_>, _>>()
+                    .expect("deserialization with a empty, fully-matching struct should succeed");
+
+                assert_eq!(
+                    empty.len(),
+                    num_rows,
+                    "deserializing into an empty struct should not error"
+                );
+            }
+        }
+    }
+
     #[test_case("samples/misc/SN2923fxjA.fits.gz", 5415.0, 6386.0)]
     #[test_case("samples/misc/SN2923fxjA.fits", 5415.0, 6386.0)]
     fn test_fits_open_external_gzipped_file(filename: &str, min: f32, max: f32) {
