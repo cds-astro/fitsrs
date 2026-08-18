@@ -81,6 +81,23 @@ enum HduImageKind {
     TileCompressed(FitsHDU<BinTable>),
 }
 
+impl HduImageKind {
+    fn axes_and_bitpix(&self) -> ImageResult<(&[u64], Bitpix)> {
+        match self {
+            Self::Image(hdu) => {
+                let image = hdu.get_header().get_xtension();
+                Ok((image.get_naxis(), image.get_bitpix()))
+            }
+            Self::TileCompressed(hdu) => {
+                let Some(image) = hdu.get_header().get_xtension().get_z_image() else {
+                    return Err(to_image_error("tile-compressed HDU has no z_image"));
+                };
+                Ok((&image.z_naxisn, image.z_bitpix))
+            }
+        }
+    }
+}
+
 pub struct FitsDecoder<'a> {
     width: u32,
     height: u32,
@@ -111,35 +128,11 @@ impl<'a> FitsDecoder<'a> {
             }
         };
 
-        let (width, height, is_rgb, bitpix, hdu) = match found {
-            HduImageKind::Image(hdu) => {
-                let xtension: &FitsImage = hdu.get_header().get_xtension();
-                let &[width, height, ref extra_axes @ ..] = xtension.get_naxis() else {
-                    return Err(to_image_error("primary HDU has fewer than 2 axes"));
-                };
-                let is_rgb = is_rgb(extra_axes)?;
-                let bitpix = xtension.get_bitpix();
-                (width, height, is_rgb, bitpix, HduImageKind::Image(hdu))
-            }
-            HduImageKind::TileCompressed(hdu) => {
-                let Some(z_image) = hdu.get_header().get_xtension().get_z_image() else {
-                    // this should never happen we check for the presence of z_image in the found loop
-                    return Err(to_image_error("tile-compressed HDU has no z_image"));
-                };
-                let &[width, height, ref extra_axes @ ..] = z_image.z_naxisn.as_ref() else {
-                    return Err(to_image_error("tile-compressed HDU has fewer than 2 axes"));
-                };
-                let is_rgb = is_rgb(extra_axes)?;
-                let bitpix = z_image.z_bitpix;
-                (
-                    width,
-                    height,
-                    is_rgb,
-                    bitpix,
-                    HduImageKind::TileCompressed(hdu),
-                )
-            }
+        let (axes, bitpix) = found.axes_and_bitpix()?;
+        let &[width, height, ref extra_axes @ ..] = axes else {
+            return Err(to_image_error("image HDU has fewer than 2 axes"));
         };
+        let is_rgb = is_rgb(extra_axes)?;
 
         Ok(Self {
             width: u32::try_from(width)
@@ -149,7 +142,7 @@ impl<'a> FitsDecoder<'a> {
             is_rgb,
             bitpix,
             fits,
-            hdu,
+            hdu: found,
         })
     }
 }
