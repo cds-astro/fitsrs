@@ -50,6 +50,16 @@ fn to_image_error(err: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> I
     ))
 }
 
+fn is_rgb(extra_axes: &[u64]) -> Result<bool, ImageError> {
+    match extra_axes {
+        [] | [1] => Ok(false),
+        [3] => Ok(true),
+        _ => Err(to_image_error(
+            "incompatible image axes (expected 2 or 3 with NAXIS3=3 for RGB)",
+        )),
+    }
+}
+
 /// Registers the FITS decoder with the `image` crate so that calls such as
 /// `ImageReader::open("image.fits")?.decode()?` work with FITS files.
 ///
@@ -107,13 +117,7 @@ impl<'a> FitsDecoder<'a> {
                 let &[width, height, ref extra_axes @ ..] = xtension.get_naxis() else {
                     return Err(to_image_error("primary HDU has fewer than 2 axes"));
                 };
-                let is_rgb = match extra_axes {
-                    [] | [1] => Ok(false),
-                    [3] => Ok(true),
-                    _ => Err(to_image_error(
-                        "incompatible image axes (expected 2 or 3 with NAXIS3=3 for RGB)",
-                    )),
-                }?;
+                let is_rgb = is_rgb(extra_axes)?;
                 let bitpix = xtension.get_bitpix();
                 (width, height, is_rgb, bitpix, HduImageKind::Image(hdu))
             }
@@ -125,18 +129,11 @@ impl<'a> FitsDecoder<'a> {
                 let &[width, height, ref extra_axes @ ..] = z_image.z_naxisn.as_ref() else {
                     return Err(to_image_error("tile-compressed HDU has fewer than 2 axes"));
                 };
-                // if z_naxisn was a u64 to match Image, this could be extracted
-                let is_rgb = match extra_axes {
-                    [] | [1] => Ok(false),
-                    [3] => Ok(true),
-                    _ => Err(to_image_error(
-                        "incompatible image axes (expected 2 or 3 with NAXIS3=3 for RGB)",
-                    )),
-                }?;
+                let is_rgb = is_rgb(extra_axes)?;
                 let bitpix = z_image.z_bitpix;
                 (
-                    width as u64,
-                    height as u64,
+                    width,
+                    height,
                     is_rgb,
                     bitpix,
                     HduImageKind::TileCompressed(hdu),

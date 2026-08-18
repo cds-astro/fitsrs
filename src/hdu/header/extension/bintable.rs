@@ -108,7 +108,7 @@ pub struct TileCompressedImage {
 
     /// ZNAXISn (required keywords) The value field of these keywords shall contain a positive integer
     /// that gives the value of the NAXISn keywords in the uncompressed FITS image.
-    pub z_naxisn: Box<[usize]>,
+    pub z_naxisn: Box<[u64]>,
 
     /// ZTILEn (optional keywords) The value of these indexed keywords (where n ranges from 1 to
     /// ZNAXIS) shall contain a positive integer representing the number of pixels along axis n of
@@ -312,7 +312,7 @@ impl Xtension for BinTable {
                     1
                 };
 
-                z_naxisn.push(znaxisn as usize);
+                z_naxisn.push(znaxisn);
                 z_tilen.push(tilen as usize)
             }
 
