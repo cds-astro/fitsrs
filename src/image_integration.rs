@@ -66,7 +66,7 @@ pub fn register_fits_decoding_hook() {
     });
 }
 
-enum HduKind {
+enum HduImageKind {
     Image(FitsHDU<FitsImage>),
     TileCompressed(FitsHDU<BinTable>),
 }
@@ -77,31 +77,24 @@ pub struct FitsDecoder<'a> {
     is_rgb: bool,
     bitpix: Bitpix,
     fits: Fits<FitsReader<'a>>,
-    hdu: HduKind,
+    hdu: HduImageKind,
 }
 
 impl<'a> FitsDecoder<'a> {
     pub fn new(reader: GenericReader<'a>) -> ImageResult<Self> {
         let mut fits = Fits::from_reader(FitsReader(reader));
 
-        // The primary HDU is always an image, but it may have no data,
-        // in which case the actual image is in the first XImage extension.
-        // Tile-compressed images are stored as XBinaryTable with a z_image header.
-        enum Found {
-            Image(FitsHDU<FitsImage>),
-            TileCompressed(FitsHDU<BinTable>),
-        }
         let found = loop {
             match fits.next().transpose().map_err(to_image_error)? {
                 Some(HDU::Primary(hdu)) | Some(HDU::XImage(hdu))
                     if hdu.get_data_unit_byte_size() != 0 =>
                 {
-                    break Found::Image(hdu);
+                    break HduImageKind::Image(hdu);
                 }
                 Some(HDU::XBinaryTable(hdu))
                     if hdu.get_header().get_xtension().get_z_image().is_some() =>
                 {
-                    break Found::TileCompressed(hdu);
+                    break HduImageKind::TileCompressed(hdu);
                 }
                 Some(_) => {}
                 None => return Err(to_image_error("no 2D image HDU found in FITS file")),
@@ -109,7 +102,7 @@ impl<'a> FitsDecoder<'a> {
         };
 
         let (width, height, is_rgb, bitpix, hdu) = match found {
-            Found::Image(hdu) => {
+            HduImageKind::Image(hdu) => {
                 let xtension: &FitsImage = hdu.get_header().get_xtension();
                 let &[width, height, ref extra_axes @ ..] = xtension.get_naxis() else {
                     return Err(to_image_error("primary HDU has fewer than 2 axes"));
@@ -122,9 +115,9 @@ impl<'a> FitsDecoder<'a> {
                     )),
                 }?;
                 let bitpix = xtension.get_bitpix();
-                (width, height, is_rgb, bitpix, HduKind::Image(hdu))
+                (width, height, is_rgb, bitpix, HduImageKind::Image(hdu))
             }
-            Found::TileCompressed(hdu) => {
+            HduImageKind::TileCompressed(hdu) => {
                 let Some(z_image) = hdu.get_header().get_xtension().get_z_image() else {
                     // this should never happen we check for the presence of z_image in the found loop
                     return Err(to_image_error("tile-compressed HDU has no z_image"));
@@ -146,7 +139,7 @@ impl<'a> FitsDecoder<'a> {
                     height as u64,
                     is_rgb,
                     bitpix,
-                    HduKind::TileCompressed(hdu),
+                    HduImageKind::TileCompressed(hdu),
                 )
             }
         };
@@ -333,7 +326,7 @@ impl<'a> ImageDecoder for FitsDecoder<'a> {
     fn read_image(mut self, buf: &mut [u8]) -> ImageResult<()> {
         let is_rgb = self.is_rgb;
         match self.hdu {
-            HduKind::Image(hdu) => {
+            HduImageKind::Image(hdu) => {
                 let scale = Scale::deserialize(hdu.get_header().into_deserializer())
                     .map_err(to_image_error)?;
                 match self.fits.get_data(&hdu).pixels() {
@@ -345,7 +338,7 @@ impl<'a> ImageDecoder for FitsDecoder<'a> {
                     Pixels::F64(it) => write_f64(buf, it, is_rgb),
                 }
             }
-            HduKind::TileCompressed(hdu) => {
+            HduImageKind::TileCompressed(hdu) => {
                 let scale = Scale::deserialize(hdu.get_header().into_deserializer())
                     .map_err(to_image_error)?;
                 match self.fits.get_data(&hdu) {
