@@ -98,18 +98,17 @@ while let Some(Ok(hdu)) = hdu_list.next() {
             // Try to access the WCS for an HDU image
             if let Ok(wcs) = hdu.wcs() {
                 // Get the lonlat position on the sky of the pixel located at (0, 0) on the image
-                let xy = ImgXY::new(0.0, 0.0);
-                let lonlat = wcs
-                    .unproj_lonlat(&xy)
-                    .unwrap();
+                let xy = ImgXY::new(1.0, 1.0);
+                if let Some(lonlat) = wcs
+                    .unproj_lonlat(&xy) {
+                        // Get the pixel position in the image of a sky location
+                        let xy_2 = wcs
+                            .proj_lonlat(&lonlat)
+                            .unwrap();
 
-                // Get the pixel position in the image of a sky location
-                let xy_2 = wcs
-                    .proj_lonlat(&lonlat)
-                    .unwrap();
-
-                assert!((xy.x() - xy_2.x()).abs() <= 1e-9);
-                assert!((xy.y() - xy_2.y()).abs() <= 1e-9);
+                        assert!((xy.x() - xy_2.x()).abs() <= 1e-9);
+                        assert!((xy.y() - xy_2.y()).abs() <= 1e-9);
+                    }
             }
             let image = hdu_list.get_data(&hdu);
             match image.pixels() {
