@@ -361,7 +361,8 @@ mod tests {
             phot_bp_mean_mag: f32,
             phot_rp_mean_mag: f32,
             mag: f32,
-            flux: f32,
+            flux: Option<f32>,
+            ref_cat: Vec<char>,
         }
 
         #[allow(dead_code)]
@@ -413,12 +414,13 @@ mod tests {
                 let last_typed = rows.last().expect("table should be non-empty");
 
                 assert_eq!(
-                    last_typed,
+                    dbg!(last_typed),
                     &Mag {
                         phot_bp_mean_mag: 12.726986,
                         phot_rp_mean_mag: 11.683337,
                         mag: 12.290148,
-                        flux: 33.244617,
+                        flux: Some(33.244617),
+                        ref_cat: vec!['G', '2'],
                     }
                 );
 

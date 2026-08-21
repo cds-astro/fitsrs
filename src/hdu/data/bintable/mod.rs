@@ -9,10 +9,9 @@ pub use data::TableData;
 pub use row::TableRowData;
 
 use crate::error::Error;
-use serde::{forward_to_deserialize_any, Deserializer};
-
 use serde::de::value::SeqDeserializer;
 use serde::de::IntoDeserializer;
+use serde::{forward_to_deserialize_any, Deserializer};
 
 /// A data structure refering to a column in a table
 #[derive(Clone)]
@@ -35,15 +34,13 @@ pub enum DataValue {
         idx: usize,
     },
     /// 'X' => Bit
-    Bit {
+    BitArray {
         /// The current byte where the bit lies
         byte: u8,
-        /// The bit index in the byte
-        bit_idx: u8,
+        /// The idx of the byte of the array
+        idx: usize,
         /// Name of the column
         column: ColumnId,
-        /// Its position in the column (i.e. when repeat count > 1)
-        idx: usize,
     },
     /// 'B' => Unsigned Byte
     UnsignedByte {
@@ -144,6 +141,8 @@ pub enum DataValue {
         /// The offset byte position from the start of the heap
         offset_byte: u64,
     },
+    /// Some TFORM encodes NULL values, such as L, A (Null strings), B, I, J, K
+    Null,
 }
 
 pub fn seq_deserializer<T, const N: usize>(
@@ -164,7 +163,7 @@ impl<'de> Deserializer<'de> for DataValue {
     {
         match self {
             DataValue::Logical { value, .. } => visitor.visit_bool(value),
-            DataValue::Bit { byte, bit_idx, .. } => visitor.visit_bool((byte & (1 << bit_idx)) != 0),
+            DataValue::BitArray { byte, .. } => visitor.visit_u8(byte),
             DataValue::UnsignedByte { value, .. } => visitor.visit_u8(value),
             DataValue::Short { value, .. } => visitor.visit_i16(value),
             DataValue::Integer { value, .. } => visitor.visit_i32(value),
@@ -186,6 +185,7 @@ impl<'de> Deserializer<'de> for DataValue {
                 num_elems,
                 offset_byte,
             } => visitor.visit_newtype_struct(seq_deserializer([num_elems, offset_byte])),
+            DataValue::Null => visitor.visit_none(),
         }
     }
 
@@ -193,12 +193,23 @@ impl<'de> Deserializer<'de> for DataValue {
     where
         V: serde::de::Visitor<'de>,
     {
-        visitor.visit_some(self)
+        match self {
+            DataValue::Null => visitor.visit_none(),
+            _ => visitor.visit_some(self),
+        }
     }
 
     forward_to_deserialize_any! {
         bool i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 char str string bytes byte_buf unit
         seq tuple tuple_struct map struct enum identifier ignored_any
         newtype_struct unit_struct
+    }
+}
+
+impl<'de> IntoDeserializer<'de, Error> for DataValue {
+    type Deserializer = Self;
+
+    fn into_deserializer(self) -> Self::Deserializer {
+        self
     }
 }
