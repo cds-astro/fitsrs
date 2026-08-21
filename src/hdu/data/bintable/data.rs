@@ -495,11 +495,10 @@ where
                     VariableArrayTy::X => {
                         let byte = self.reader.read_u8().ok()?;
                         *num_bytes_to_read -= X::BYTES_SIZE as u64;
-                        DataValue::Bit {
+                        DataValue::BitArray {
                             byte,
-                            bit_idx: 0,
-                            column: ColumnId::Index(col_idx),
                             idx,
+                            column: ColumnId::Index(col_idx),
                         }
                     }
                     VariableArrayTy::B => {
@@ -623,11 +622,15 @@ where
                                 self.seek_to_next_col().ok()?;
                             }
 
-                            Some(DataValue::Logical {
-                                value: byte != 0,
-                                column: ColumnId::Index(col_idx),
-                                idx,
-                            }) // Determine the count idx inside the field
+                            if byte == 0x0 {
+                                Some(DataValue::Null)
+                            } else {
+                                Some(DataValue::Logical {
+                                    value: byte == b'T',
+                                    column: ColumnId::Index(col_idx),
+                                    idx,
+                                }) // Determine the count idx inside the field
+                            }
                         }
                         // Bit
                         TFormType::X { repeat_count } => {
@@ -639,11 +642,10 @@ where
                                 self.seek_to_next_col().ok()?;
                             }
 
-                            Some(DataValue::Bit {
+                            Some(DataValue::BitArray {
                                 byte,
-                                bit_idx: 0,
                                 column: ColumnId::Index(col_idx),
-                                idx,
+                                idx: self.item_idx, // the idx of the byte in the array
                             }) // Determine the count idx inside the field
                         }
                         // Unsigned byte
@@ -672,11 +674,16 @@ where
                                 self.seek_to_next_col().ok()?;
                             }
 
-                            Some(DataValue::Short {
-                                value: short,
-                                column: ColumnId::Index(col_idx),
-                                idx,
-                            }) // Determine the count idx inside the field
+                            let tnull = self.ctx.tnull[col_idx];
+                            if tnull.is_some_and(|tnull| tnull == short as i64) {
+                                Some(DataValue::Null)
+                            } else {
+                                Some(DataValue::Short {
+                                    value: short,
+                                    column: ColumnId::Index(col_idx),
+                                    idx,
+                                })
+                            }
                         }
                         // 32-bit integer
                         TFormType::J { repeat_count } => {
@@ -688,11 +695,16 @@ where
                                 self.seek_to_next_col().ok()?;
                             }
 
-                            Some(DataValue::Integer {
-                                value: int,
-                                column: ColumnId::Index(col_idx),
-                                idx,
-                            }) // Determine the count idx inside the field
+                            let tnull = self.ctx.tnull[col_idx];
+                            if tnull.is_some_and(|tnull| tnull == int as i64) {
+                                Some(DataValue::Null)
+                            } else {
+                                Some(DataValue::Integer {
+                                    value: int,
+                                    column: ColumnId::Index(col_idx),
+                                    idx,
+                                })
+                            }
                         }
                         // 64-bit integer
                         TFormType::K { repeat_count } => {
@@ -704,27 +716,53 @@ where
                                 self.seek_to_next_col().ok()?;
                             }
 
-                            Some(DataValue::Long {
-                                value: long,
-                                column: ColumnId::Index(col_idx),
-                                idx,
-                            }) // Determine the count idx inside the field
+                            let tnull = self.ctx.tnull[col_idx];
+                            if tnull.is_some_and(|tnull| tnull == long) {
+                                Some(DataValue::Null)
+                            } else {
+                                Some(DataValue::Long {
+                                    value: long,
+                                    column: ColumnId::Index(col_idx),
+                                    idx,
+                                })
+                            }
                         }
                         // Character
                         TFormType::A { repeat_count } => {
-                            let c = self.reader.read_u8().ok()?;
-                            self.byte_offset += A::BYTES_SIZE;
-
-                            self.item_idx += 1;
-                            if self.item_idx == *repeat_count {
+                            if *repeat_count == 0 {
                                 self.seek_to_next_col().ok()?;
-                            }
 
-                            Some(DataValue::Character {
-                                value: c as char,
-                                column: ColumnId::Index(col_idx),
-                                idx,
-                            }) // Determine the count idx inside the field
+                                Some(DataValue::Null)
+                            } else {
+                                let c = self.reader.read_u8().ok()?;
+                                self.byte_offset += A::BYTES_SIZE;
+
+                                self.item_idx += 1;
+
+                                match c {
+                                    // Null strings are defined
+                                    // by the presence of an ASCII NULL as the first character.
+                                    0x0 if self.item_idx == 0 => {
+                                        self.seek_to_next_col().ok()?;
+
+                                        Some(DataValue::Null)
+                                    }
+                                    // This character string may be terminated before the
+                                    // length specified by the repeat count by an ASCII NULL (hexadecimal code 00).
+                                    // Characters after the first ASCII NULL are not defined
+                                    _ => {
+                                        if self.item_idx == *repeat_count {
+                                            self.seek_to_next_col().ok()?;
+                                        }
+
+                                        Some(DataValue::Character {
+                                            value: c as char,
+                                            column: ColumnId::Index(col_idx),
+                                            idx,
+                                        })
+                                    }
+                                }
+                            }
                         }
                         // Single-precision floating point
                         TFormType::E { repeat_count } => {
