@@ -362,6 +362,7 @@ mod tests {
             phot_rp_mean_mag: f32,
             mag: f32,
             flux: f32,
+            ref_cat: String,
         }
 
         #[allow(dead_code)]
@@ -419,6 +420,7 @@ mod tests {
                         phot_rp_mean_mag: 11.683337,
                         mag: 12.290148,
                         flux: 33.244617,
+                        ref_cat: String::from("G2"),
                     }
                 );
 

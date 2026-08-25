@@ -5,7 +5,7 @@ use crate::DataValue;
 
 use serde::de::value::SeqDeserializer;
 use serde::de::{DeserializeOwned, DeserializeSeed, Deserializer, MapAccess, Visitor};
-
+use serde::de::value::StringDeserializer;
 use std::{
     cell::OnceCell,
     io::{Read, Seek},
@@ -253,7 +253,21 @@ where
 
                 let deser = SeqDeserializer::new(next_values.into_iter());
                 seed.deserialize(deser)
-            }
+            },
+            DataValue::Character { value, column, idx } => {
+                let rc = tform.repeat_count();
+                let next_values = self.next_values(DataValue::Character { value: *value, column: *column, idx: *idx }, rc)?
+                    .into_iter()
+                    .map(|dv| {
+                        match dv {
+                            DataValue::Character { value, .. } => Ok(value as u8),
+                            _ => Err(Error::StaticError("Expected a Character to complete the string"))
+                        }
+                    }).collect::<Result<Vec<_>, _>>()?;
+
+                let deser = String::from_utf8(next_values).map_err(|_| Error::StaticError("Cannot build a String from utf8 char"))?;
+                seed.deserialize(StringDeserializer::new(deser))
+            },
             _ => {
                 let rc = tform.repeat_count();
                 if rc > 1 {
