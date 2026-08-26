@@ -38,6 +38,16 @@ pub struct BinTable {
     /// permitted for encoding
     pub(crate) tforms: Vec<TFormType>,
 
+    /// The value field for this indexed keyword
+    /// shall contain the integer that represents an undefined value for
+    /// Field n of Data Type B, I, J or K, or P or Q array-descriptor
+    /// fields (Sect. 7.3.5) that point to B, I, J, or K integer arrays. The
+    /// keyword must not be used if Field n is of any other data type.
+    /// The value of this keyword corresponds to the table column values before
+    /// applying any transformation indicated by the TSCALn
+    /// and TZEROn keywords.
+    pub(crate) tnull: Box<[Option<i64>]>,
+
     /// TTYPEn keywords. The value field for this indexed keyword
     /// shall contain a character string giving the name of Field n. It
     /// is strongly recommended that every field of the table be assigned a unique, case-insensitive name with this keyword, and
@@ -456,6 +466,13 @@ impl Xtension for BinTable {
             })
             .unzip();
 
+        let tnull = (1..=tfields)
+            .map(|idx_field| {
+                // discard the tform if it was not found and raise a warning
+                values.get_parsed::<i64>(&format!("TNULL{idx_field}")).ok()
+            })
+            .collect();
+
         let data_compressed_idx = find_field_by_ttype(&ttypes, "COMPRESSED_DATA")
             // Find for a GZIP_DATA_COMPRESSED named field
             .or(find_field_by_ttype(&ttypes, "GZIP_COMPRESSED_DATA"));
@@ -526,6 +543,7 @@ impl Xtension for BinTable {
             tfields,
             tforms,
             ttypes,
+            tnull,
             pcount,
             gcount,
             theap,
@@ -853,6 +871,8 @@ mod tests {
                     Some("QUALITY".to_owned()),
                     Some("FLUX".to_owned()),
                 ],
+                tnull: vec![None, None, None, None, None, None, None, None, None]
+                    .into_boxed_slice(),
                 theap: 11535,
                 // Should be 0
                 pcount: 0,
