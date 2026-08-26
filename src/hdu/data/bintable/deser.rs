@@ -194,25 +194,16 @@ where
     where
         S: DeserializeSeed<'de>,
     {
-        let mut values = Vec::with_capacity(num_elems);
-
-        for _ in 0..num_elems {
-            values.push(
-                self.data
-                    .next()
-                    .ok_or(Error::StaticError("No more values found."))?,
-            );
-        }
+        let values = self.read_next_values(num_elems);
 
         let deser = SeqDeserializer::new(values.into_iter());
         seed.deserialize(deser)
     }
 
-    fn next_values(&mut self, first: DataValue, count: usize) -> Result<Vec<DataValue>, Error> {
+    fn read_next_values(&mut self, count: usize) -> Result<Vec<DataValue>, Error> {
         let mut values = Vec::with_capacity(count);
-        values.push(first);
 
-        for _ in 1..count {
+        for _ in 0..count {
             values.push(
                 self.data
                     .next()
@@ -264,36 +255,34 @@ where
             DataValue::VariableLengthArray64 { num_elems, .. } => {
                 self.deserialize_array(*num_elems as usize, seed)
             }
-            DataValue::Character { value, column, idx } => {
+            DataValue::Character { value, .. } => {
                 let rc = tform.repeat_count();
-                let next_values = self
-                    .next_values(
-                        DataValue::Character {
-                            value: *value,
-                            column: *column,
-                            idx: *idx,
-                        },
-                        rc,
-                    )?
-                    .into_iter()
-                    .map(|dv| match dv {
-                        DataValue::Character { value, .. } => Ok(value as u8),
-                        _ => Err(Error::StaticError(
-                            "Expected a Character to complete the string",
-                        )),
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
 
-                let deser = String::from_utf8(next_values)
+                let mut str_bytes = vec![*value as u8];
+
+                str_bytes.extend(
+                    self.read_next_values(rc - 1)?
+                        .into_iter()
+                        .map(|dv| match dv {
+                            DataValue::Character { value, .. } => Ok(value as u8),
+                            _ => Err(Error::StaticError(
+                                "Expected a Character to complete the string",
+                            )),
+                        })
+                        .collect::<Result<Vec<_>, _>>()?,
+                );
+
+                let deser = String::from_utf8(str_bytes)
                     .map_err(|_| Error::StaticError("Cannot build a String from utf8 char"))?;
                 seed.deserialize(StringDeserializer::new(deser))
             }
             _ => {
                 let rc = tform.repeat_count();
                 if rc > 1 {
-                    let next_values = self.next_values(value, rc)?;
+                    let mut values = vec![value];
+                    values.extend(self.read_next_values(rc - 1)?);
 
-                    let deser = SeqDeserializer::new(next_values.into_iter());
+                    let deser = SeqDeserializer::new(values.into_iter());
                     seed.deserialize(deser)
                 } else {
                     seed.deserialize(value)
