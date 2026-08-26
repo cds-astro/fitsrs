@@ -163,7 +163,9 @@ impl<'de> Deserializer<'de> for DataValue {
     {
         match self {
             DataValue::Logical { value, .. } => visitor.visit_bool(value),
-            DataValue::Bit { byte, bit_idx, .. } => visitor.visit_bool((byte & (1 << bit_idx)) != 0),
+            DataValue::Bit { byte, bit_idx, .. } => {
+                visitor.visit_bool((byte & (1 << bit_idx)) != 0)
+            }
             DataValue::UnsignedByte { value, .. } => visitor.visit_u8(value),
             DataValue::Short { value, .. } => visitor.visit_i16(value),
             DataValue::Integer { value, .. } => visitor.visit_i32(value),

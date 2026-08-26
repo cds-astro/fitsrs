@@ -4,8 +4,8 @@ use crate::hdu::header::extension::bintable::TFormType;
 use crate::DataValue;
 
 use serde::de::value::SeqDeserializer;
-use serde::de::{DeserializeOwned, DeserializeSeed, Deserializer, MapAccess, Visitor};
 use serde::de::value::StringDeserializer;
+use serde::de::{DeserializeOwned, DeserializeSeed, Deserializer, MapAccess, Visitor};
 use std::{
     cell::OnceCell,
     io::{Read, Seek},
@@ -190,13 +190,9 @@ impl<'a, R> RowMapAccess<'a, R>
 where
     R: Read + Seek + Debug,
 {
-    fn deserialize_array<'de, S>(
-        &mut self,
-        num_elems: usize,
-        seed: S,
-    ) -> Result<S::Value, Error>
+    fn deserialize_array<'de, S>(&mut self, num_elems: usize, seed: S) -> Result<S::Value, Error>
     where
-        S: DeserializeSeed<'de>
+        S: DeserializeSeed<'de>,
     {
         let mut values = Vec::with_capacity(num_elems);
 
@@ -267,21 +263,31 @@ where
             }
             DataValue::VariableLengthArray64 { num_elems, .. } => {
                 self.deserialize_array(*num_elems as usize, seed)
-            },
+            }
             DataValue::Character { value, column, idx } => {
                 let rc = tform.repeat_count();
-                let next_values = self.next_values(DataValue::Character { value: *value, column: *column, idx: *idx }, rc)?
+                let next_values = self
+                    .next_values(
+                        DataValue::Character {
+                            value: *value,
+                            column: *column,
+                            idx: *idx,
+                        },
+                        rc,
+                    )?
                     .into_iter()
-                    .map(|dv| {
-                        match dv {
-                            DataValue::Character { value, .. } => Ok(value as u8),
-                            _ => Err(Error::StaticError("Expected a Character to complete the string"))
-                        }
-                    }).collect::<Result<Vec<_>, _>>()?;
+                    .map(|dv| match dv {
+                        DataValue::Character { value, .. } => Ok(value as u8),
+                        _ => Err(Error::StaticError(
+                            "Expected a Character to complete the string",
+                        )),
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
 
-                let deser = String::from_utf8(next_values).map_err(|_| Error::StaticError("Cannot build a String from utf8 char"))?;
+                let deser = String::from_utf8(next_values)
+                    .map_err(|_| Error::StaticError("Cannot build a String from utf8 char"))?;
                 seed.deserialize(StringDeserializer::new(deser))
-            },
+            }
             _ => {
                 let rc = tform.repeat_count();
                 if rc > 1 {
