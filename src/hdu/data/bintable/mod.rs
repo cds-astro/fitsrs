@@ -9,10 +9,9 @@ pub use data::TableData;
 pub use row::TableRowData;
 
 use crate::error::Error;
-use serde::{forward_to_deserialize_any, Deserializer};
-
 use serde::de::value::SeqDeserializer;
 use serde::de::IntoDeserializer;
+use serde::{forward_to_deserialize_any, Deserializer};
 
 /// A data structure refering to a column in a table
 #[derive(Clone)]
@@ -200,5 +199,13 @@ impl<'de> Deserializer<'de> for DataValue {
         bool i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 char str string bytes byte_buf unit
         seq tuple tuple_struct map struct enum identifier ignored_any
         newtype_struct unit_struct
+    }
+}
+
+impl<'de> IntoDeserializer<'de, Error> for DataValue {
+    type Deserializer = Self;
+
+    fn into_deserializer(self) -> Self::Deserializer {
+        self
     }
 }

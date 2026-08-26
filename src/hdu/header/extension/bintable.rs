@@ -784,6 +784,23 @@ impl TFormType {
         }
     }
 
+    pub(crate) fn repeat_count(&self) -> usize {
+        match self {
+            TFormType::L { repeat_count } | // Logical
+            TFormType::X { repeat_count } | // Bit
+            TFormType::B { repeat_count } | // Unsigned byte
+            TFormType::I { repeat_count } | // 16-bit integer
+            TFormType::J { repeat_count } | // 32-bit integer
+            TFormType::K { repeat_count } | // 64-bit integer
+            TFormType::A { repeat_count } | // Character
+            TFormType::E { repeat_count } | // Single-precision floating point
+            TFormType::D { repeat_count } | // Double-precision floating point
+            TFormType::C { repeat_count } | // Single-precision complex
+            TFormType::M { repeat_count } => *repeat_count, // Double-precision complex
+            TFormType::P { .. } | TFormType::Q { .. } => 1, // Array Descriptor (32/64-bits)
+        }
+    }
+
     pub(crate) fn num_bytes_field(&self) -> usize {
         self.num_bits_field().div_ceil(8)
     }
