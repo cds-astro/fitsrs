@@ -190,6 +190,28 @@ impl<'a, R> RowMapAccess<'a, R>
 where
     R: Read + Seek + Debug,
 {
+    fn deserialize_array<'de, S>(
+        &mut self,
+        num_elems: usize,
+        seed: S,
+    ) -> Result<S::Value, Error>
+    where
+        S: DeserializeSeed<'de>
+    {
+        let mut values = Vec::with_capacity(num_elems);
+
+        for _ in 0..num_elems {
+            values.push(
+                self.data
+                    .next()
+                    .ok_or(Error::StaticError("No more values found."))?,
+            );
+        }
+
+        let deser = SeqDeserializer::new(values.into_iter());
+        seed.deserialize(deser)
+    }
+
     fn next_values(&mut self, first: DataValue, count: usize) -> Result<Vec<DataValue>, Error> {
         let mut values = Vec::with_capacity(count);
         values.push(first);
@@ -241,18 +263,10 @@ where
 
         match &value {
             DataValue::VariableLengthArray32 { num_elems, .. } => {
-                let num_elems = *num_elems as usize;
-                let next_values = self.next_values(value, num_elems)?;
-
-                let deser = SeqDeserializer::new(next_values.into_iter());
-                seed.deserialize(deser)
+                self.deserialize_array(*num_elems as usize, seed)
             }
             DataValue::VariableLengthArray64 { num_elems, .. } => {
-                let num_elems = *num_elems as usize;
-                let next_values = self.next_values(value, num_elems)?;
-
-                let deser = SeqDeserializer::new(next_values.into_iter());
-                seed.deserialize(deser)
+                self.deserialize_array(*num_elems as usize, seed)
             },
             DataValue::Character { value, column, idx } => {
                 let rc = tform.repeat_count();
