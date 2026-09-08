@@ -506,7 +506,11 @@ impl Xtension for BinTable {
         let theap = if let Ok(value) = values.get_parsed::<usize>("THEAP") {
             value
         } else {
-            (naxis1 as usize) * (naxis2 as usize)
+            (naxis1 as usize)
+                .checked_mul(naxis2 as usize)
+                .ok_or(Error::StaticError(
+                    "BinTable NAXIS1 * NAXIS2 overflows usize; the header declares an impossible table size.",
+                ))?
         };
 
         let num_bits_per_row = tforms
@@ -793,9 +797,11 @@ impl TFormType {
 mod tests {
     use super::{BinTable, TFormType};
     use crate::{
+        error::Error,
         hdu::{header::Bitpix, HDU},
-        FITSFile,
+        FITSFile, Fits,
     };
+    use std::io::Cursor;
 
     fn compare_bintable_ext(filename: &str, bin_table: BinTable) {
         let mut f = FITSFile::open(filename).unwrap();
@@ -861,5 +867,67 @@ mod tests {
                 z_image: None,
             },
         );
+    }
+
+    /// Pads a list of cards into a 2880 byte FITS header block.
+    fn header_block(cards: &[&str]) -> Vec<u8> {
+        let mut block = Vec::new();
+        for card in cards {
+            let mut buf = [b' '; 80];
+            buf[..card.len()].copy_from_slice(card.as_bytes());
+            block.extend_from_slice(&buf);
+        }
+        let mut buf = [b' '; 80];
+        buf[..3].copy_from_slice(b"END");
+        block.extend_from_slice(&buf);
+        block.resize(block.len().div_ceil(2880) * 2880, b' ');
+        block
+    }
+
+    /// A BINTABLE header may declare a NAXIS2 large enough that NAXIS1 * NAXIS2 does not fit in a
+    /// usize. The THEAP fallback used to compute that product unchecked, which panics in a debug
+    /// build and wraps in a release one. Both are reachable from an untrusted file, so the header
+    /// has to be rejected instead.
+    ///
+    /// TFORM1 matches NAXIS1 here so that the NAXIS1/TFORMS consistency check does not reject the
+    /// header before the multiplication happens.
+    #[test]
+    fn bintable_naxis_product_overflowing_usize_is_rejected() {
+        let mut data = header_block(&[
+            "SIMPLE  =                    T",
+            "BITPIX  =                    8",
+            "NAXIS   =                    0",
+            "EXTEND  =                    T",
+        ]);
+        data.extend_from_slice(&header_block(&[
+            "XTENSION= 'BINTABLE'",
+            "BITPIX  =                    8",
+            "NAXIS   =                    2",
+            "NAXIS1  =                    8",
+            "NAXIS2  =  4611686018427387904",
+            "PCOUNT  =                    0",
+            "GCOUNT  =                    1",
+            "TFIELDS =                    1",
+            "TFORM1  = '8B'",
+        ]));
+        data.resize(data.len() + 2880, 0);
+
+        let hdus = Fits::from_reader(Cursor::new(data));
+        let mut last = None;
+        for hdu in hdus {
+            if let Err(e) = hdu {
+                last = Some(e);
+                break;
+            }
+        }
+
+        match last {
+            Some(Error::StaticError(msg)) => assert!(
+                msg.contains("overflows usize"),
+                "expected the overflow to be reported, got: {}",
+                msg
+            ),
+            other => panic!("expected a StaticError about the overflow, got {:?}", other),
+        }
     }
 }
