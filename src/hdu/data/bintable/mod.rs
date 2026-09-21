@@ -30,15 +30,13 @@ pub enum DataValue {
         idx: usize,
     },
     /// 'X' => Bit
-    Bit {
+    BitArray {
         /// The current byte where the bit lies
         byte: u8,
-        /// The bit index in the byte
-        bit_idx: u8,
+        /// The idx of the byte of the array
+        idx: usize,
         /// Name of the column
         column: ColumnId,
-        /// Its position in the column (i.e. when repeat count > 1)
-        idx: usize,
     },
     /// 'B' => Unsigned Byte
     UnsignedByte {
@@ -139,4 +137,6 @@ pub enum DataValue {
         /// The offset byte position from the start of the heap
         offset_byte: u64,
     },
+    /// Some TFORM encodes NULL values, such as L, A (Null strings), B, I, J, K
+    Null,
 }
