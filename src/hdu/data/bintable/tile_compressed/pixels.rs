@@ -52,7 +52,7 @@ where
     desc: TileDesc<K>,
 
     z_tile: Box<[usize]>,
-    //z_naxis: Box<[usize]>,
+    z_naxis: Box<[usize]>,
     z_cmp_type: ZCmpType,
     data_compressed_idx: usize,
 }
@@ -61,6 +61,32 @@ impl<R, K> It<R, K>
 where
     K: Keywords,
 {
+    /// Return the actual number of pixels in the tile represented by a BINTABLE row.
+    /// Edge tiles can be smaller than ZTILEn. get_row_idx() is FITS-style (1-based).
+    fn tile_pixel_count(&self, row_idx: usize) -> usize {
+        let n = row_idx.saturating_sub(1);
+        let d = self.z_tile.len();
+        let tiles_per_axis = self
+            .z_naxis
+            .iter()
+            .zip(self.z_tile.iter())
+            .map(|(&naxis, &tile)| naxis.div_ceil(tile))
+            .collect::<Vec<_>>();
+
+        let mut coord = vec![0usize; d];
+        coord[0] = n % tiles_per_axis[0];
+        for i in 1..d {
+            let stride = tiles_per_axis.iter().take(i).product::<usize>();
+            coord[i] = (n / stride) % tiles_per_axis[i];
+        }
+
+        coord
+            .iter()
+            .zip(self.z_naxis.iter().zip(self.z_tile.iter()))
+            .map(|(&c, (&naxis, &tile))| tile.min(naxis.saturating_sub(c * tile)))
+            .product()
+    }
+
     fn get_reader(&mut self) -> &mut R {
         self.row_it.get_reader()
     }
@@ -80,6 +106,7 @@ where
             z_tilen,
             z_cmp_type,
             data_compressed_idx,
+            z_naxisn,
             ..
         } = config;
         // Allocation of a buffer at init of the iterator that is the size of the biggest tiles we can found
@@ -107,60 +134,12 @@ where
             desc,
 
             data_compressed_idx: *data_compressed_idx,
-            //z_naxis: z_naxisn.clone(),
             z_tile: z_tilen.clone(),
+            z_naxis: z_naxisn.iter().map(|znaxis| *znaxis as usize).collect::<Vec<_>>().into_boxed_slice(),
             z_cmp_type: *z_cmp_type,
         }
     }
 }
-
-/*
-/// Compute the size of the tile from its row position inside the compressed data column
-/// FIXME: optimize this computation by using memoization
-pub(crate) fn tile_size_from_row_idx(
-    z_tile: &[usize],
-    z_naxis: &[usize],
-    n: usize,
-) -> Box<[usize]> {
-    let d = z_tile.len();
-
-    if d == 0 {
-        // There must be at least one dimension
-        unreachable!();
-    } else {
-        let mut u = vec![0_usize; z_tile.len()];
-
-        let s = z_naxis
-            .iter()
-            .zip(z_tile.iter())
-            .map(|(naxisi, tilei)| naxisi.div_ceil(*tilei))
-            .collect::<Vec<_>>();
-
-        // Compute the position inside the first dimension
-        u[0] = n % s[0];
-
-        for i in 1..d {
-            u[i] = n
-                - u[0]
-                - (1..i)
-                    .map(|k| {
-                        let prod_sk = s.iter().take(k).product::<usize>();
-                        u[k] * prod_sk
-                    })
-                    .sum::<usize>();
-
-            let prod_si = s.iter().take(i).product::<usize>();
-
-            u[i] = (u[i] / prod_si) % s[i];
-        }
-
-        u.iter()
-            .zip(z_naxis.iter().zip(z_tile.iter()))
-            .map(|(&u_i, (&naxis, &tilez))| tilez.min(naxis - u_i * tilez))
-            .collect()
-    }
-}
-    */
 
 use std::fmt::Debug;
 impl<R> Iterator for It<R, U8Keywords>
@@ -191,7 +170,7 @@ where
             let row_idx = self.row_it.get_row_idx();
 
             // Update the tile compressed currently decompressed
-            let num_pixels = self.z_tile.iter().product::<usize>() as u64;
+            let num_pixels = self.tile_pixel_count(row_idx) as u64;
             self.desc.n_pixels = num_pixels;
             self.desc.remaining_pixels = num_pixels;
 
@@ -215,11 +194,15 @@ where
                     match s.z_cmp_type {
                         // For GZIP2, the byte shuffling is done in the next method
                         ZCmpType::Gzip1 | ZCmpType::Gzip2 => {
+                            let tile_bytes = num_pixels as usize * std::mem::size_of::<u32>();
+                            buf.resize(tile_bytes, 0);
                             let mut gz = GzDecoder::new(reader);
                             gz.read_exact(&mut buf[..])?;
                         }
                         // FIXME support bytepix
                         ZCmpType::Rice { blocksize, .. } => {
+                            let tile_bytes = num_pixels as usize * std::mem::size_of::<u32>();
+                            buf.resize(tile_bytes, 0);
                             let mut rice = RICEDecoder::<_, i32>::new(
                                 reader,
                                 blocksize as i32,
@@ -259,7 +242,10 @@ where
         };
         self.desc.remaining_pixels -= 1;
 
-        Some(value)
+        let v_f32 = value as f32;
+        let v_scaled = v_f32 * self.desc.keywords.bscale + self.desc.keywords.bzero;
+
+        Some(v_scaled as u8)
     }
 }
 
@@ -291,7 +277,7 @@ where
             let row_idx = self.row_it.get_row_idx();
 
             // Update the tile compressed currently decompressed
-            let num_pixels = self.z_tile.iter().product::<usize>() as u64;
+            let num_pixels = self.tile_pixel_count(row_idx) as u64;
             self.desc.n_pixels = num_pixels;
             self.desc.remaining_pixels = num_pixels;
             // We jump to the heap at the position of the tile
@@ -314,11 +300,15 @@ where
                     match s.z_cmp_type {
                         // For GZIP2, the byte shuffling is done in the next method
                         ZCmpType::Gzip1 | ZCmpType::Gzip2 => {
+                            let tile_bytes = num_pixels as usize * std::mem::size_of::<u32>();
+                            buf.resize(tile_bytes, 0);
                             let mut gz = GzDecoder::new(reader);
                             gz.read_exact(&mut buf[..])?;
                         }
                         // FIXME support bytepix
                         ZCmpType::Rice { blocksize, .. } => {
+                            let tile_bytes = num_pixels as usize * std::mem::size_of::<u32>();
+                            buf.resize(tile_bytes, 0);
                             let mut rice = RICEDecoder::<_, i32>::new(
                                 reader,
                                 blocksize as i32,
@@ -365,7 +355,10 @@ where
         };
         self.desc.remaining_pixels -= 1;
 
-        Some(value)
+        let v_f32 = value as f32;
+        let v_scaled = v_f32 * self.desc.keywords.bscale + self.desc.keywords.bzero;
+
+        Some(v_scaled as i16)
     }
 }
 
@@ -397,7 +390,7 @@ where
             let row_idx = self.row_it.get_row_idx();
 
             // Update the tile compressed currently decompressed
-            let num_pixels = self.z_tile.iter().product::<usize>() as u64;
+            let num_pixels = self.tile_pixel_count(row_idx) as u64;
             self.desc.n_pixels = num_pixels;
             self.desc.remaining_pixels = num_pixels;
             // We jump to the heap at the position of the tile
@@ -420,11 +413,15 @@ where
                     match s.z_cmp_type {
                         // For GZIP2, the byte shuffling is done in the next method
                         ZCmpType::Gzip1 | ZCmpType::Gzip2 => {
+                            let tile_bytes = num_pixels as usize * std::mem::size_of::<u32>();
+                            buf.resize(tile_bytes, 0);
                             let mut gz = GzDecoder::new(reader);
                             gz.read_exact(&mut buf[..])?;
                         }
                         // FIXME support bytepix
                         ZCmpType::Rice { blocksize, .. } => {
+                            let tile_bytes = num_pixels as usize * std::mem::size_of::<u32>();
+                            buf.resize(tile_bytes, 0);
                             let mut rice = RICEDecoder::<_, i32>::new(
                                 reader,
                                 blocksize as i32,
@@ -483,7 +480,10 @@ where
         };
         self.desc.remaining_pixels -= 1;
 
-        Some(value)
+        let v_f32 = value as f32;
+        let v_scaled = v_f32 * self.desc.keywords.bscale + self.desc.keywords.bzero;
+
+        Some(v_scaled as i32)
     }
 }
 
@@ -515,7 +515,7 @@ where
             let row_idx = self.row_it.get_row_idx();
 
             // Update the tile compressed currently decompressed
-            let num_pixels = self.z_tile.iter().product::<usize>() as u64;
+            let num_pixels = self.tile_pixel_count(row_idx) as u64;
             self.desc.n_pixels = num_pixels;
             self.desc.remaining_pixels = num_pixels;
 
@@ -549,16 +549,24 @@ where
                 _ => Quantiz::NoDither,
             };
 
-            *scale = match row_data[*z_scale_idx] {
-                DataValue::Float { value, .. } => value,
-                DataValue::Double { value, .. } => value as f32,
-                _ => unreachable!(),
+            *scale = if let Some(z_scale_idx) = z_scale_idx {
+                match row_data[*z_scale_idx] {
+                    DataValue::Float { value, .. } => value,
+                    DataValue::Double { value, .. } => value as f32,
+                    _ => unreachable!(),
+                }
+            } else {
+                1.0
             };
 
-            *zero = match row_data[*z_zero_idx] {
-                DataValue::Float { value, .. } => value,
-                DataValue::Double { value, .. } => value as f32,
-                _ => unreachable!(),
+            *zero = if let Some(z_zero_idx) = z_zero_idx {
+                match row_data[*z_zero_idx] {
+                    DataValue::Float { value, .. } => value,
+                    DataValue::Double { value, .. } => value as f32,
+                    _ => unreachable!(),
+                }
+            } else {
+                0.0
             };
 
             if let Some(idx) = z_blank_idx {
@@ -591,11 +599,15 @@ where
                     match s.z_cmp_type {
                         // For GZIP2, the byte shuffling is done in the next method
                         ZCmpType::Gzip1 | ZCmpType::Gzip2 => {
+                            let tile_bytes = num_pixels as usize * std::mem::size_of::<u32>();
+                            buf.resize(tile_bytes, 0);
                             let mut gz = GzDecoder::new(reader);
                             gz.read_exact(&mut buf[..])?;
                         }
                         // FIXME support bytepix
                         ZCmpType::Rice { blocksize, .. } => {
+                            let tile_bytes = num_pixels as usize * std::mem::size_of::<u32>();
+                            buf.resize(tile_bytes, 0);
                             let mut rice = RICEDecoder::<_, i32>::new(
                                 reader,
                                 blocksize as i32,
@@ -630,18 +642,18 @@ where
                     self.buf[off + 3],
                 ]);
                 self.desc.keywords.unquantize(value)
-            }
+            },
             ZCmpType::Gzip2 => {
                 // We need to get the byte index in the buffer storing u32, i.e. 4 bytes per elements
                 // read from BigEndian, i.e. the most significant byte is at first and the least one is at last position
                 let num_bytes = self.buf.len();
                 let step_msb = num_bytes / 4;
-                let value = ((self.buf[idx] as i32) << 24)
-                    | ((self.buf[idx + step_msb] as i32) << 16)
-                    | ((self.buf[idx + 2 * step_msb] as i32) << 8)
-                    | (self.buf[idx + 3 * step_msb] as i32);
+                let bits = ((self.buf[idx] as u32) << 24)
+                    | ((self.buf[idx + step_msb] as u32) << 16)
+                    | ((self.buf[idx + 2 * step_msb] as u32) << 8)
+                    | (self.buf[idx + 3 * step_msb] as u32);
 
-                self.desc.keywords.unquantize(value)
+                self.desc.keywords.unquantize(bits as i32)
             }
             // 32-bit floating point
             ZCmpType::Rice { .. } => {
@@ -660,6 +672,7 @@ where
             _ => unreachable!(),
         };
         self.desc.remaining_pixels -= 1;
+
 
         Some(value)
     }
@@ -693,7 +706,7 @@ where
             let row_idx = self.row_it.get_row_idx();
 
             // Update the tile compressed currently decompressed
-            let num_pixels = self.z_tile.iter().product::<usize>() as u64;
+            let num_pixels = self.tile_pixel_count(row_idx) as u64;
             self.desc.n_pixels = num_pixels;
             self.desc.remaining_pixels = num_pixels;
 
@@ -727,16 +740,24 @@ where
                 _ => Quantiz::NoDither,
             };
 
-            *scale = match row_data[*z_scale_idx] {
-                DataValue::Float { value, .. } => value,
-                DataValue::Double { value, .. } => value as f32,
-                _ => unreachable!(),
+            *scale = if let Some(z_scale_idx) = z_scale_idx {
+                match row_data[*z_scale_idx] {
+                    DataValue::Float { value, .. } => value,
+                    DataValue::Double { value, .. } => value as f32,
+                    _ => unreachable!(),
+                }
+            } else {
+                1.0
             };
 
-            *zero = match row_data[*z_zero_idx] {
-                DataValue::Float { value, .. } => value,
-                DataValue::Double { value, .. } => value as f32,
-                _ => unreachable!(),
+            *zero = if let Some(z_zero_idx) = z_zero_idx {
+                match row_data[*z_zero_idx] {
+                    DataValue::Float { value, .. } => value,
+                    DataValue::Double { value, .. } => value as f32,
+                    _ => unreachable!(),
+                }
+            } else {
+                0.0
             };
 
             if let Some(idx) = z_blank_idx {
@@ -769,11 +790,15 @@ where
                     match s.z_cmp_type {
                         // For GZIP2, the byte shuffling is done in the next method
                         ZCmpType::Gzip1 | ZCmpType::Gzip2 => {
+                            let tile_bytes = num_pixels as usize * std::mem::size_of::<u32>();
+                            buf.resize(tile_bytes, 0);
                             let mut gz = GzDecoder::new(reader);
                             gz.read_exact(&mut buf[..])?;
                         }
                         // FIXME support bytepix
                         ZCmpType::Rice { blocksize, .. } => {
+                            let tile_bytes = num_pixels as usize * std::mem::size_of::<u32>();
+                            buf.resize(tile_bytes, 0);
                             let mut rice = RICEDecoder::<_, i32>::new(
                                 reader,
                                 blocksize as i32,

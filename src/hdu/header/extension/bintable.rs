@@ -141,11 +141,8 @@ pub struct TileCompressedImage {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub(crate) enum ZQuantiz {
-    #[serde(rename = "NO_DITHER")]
     NoDither,
-    #[serde(rename = "SUBTRACTIVE_DITHER_1")]
     SubtractiveDither1,
-    #[serde(rename = "SUBTRACTIVE_DITHER_2")]
     SubtractiveDither2,
 }
 
@@ -331,10 +328,23 @@ impl Xtension for BinTable {
         // ZQUANTIZ (optional keyword) This keyword records the name of the algorithm that was
         // used to quantize floating-point image pixels into integer values which are then passed to
         // the compression algorithm, as discussed further in section 4 of this document.
-        let z_quantiz = values.get_parsed("ZQUANTIZ").unwrap_or_else(|err| {
-            warn!("ZQUANTIZ value not recognized: {err}");
+        let z_quantiz = if let Some(Value::String {
+            value: ref z_quantiz,
+            ..
+        }) = values.get("ZQUANTIZ")
+        {
+            match z_quantiz.trim_ascii_end() {
+                "NO_DITHER" => Some(ZQuantiz::NoDither),
+                "SUBTRACTIVE_DITHER_1" => Some(ZQuantiz::SubtractiveDither1),
+                "SUBTRACTIVE_DITHER_2" => Some(ZQuantiz::SubtractiveDither2),
+                _ => {
+                    warn!("ZQUANTIZ value not recognized");
+                    None
+                }
+            }
+        } else {
             None
-        });
+        };
 
         // ZDITHER0 (optional keyword) The value field of this keyword shall contain an integer that
         // gives the seed value for the random dithering pattern that was used when quantizing the
