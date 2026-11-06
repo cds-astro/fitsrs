@@ -9,8 +9,6 @@ pub use image::{ImageData, Pixels};
 
 pub use iter::It;
 
-use std::fmt::Debug;
-
 use std::marker::Unpin;
 
 use crate::error::Error;
@@ -28,7 +26,7 @@ where
 {
     /// The type of the returned data.
     /// Usually an iterator over the data
-    type Data: Debug + 'a;
+    type Data: 'a;
 
     /// Read the data unit providing a special iteratior in function of the extension encountered
     ///

@@ -333,12 +333,12 @@ impl<'a> ImageDecoder for FitsDecoder<'a> {
                     .map_err(to_image_error)?;
                 match self.fits.get_data(&hdu) {
                     BinaryTableData::TileCompressed(tc) => match tc {
-                        TcPixels::U8(it) => write_u8(buf, it, scale, is_rgb),
-                        TcPixels::I16(it) => write_i16(buf, it, scale, is_rgb),
-                        TcPixels::I32(it) => write_i32(buf, it, scale, is_rgb),
+                        TcPixels::U8(it) => write_u8(buf, it.map(|(_, v)| v), scale, is_rgb),
+                        TcPixels::I16(it) => write_i16(buf, it.map(|(_, v)| v), scale, is_rgb),
+                        TcPixels::I32(it) => write_i32(buf, it.map(|(_, v)| v), scale, is_rgb),
                         // Tile-compressed F32 and F64 iterators both yield f32
-                        TcPixels::F32(it) => write_f32(buf, it, is_rgb),
-                        TcPixels::F64(it) => write_f32(buf, it, is_rgb),
+                        TcPixels::F32(it) => write_f32(buf, it.map(|(_, v)| v), is_rgb),
+                        TcPixels::F64(it) => write_f32(buf, it.map(|(_, v)| v), is_rgb),
                     },
                     BinaryTableData::Table(_) => {
                         return Err(to_image_error(
