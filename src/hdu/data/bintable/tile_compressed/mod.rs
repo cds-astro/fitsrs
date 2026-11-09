@@ -490,7 +490,7 @@ mod tests {
     }
 
     #[test_case("samples/lsst/cutout.fits")]
-    fn test_lsst_data(filename: &str) {
+    fn test_fits_lsst_data(filename: &str) {
         use std::fs::File;
 
         let mut f = File::open(filename).unwrap();
