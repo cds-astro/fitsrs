@@ -7,7 +7,7 @@ use super::{
     F32Keywords, F64Keywords, I16Keywords, I32Keywords, Keywords, Quantiz, TileDesc, U8Keywords,
 };
 use crate::error::Error;
-use crate::hdu::header::extension::bintable::{BinTable, TileCompressedImage, ZCmpType, ZQuantiz};
+use crate::hdu::header::extension::bintable::{BinTable, TileCompressedImage, ZCmpType};
 use crate::hdu::header::{Bitpix, Header};
 use crate::{TableData, TableRowData};
 use std::io::{Read, Seek, SeekFrom};
@@ -52,24 +52,56 @@ where
     desc: TileDesc<K>,
 
     z_tile: Box<[usize]>,
-    //z_naxis: Box<[usize]>,
+    z_naxis: Box<[usize]>,
     z_cmp_type: ZCmpType,
     data_compressed_idx: usize,
+
+    tile_origin: Box<[usize]>,
+    tile_shape: Box<[usize]>,
 }
 
 impl<R, K> It<R, K>
 where
     K: Keywords,
 {
+    /// Return the actual number of pixels in the tile represented by a BINTABLE row.
+    /// Edge tiles can be smaller than ZTILEn. get_row_idx() is FITS-style (1-based).
+    fn tile_geometry(&self, row_idx: usize) -> (Vec<usize>, Vec<usize>) {
+        let n = row_idx.saturating_sub(1);
+        let d = self.z_tile.len();
+
+        let tiles_per_axis: Vec<usize> = self
+            .z_naxis
+            .iter()
+            .zip(self.z_tile.iter())
+            .map(|(&naxis, &tile)| naxis.div_ceil(tile))
+            .collect();
+
+        let mut coord = vec![0usize; d];
+
+        coord[0] = n % tiles_per_axis[0];
+
+        for i in 1..d {
+            let stride = tiles_per_axis.iter().take(i).product::<usize>();
+            coord[i] = (n / stride) % tiles_per_axis[i];
+        }
+
+        let mut origin = vec![0usize; d];
+        let mut shape = vec![0usize; d];
+
+        for i in 0..d {
+            origin[i] = coord[i] * self.z_tile[i];
+
+            shape[i] = self.z_tile[i].min(self.z_naxis[i] - origin[i]);
+        }
+
+        (origin, shape)
+    }
+
     fn get_reader(&mut self) -> &mut R {
         self.row_it.get_reader()
     }
-}
 
-impl<R, K> It<R, K>
-where
-    K: Keywords,
-{
     pub(crate) fn new(
         header: &Header<BinTable>,
         mut data: TableData<R>,
@@ -80,6 +112,7 @@ where
             z_tilen,
             z_cmp_type,
             data_compressed_idx,
+            z_naxisn,
             ..
         } = config;
         // Allocation of a buffer at init of the iterator that is the size of the biggest tiles we can found
@@ -106,61 +139,20 @@ where
 
             desc,
 
+            tile_origin: vec![0; z_tilen.len()].into_boxed_slice(),
+            tile_shape: vec![0; z_tilen.len()].into_boxed_slice(),
+
             data_compressed_idx: *data_compressed_idx,
-            //z_naxis: z_naxisn.clone(),
             z_tile: z_tilen.clone(),
+            z_naxis: z_naxisn
+                .iter()
+                .map(|znaxis| *znaxis as usize)
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
             z_cmp_type: *z_cmp_type,
         }
     }
 }
-
-/*
-/// Compute the size of the tile from its row position inside the compressed data column
-/// FIXME: optimize this computation by using memoization
-pub(crate) fn tile_size_from_row_idx(
-    z_tile: &[usize],
-    z_naxis: &[usize],
-    n: usize,
-) -> Box<[usize]> {
-    let d = z_tile.len();
-
-    if d == 0 {
-        // There must be at least one dimension
-        unreachable!();
-    } else {
-        let mut u = vec![0_usize; z_tile.len()];
-
-        let s = z_naxis
-            .iter()
-            .zip(z_tile.iter())
-            .map(|(naxisi, tilei)| naxisi.div_ceil(*tilei))
-            .collect::<Vec<_>>();
-
-        // Compute the position inside the first dimension
-        u[0] = n % s[0];
-
-        for i in 1..d {
-            u[i] = n
-                - u[0]
-                - (1..i)
-                    .map(|k| {
-                        let prod_sk = s.iter().take(k).product::<usize>();
-                        u[k] * prod_sk
-                    })
-                    .sum::<usize>();
-
-            let prod_si = s.iter().take(i).product::<usize>();
-
-            u[i] = (u[i] / prod_si) % s[i];
-        }
-
-        u.iter()
-            .zip(z_naxis.iter().zip(z_tile.iter()))
-            .map(|(&u_i, (&naxis, &tilez))| tilez.min(naxis - u_i * tilez))
-            .collect()
-    }
-}
-    */
 
 use std::fmt::Debug;
 impl<R> Iterator for It<R, U8Keywords>
@@ -168,7 +160,7 @@ where
     R: Read + Seek + Debug,
 {
     // Return a vec of fields because to take into account the repeat count value for that field
-    type Item = u8;
+    type Item = (usize, u8);
 
     fn next(&mut self) -> Option<Self::Item> {
         // We first retrieve the whole row from the row data iterator
@@ -191,7 +183,13 @@ where
             let row_idx = self.row_it.get_row_idx();
 
             // Update the tile compressed currently decompressed
-            let num_pixels = self.z_tile.iter().product::<usize>() as u64;
+            let (origin, shape) = self.tile_geometry(row_idx);
+
+            self.tile_origin = origin.into_boxed_slice();
+            self.tile_shape = shape.into_boxed_slice();
+
+            let num_pixels = self.tile_shape.iter().product::<usize>() as u64;
+
             self.desc.n_pixels = num_pixels;
             self.desc.remaining_pixels = num_pixels;
 
@@ -215,11 +213,15 @@ where
                     match s.z_cmp_type {
                         // For GZIP2, the byte shuffling is done in the next method
                         ZCmpType::Gzip1 | ZCmpType::Gzip2 => {
+                            let tile_bytes = num_pixels as usize * std::mem::size_of::<u32>();
+                            buf.resize(tile_bytes, 0);
                             let mut gz = GzDecoder::new(reader);
                             gz.read_exact(&mut buf[..])?;
                         }
                         // FIXME support bytepix
                         ZCmpType::Rice { blocksize, .. } => {
+                            let tile_bytes = num_pixels as usize * std::mem::size_of::<u32>();
+                            buf.resize(tile_bytes, 0);
                             let mut rice = RICEDecoder::<_, i32>::new(
                                 reader,
                                 blocksize as i32,
@@ -257,9 +259,31 @@ where
             // Not supported compression/bitpix results in parsing the binary table as normal and thus this part is not reachable
             _ => unreachable!(),
         };
+        // Current pixel position inside the tile
+        let mut local_idx = idx;
+
+        // Convert tile-local linear index into global image index.
+        // FITS ordering: axis 0 is the fastest varying axis.
+        let mut image_idx = 0usize;
+        let mut image_stride = 1usize;
+
+        for axis in 0..self.z_naxis.len() {
+            let local_coord = local_idx % self.tile_shape[axis];
+            local_idx /= self.tile_shape[axis];
+
+            let global_coord = self.tile_origin[axis] + local_coord;
+
+            image_idx += global_coord * image_stride;
+
+            image_stride *= self.z_naxis[axis];
+        }
+
         self.desc.remaining_pixels -= 1;
 
-        Some(value)
+        let v_f32 = value as f32;
+        let v_scaled = v_f32 * self.desc.keywords.bscale + self.desc.keywords.bzero;
+
+        Some((image_idx, v_scaled as u8))
     }
 }
 
@@ -268,7 +292,7 @@ where
     R: Read + Seek + Debug,
 {
     // Return a vec of fields because to take into account the repeat count value for that field
-    type Item = i16;
+    type Item = (usize, i16);
 
     fn next(&mut self) -> Option<Self::Item> {
         // We first retrieve the whole row from the row data iterator
@@ -291,7 +315,13 @@ where
             let row_idx = self.row_it.get_row_idx();
 
             // Update the tile compressed currently decompressed
-            let num_pixels = self.z_tile.iter().product::<usize>() as u64;
+            let (origin, shape) = self.tile_geometry(row_idx);
+
+            self.tile_origin = origin.into_boxed_slice();
+            self.tile_shape = shape.into_boxed_slice();
+
+            let num_pixels = self.tile_shape.iter().product::<usize>() as u64;
+
             self.desc.n_pixels = num_pixels;
             self.desc.remaining_pixels = num_pixels;
             // We jump to the heap at the position of the tile
@@ -314,11 +344,15 @@ where
                     match s.z_cmp_type {
                         // For GZIP2, the byte shuffling is done in the next method
                         ZCmpType::Gzip1 | ZCmpType::Gzip2 => {
+                            let tile_bytes = num_pixels as usize * std::mem::size_of::<u32>();
+                            buf.resize(tile_bytes, 0);
                             let mut gz = GzDecoder::new(reader);
                             gz.read_exact(&mut buf[..])?;
                         }
                         // FIXME support bytepix
                         ZCmpType::Rice { blocksize, .. } => {
+                            let tile_bytes = num_pixels as usize * std::mem::size_of::<u32>();
+                            buf.resize(tile_bytes, 0);
                             let mut rice = RICEDecoder::<_, i32>::new(
                                 reader,
                                 blocksize as i32,
@@ -363,9 +397,31 @@ where
             // Not supported compression/bitpix results in parsing the binary table as normal and thus this part is not reachable
             _ => unreachable!(),
         };
+        // Current pixel position inside the tile
+        let mut local_idx = idx;
+
+        // Convert tile-local linear index into global image index.
+        // FITS ordering: axis 0 is the fastest varying axis.
+        let mut image_idx = 0usize;
+        let mut image_stride = 1usize;
+
+        for axis in 0..self.z_naxis.len() {
+            let local_coord = local_idx % self.tile_shape[axis];
+            local_idx /= self.tile_shape[axis];
+
+            let global_coord = self.tile_origin[axis] + local_coord;
+
+            image_idx += global_coord * image_stride;
+
+            image_stride *= self.z_naxis[axis];
+        }
+
         self.desc.remaining_pixels -= 1;
 
-        Some(value)
+        let v_f32 = value as f32;
+        let v_scaled = v_f32 * self.desc.keywords.bscale + self.desc.keywords.bzero;
+
+        Some((image_idx, v_scaled as i16))
     }
 }
 
@@ -374,7 +430,7 @@ where
     R: Read + Seek + Debug,
 {
     // Return a vec of fields because to take into account the repeat count value for that field
-    type Item = i32;
+    type Item = (usize, i32);
 
     fn next(&mut self) -> Option<Self::Item> {
         // We first retrieve the whole row from the row data iterator
@@ -397,7 +453,13 @@ where
             let row_idx = self.row_it.get_row_idx();
 
             // Update the tile compressed currently decompressed
-            let num_pixels = self.z_tile.iter().product::<usize>() as u64;
+            let (origin, shape) = self.tile_geometry(row_idx);
+
+            self.tile_origin = origin.into_boxed_slice();
+            self.tile_shape = shape.into_boxed_slice();
+
+            let num_pixels = self.tile_shape.iter().product::<usize>() as u64;
+
             self.desc.n_pixels = num_pixels;
             self.desc.remaining_pixels = num_pixels;
             // We jump to the heap at the position of the tile
@@ -420,11 +482,15 @@ where
                     match s.z_cmp_type {
                         // For GZIP2, the byte shuffling is done in the next method
                         ZCmpType::Gzip1 | ZCmpType::Gzip2 => {
+                            let tile_bytes = num_pixels as usize * std::mem::size_of::<u32>();
+                            buf.resize(tile_bytes, 0);
                             let mut gz = GzDecoder::new(reader);
                             gz.read_exact(&mut buf[..])?;
                         }
                         // FIXME support bytepix
                         ZCmpType::Rice { blocksize, .. } => {
+                            let tile_bytes = num_pixels as usize * std::mem::size_of::<u32>();
+                            buf.resize(tile_bytes, 0);
                             let mut rice = RICEDecoder::<_, i32>::new(
                                 reader,
                                 blocksize as i32,
@@ -481,9 +547,31 @@ where
             // Not supported compression/bitpix results in parsing the binary table as normal and thus this part is not reachable
             _ => unreachable!(),
         };
+        // Current pixel position inside the tile
+        let mut local_idx = idx;
+
+        // Convert tile-local linear index into global image index.
+        // FITS ordering: axis 0 is the fastest varying axis.
+        let mut image_idx = 0usize;
+        let mut image_stride = 1usize;
+
+        for axis in 0..self.z_naxis.len() {
+            let local_coord = local_idx % self.tile_shape[axis];
+            local_idx /= self.tile_shape[axis];
+
+            let global_coord = self.tile_origin[axis] + local_coord;
+
+            image_idx += global_coord * image_stride;
+
+            image_stride *= self.z_naxis[axis];
+        }
+
         self.desc.remaining_pixels -= 1;
 
-        Some(value)
+        let v_f32 = value as f32;
+        let v_scaled = v_f32 * self.desc.keywords.bscale + self.desc.keywords.bzero;
+
+        Some((image_idx, v_scaled as i32))
     }
 }
 
@@ -492,7 +580,7 @@ where
     R: Read + Seek + Debug,
 {
     // Return a vec of fields because to take into account the repeat count value for that field
-    type Item = f32;
+    type Item = (usize, f32);
 
     fn next(&mut self) -> Option<Self::Item> {
         // We first retrieve the whole row from the row data iterator
@@ -515,7 +603,13 @@ where
             let row_idx = self.row_it.get_row_idx();
 
             // Update the tile compressed currently decompressed
-            let num_pixels = self.z_tile.iter().product::<usize>() as u64;
+            let (origin, shape) = self.tile_geometry(row_idx);
+
+            self.tile_origin = origin.into_boxed_slice();
+            self.tile_shape = shape.into_boxed_slice();
+
+            let num_pixels = self.tile_shape.iter().product::<usize>() as u64;
+
             self.desc.n_pixels = num_pixels;
             self.desc.remaining_pixels = num_pixels;
 
@@ -527,7 +621,6 @@ where
                         scale,
                         zero,
                         z_dither_0,
-                        z_quantiz,
                         quantiz,
                         z_blank_idx,
                         z_blank,
@@ -535,30 +628,31 @@ where
                 ..
             } = &mut self.desc;
 
-            *quantiz = match z_quantiz {
-                ZQuantiz::SubtractiveDither1 => {
-                    let i0 = (row_idx - 1 + ((*z_dither_0) as usize)) % 10000;
-                    let i1 = (RAND_VALUES[i0] * 500.0).floor() as usize;
-                    Quantiz::SubtractiveDither1 { i1 }
+            if let Some(Quantiz::SubtractiveDither1 { i1 } | Quantiz::SubtractiveDither2 { i1 }) =
+                quantiz.as_mut()
+            {
+                let i0 = (row_idx - 1 + ((*z_dither_0) as usize)) % 10000;
+                *i1 = (RAND_VALUES[i0] * 500.0).floor() as usize;
+            }
+
+            *scale = if let Some(z_scale_idx) = z_scale_idx {
+                match row_data[*z_scale_idx] {
+                    DataValue::Float { value, .. } => value,
+                    DataValue::Double { value, .. } => value as f32,
+                    _ => unreachable!(),
                 }
-                ZQuantiz::SubtractiveDither2 => {
-                    let i0 = (row_idx - 1 + (*z_dither_0 as usize)) % 10000;
-                    let i1 = (RAND_VALUES[i0] * 500.0).floor() as usize;
-                    Quantiz::SubtractiveDither2 { i1 }
-                }
-                _ => Quantiz::NoDither,
+            } else {
+                1.0
             };
 
-            *scale = match row_data[*z_scale_idx] {
-                DataValue::Float { value, .. } => value,
-                DataValue::Double { value, .. } => value as f32,
-                _ => unreachable!(),
-            };
-
-            *zero = match row_data[*z_zero_idx] {
-                DataValue::Float { value, .. } => value,
-                DataValue::Double { value, .. } => value as f32,
-                _ => unreachable!(),
+            *zero = if let Some(z_zero_idx) = z_zero_idx {
+                match row_data[*z_zero_idx] {
+                    DataValue::Float { value, .. } => value,
+                    DataValue::Double { value, .. } => value as f32,
+                    _ => unreachable!(),
+                }
+            } else {
+                0.0
             };
 
             if let Some(idx) = z_blank_idx {
@@ -591,11 +685,15 @@ where
                     match s.z_cmp_type {
                         // For GZIP2, the byte shuffling is done in the next method
                         ZCmpType::Gzip1 | ZCmpType::Gzip2 => {
+                            let tile_bytes = num_pixels as usize * std::mem::size_of::<u32>();
+                            buf.resize(tile_bytes, 0);
                             let mut gz = GzDecoder::new(reader);
                             gz.read_exact(&mut buf[..])?;
                         }
                         // FIXME support bytepix
                         ZCmpType::Rice { blocksize, .. } => {
+                            let tile_bytes = num_pixels as usize * std::mem::size_of::<u32>();
+                            buf.resize(tile_bytes, 0);
                             let mut rice = RICEDecoder::<_, i32>::new(
                                 reader,
                                 blocksize as i32,
@@ -636,12 +734,12 @@ where
                 // read from BigEndian, i.e. the most significant byte is at first and the least one is at last position
                 let num_bytes = self.buf.len();
                 let step_msb = num_bytes / 4;
-                let value = ((self.buf[idx] as i32) << 24)
-                    | ((self.buf[idx + step_msb] as i32) << 16)
-                    | ((self.buf[idx + 2 * step_msb] as i32) << 8)
-                    | (self.buf[idx + 3 * step_msb] as i32);
+                let bits = ((self.buf[idx] as u32) << 24)
+                    | ((self.buf[idx + step_msb] as u32) << 16)
+                    | ((self.buf[idx + 2 * step_msb] as u32) << 8)
+                    | (self.buf[idx + 3 * step_msb] as u32);
 
-                self.desc.keywords.unquantize(value)
+                self.desc.keywords.unquantize(bits as i32)
             }
             // 32-bit floating point
             ZCmpType::Rice { .. } => {
@@ -659,9 +757,28 @@ where
             // Not supported compression/bitpix results in parsing the binary table as normal and thus this part is not reachable
             _ => unreachable!(),
         };
+        // Current pixel position inside the tile
+        let mut local_idx = idx;
+
+        // Convert tile-local linear index into global image index.
+        // FITS ordering: axis 0 is the fastest varying axis.
+        let mut image_idx = 0usize;
+        let mut image_stride = 1usize;
+
+        for axis in 0..self.z_naxis.len() {
+            let local_coord = local_idx % self.tile_shape[axis];
+            local_idx /= self.tile_shape[axis];
+
+            let global_coord = self.tile_origin[axis] + local_coord;
+
+            image_idx += global_coord * image_stride;
+
+            image_stride *= self.z_naxis[axis];
+        }
+
         self.desc.remaining_pixels -= 1;
 
-        Some(value)
+        Some((image_idx, value))
     }
 }
 
@@ -670,7 +787,7 @@ where
     R: Read + Seek + Debug,
 {
     // Return a vec of fields because to take into account the repeat count value for that field
-    type Item = f32;
+    type Item = (usize, f32);
 
     fn next(&mut self) -> Option<Self::Item> {
         // We first retrieve the whole row from the row data iterator
@@ -693,7 +810,13 @@ where
             let row_idx = self.row_it.get_row_idx();
 
             // Update the tile compressed currently decompressed
-            let num_pixels = self.z_tile.iter().product::<usize>() as u64;
+            let (origin, shape) = self.tile_geometry(row_idx);
+
+            self.tile_origin = origin.into_boxed_slice();
+            self.tile_shape = shape.into_boxed_slice();
+
+            let num_pixels = self.tile_shape.iter().product::<usize>() as u64;
+
             self.desc.n_pixels = num_pixels;
             self.desc.remaining_pixels = num_pixels;
 
@@ -705,7 +828,6 @@ where
                         scale,
                         zero,
                         z_dither_0,
-                        z_quantiz,
                         quantiz,
                         z_blank_idx,
                         z_blank,
@@ -713,30 +835,31 @@ where
                 ..
             } = &mut self.desc;
 
-            *quantiz = match z_quantiz {
-                ZQuantiz::SubtractiveDither1 => {
-                    let i0 = (row_idx - 1 + ((*z_dither_0) as usize)) % 10000;
-                    let i1 = (RAND_VALUES[i0] * 500.0).floor() as usize;
-                    Quantiz::SubtractiveDither1 { i1 }
+            if let Some(Quantiz::SubtractiveDither1 { i1 } | Quantiz::SubtractiveDither2 { i1 }) =
+                quantiz.as_mut()
+            {
+                let i0 = (row_idx - 1 + ((*z_dither_0) as usize)) % 10000;
+                *i1 = (RAND_VALUES[i0] * 500.0).floor() as usize;
+            }
+
+            *scale = if let Some(z_scale_idx) = z_scale_idx {
+                match row_data[*z_scale_idx] {
+                    DataValue::Float { value, .. } => value,
+                    DataValue::Double { value, .. } => value as f32,
+                    _ => unreachable!(),
                 }
-                ZQuantiz::SubtractiveDither2 => {
-                    let i0 = (row_idx - 1 + (*z_dither_0 as usize)) % 10000;
-                    let i1 = (RAND_VALUES[i0] * 500.0).floor() as usize;
-                    Quantiz::SubtractiveDither2 { i1 }
-                }
-                _ => Quantiz::NoDither,
+            } else {
+                1.0
             };
 
-            *scale = match row_data[*z_scale_idx] {
-                DataValue::Float { value, .. } => value,
-                DataValue::Double { value, .. } => value as f32,
-                _ => unreachable!(),
-            };
-
-            *zero = match row_data[*z_zero_idx] {
-                DataValue::Float { value, .. } => value,
-                DataValue::Double { value, .. } => value as f32,
-                _ => unreachable!(),
+            *zero = if let Some(z_zero_idx) = z_zero_idx {
+                match row_data[*z_zero_idx] {
+                    DataValue::Float { value, .. } => value,
+                    DataValue::Double { value, .. } => value as f32,
+                    _ => unreachable!(),
+                }
+            } else {
+                0.0
             };
 
             if let Some(idx) = z_blank_idx {
@@ -769,11 +892,15 @@ where
                     match s.z_cmp_type {
                         // For GZIP2, the byte shuffling is done in the next method
                         ZCmpType::Gzip1 | ZCmpType::Gzip2 => {
+                            let tile_bytes = num_pixels as usize * std::mem::size_of::<u32>();
+                            buf.resize(tile_bytes, 0);
                             let mut gz = GzDecoder::new(reader);
                             gz.read_exact(&mut buf[..])?;
                         }
                         // FIXME support bytepix
                         ZCmpType::Rice { blocksize, .. } => {
+                            let tile_bytes = num_pixels as usize * std::mem::size_of::<u32>();
+                            buf.resize(tile_bytes, 0);
                             let mut rice = RICEDecoder::<_, i32>::new(
                                 reader,
                                 blocksize as i32,
@@ -837,9 +964,28 @@ where
             // Not supported compression/bitpix results in parsing the binary table as normal and thus this part is not reachable
             _ => unreachable!(),
         };
+        // Current pixel position inside the tile
+        let mut local_idx = idx;
+
+        // Convert tile-local linear index into global image index.
+        // FITS ordering: axis 0 is the fastest varying axis.
+        let mut image_idx = 0usize;
+        let mut image_stride = 1usize;
+
+        for axis in 0..self.z_naxis.len() {
+            let local_coord = local_idx % self.tile_shape[axis];
+            local_idx /= self.tile_shape[axis];
+
+            let global_coord = self.tile_origin[axis] + local_coord;
+
+            image_idx += global_coord * image_stride;
+
+            image_stride *= self.z_naxis[axis];
+        }
+
         self.desc.remaining_pixels -= 1;
 
-        Some(value)
+        Some((image_idx, value))
     }
 }
 

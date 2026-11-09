@@ -27,7 +27,7 @@ where
     }
 }
 
-#[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum BinaryTableData<R> {
     Table(TableData<R>),
     TileCompressed(Pixels<R>),
